@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Professor Schedule Dashboard — Sejong University</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+</head>
+<body>
+
+  <!-- ===== Site Header ===== -->
+  <header class="site-header">
+    <a href="{{ url_for('index') }}" class="brand">
+      <img src="{{ url_for('static', filename='images/SEJONG.png') }}"
+           alt="Sejong University" class="brand-logo" />
+      <div class="header-divider"></div>
+      <div class="brand-text">
+        <div class="brand-university">Sejong University</div>
+        <div class="brand-college">Daeyang College of Humanities</div>
+      </div>
+    </a>
+    <div class="d-flex gap-2 align-items-center">
+      <a href="{{ url_for('settings') }}" class="settings-btn" title="Settings">
+        <i class="bi bi-gear"></i>
+        <span>Settings</span>
+      </a>
+    </div>
+  </header>
+
+  <!-- Flash messages -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="container-fluid px-4 pt-3">
+      {% for category, message in messages %}
+        <div class="alert alert-{{ 'danger' if category == 'error' else ('warning' if category == 'warning' else 'success') }} alert-dismissible fade show py-2" role="alert">
+          <i class="bi bi-{{ 'exclamation-triangle' if category == 'error' else ('exclamation-circle' if category == 'warning' else 'check-circle') }} me-2"></i>
+          {{ message }}
+          <button type="button" class="btn-close btn-sm" data-bs-dismiss="alert"></button>
+        </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  {% endwith %}
+
+  <!-- ===== Hero ===== -->
+  <div class="home-hero">
+    <h1>Professor Schedule Dashboard</h1>
+    <hr class="crimson-rule" />
+    <p class="subtitle">Select your profile to view your semester overview</p>
+  </div>
+
+  <!-- ===== Professor Cards ===== -->
+  {% if professors %}
+  <div class="professor-grid">
+    {% for prof in professors %}
+    <form action="{{ url_for('dashboard') }}" method="POST" class="prof-card-form">
+      <input type="hidden" name="professor_name" value="{{ prof }}" />
+      <button type="submit" class="prof-card">
+        {% if prof_photos.get(prof) %}
+          <img src="{{ prof_photos[prof] }}" alt="{{ prof }}" class="prof-avatar" />
+        {% else %}
+          <div class="prof-avatar-placeholder">
+            <i class="bi bi-person-fill"></i>
+          </div>
+        {% endif %}
+        <div class="prof-name">Prof. {{ prof }}</div>
+      </button>
+    </form>
+    {% endfor %}
+  </div>
+
+  <!-- ===== Department Analytics CTA ===== -->
+  <div class="dept-analytics-cta">
+    <a href="{{ url_for('department') }}" class="btn-dept-analytics">
+      <i class="bi bi-diagram-3 me-2"></i>Department Analytics
+    </a>
+  </div>
+
+  {% else %}
+  <!-- No schedule loaded -->
+  <div class="no-schedule-state">
+    <div class="icon"><i class="bi bi-calendar-x"></i></div>
+    <h5>No schedule loaded</h5>
+    <p class="text-muted" style="font-family: -apple-system, sans-serif; font-size: 0.9rem;">
+      Upload a professor schedule file to get started.
+    </p>
+    <a href="{{ url_for('settings') }}" class="btn btn-sejong mt-2" style="font-family: -apple-system, sans-serif;">
+      <i class="bi bi-gear me-2"></i>Go to Settings
+    </a>
+  </div>
+  {% endif %}
+
+  <!-- ===== Footer ===== -->
+  <footer class="site-footer">
+    Sejong University &mdash; Daeyang College of Humanities &mdash; Professor Schedule Dashboard
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
