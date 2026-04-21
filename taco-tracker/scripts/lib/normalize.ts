@@ -9,9 +9,9 @@ export interface RestaurantDraft {
   lat: number
   lng: number
   phone: string | null
-  cuisine: string
-  source: string
-  status: string
+  cuisine: 'mexican' | 'halal' | 'vegan' | 'vegetarian'
+  source: 'kakao' | 'manual' | 'submission'
+  status: 'draft' | 'live' | 'archived'
 }
 
 export function generateSlug(place: KakaoPlace): string {
