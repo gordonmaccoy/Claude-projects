@@ -32,3 +32,26 @@ describe('initial schema migration', () => {
     expect(sql).toContain('submitter_ip_hash')
   })
 })
+
+const rls = readFileSync(
+  'supabase/migrations/20260421000001_rls_policies.sql',
+  'utf8'
+)
+
+describe('RLS policies migration', () => {
+  it('enables RLS on restaurants', () => {
+    expect(rls).toContain('ALTER TABLE restaurants ENABLE ROW LEVEL SECURITY')
+  })
+
+  it('enables RLS on submissions', () => {
+    expect(rls).toContain('ALTER TABLE submissions ENABLE ROW LEVEL SECURITY')
+  })
+
+  it('restricts public reads to live rows', () => {
+    expect(rls).toContain("status = 'live'")
+  })
+
+  it('allows public inserts on submissions', () => {
+    expect(rls).toContain('FOR INSERT')
+  })
+})
