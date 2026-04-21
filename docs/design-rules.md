@@ -12,15 +12,15 @@ Defined as CSS custom properties and mirrored in Tailwind config.
 
 | Token | Hex | Role |
 |---|---|---|
-| `--bg` Masa Cream | `#F7F2E8` | Primary background |
-| `--surface` Pure Cream | `#FFFBF2` | Cards, modals, raised surfaces |
-| `--ink` Charcoal | `#1B1916` | Body text, headlines |
-| `--muted` Warm Stone | `#8A8177` | Secondary text, borders, placeholder |
-| `--brand` Terracotta | `#C84B2F` | Brand accent, primary buttons, active map pins |
-| `--brand-deep` Mole Brown | `#3B2A1F` | Heading accents, pin shadows, deep hover states |
-| `--accent` Lime | `#7A9F3A` | Used sparingly — success states, future vegetarian/vegan flags |
+| `--color-bg` Masa Cream | `#F7F2E8` | Primary background |
+| `--color-surface` Pure Cream | `#FFFBF2` | Cards, modals, raised surfaces |
+| `--color-ink` Charcoal | `#1B1916` | Body text, headlines |
+| `--color-muted` Warm Stone | `#8A8177` | Secondary text, borders, placeholder |
+| `--color-brand` Terracotta | `#C84B2F` | Brand accent, primary buttons, active map pins |
+| `--color-brand-deep` Mole Brown | `#3B2A1F` | Heading accents, pin shadows, deep hover states |
+| `--color-accent` Lime | `#7A9F3A` | Used sparingly — success states, future vegetarian/vegan flags |
 
-**Contrast rule:** every foreground/background pair must pass WCAG 2.2 AA (4.5:1 for body text, 3:1 for large text and UI components). Verify with a tool (e.g. Stark, axe) before shipping any new combination.
+**Contrast rule:** every foreground/background pair must pass WCAG 2.2 AA (4.5:1 for body text, 3:1 for large text and UI components). Verify with a tool (e.g. Stark, axe) before shipping any new combination. Token names use the `--color-*` prefix to align with Tailwind v4 color utility requirements.
 
 ## Typography
 
