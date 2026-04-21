@@ -1,0 +1,14 @@
+{
+  "site": {
+    "name": "Taco Tracker Korea",
+    "tagline": "Find the best Mexican food in Seoul"
+  },
+  "nav": {
+    "map": "Map",
+    "suggest": "Suggest a Spot",
+    "about": "About"
+  },
+  "home": {
+    "heading": "Tacos & Mexican Food in Seoul"
+  }
+}
