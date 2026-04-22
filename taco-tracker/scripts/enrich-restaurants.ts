@@ -30,6 +30,7 @@ async function writeBatch(
 ): Promise<void> {
   for (let i = 0; i < updates.length; i += BATCH_SIZE) {
     const batch = updates.slice(i, i + BATCH_SIZE)
+    // Partial upsert: only diff columns are SET; unlisted columns (status, address_ko, etc.) are untouched.
     const { error } = await supabase.from('restaurants').upsert(batch, { onConflict: 'id' })
     if (error) throw new Error(`Upsert failed: ${error.message}`)
     console.log(`  wrote batch ${Math.floor(i / BATCH_SIZE) + 1} (${batch.length} rows)`)
@@ -55,6 +56,8 @@ async function main() {
       updates.push({ id: row.id, ...diff })
     }
 
+    // Use diff value when present (including null), fall back to existing row value.
+    // diff.X is undefined (not null) when the field did not change.
     const finalNameEn = diff.name_en !== undefined ? diff.name_en : row.name_en
     const finalTags = diff.dish_tags !== undefined ? diff.dish_tags : row.dish_tags
 
