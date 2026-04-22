@@ -21,7 +21,7 @@ async function fetchDraftRows(supabase: ReturnType<typeof getSupabase>): Promise
     .select('id, name_ko, name_en, dish_tags, has_vegan_options, has_vegetarian_options, is_halal')
     .eq('status', 'draft')
   if (error) throw new Error(`Failed to fetch rows: ${error.message}`)
-  return data as RestaurantRow[]
+  return (data ?? []) as RestaurantRow[]
 }
 
 async function writeBatch(
@@ -73,6 +73,8 @@ async function main() {
     if (updates.length > 10) console.log(`  ... and ${updates.length - 10} more`)
     console.log('\n--- Rows needing name_en review (first 10) ---')
     noEnglishName.slice(0, 10).forEach(n => console.log(' ', n))
+    console.log('\n--- Rows needing dish_tags review (first 10) ---')
+    noTags.slice(0, 10).forEach(n => console.log(' ', n))
     return
   }
 
