@@ -85,6 +85,7 @@ export function inferDishTags(nameKo: string): string[] {
     quesadilla: 'quesadilla',
     nacho: 'nachos', // "nacho" → "nachos"
     fajita: 'fajita',
+    margarita: 'margarita',
     enchilada: 'enchilada',
     guacamole: 'guacamole',
     salsa: 'salsa',
@@ -98,7 +99,7 @@ export function inferDishTags(nameKo: string): string[] {
     }
   }
 
-  return Array.from(tags)
+  return Array.from(tags).sort()
 }
 
 /**

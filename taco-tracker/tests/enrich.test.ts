@@ -345,4 +345,25 @@ describe('computeDiff', () => {
     const diff = computeDiff(baseRow, patch)
     expect('is_halal' in diff).toBe(false)
   })
+
+  it('detects change when field reverts from true to null', () => {
+    const row: RestaurantRow = {
+      id: 'x',
+      name_ko: '평범한 타코',
+      name_en: null,
+      dish_tags: ['taco'],
+      has_vegan_options: null,
+      has_vegetarian_options: null,
+      is_halal: true,
+    }
+    const patch: EnrichmentPatch = {
+      name_en: null,
+      dish_tags: ['taco'],
+      has_vegan_options: null,
+      has_vegetarian_options: null,
+      is_halal: null,
+    }
+    const diff = computeDiff(row, patch)
+    expect(diff).toHaveProperty('is_halal', null)
+  })
 })
