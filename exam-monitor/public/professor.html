@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OnScreen — Professor Dashboard</title>
+  <link rel="stylesheet" href="professor.css" />
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="4" width="18" height="13" rx="2"></rect>
+            <path d="M8 21h8M12 17v4"></path>
+          </svg>
+        </div>
+        <div class="brand-name">OnScreen</div>
+      </div>
+
+      <nav class="nav">
+        <a class="nav-item active" href="#">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+          Dashboard
+        </a>
+        <span class="nav-item disabled">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Sessions
+        </span>
+        <span class="nav-item disabled">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-4 4 4 5-5"/></svg>
+          Analytics
+        </span>
+        <span class="nav-item disabled">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+          Settings
+        </span>
+      </nav>
+
+      <!-- QR code appears here once a session is live -->
+      <div class="sidebar-qr" id="sidebar-qr" hidden>
+        <div class="sidebar-qr-label">Scan to join</div>
+        <img id="qr" class="sidebar-qr-img" alt="Join QR code" />
+        <span class="status-pill live"><span class="dot"></span>Session live</span>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="limitations">
+          Page-visibility monitoring only. Cannot see which app or site students switched to.
+        </div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <h1 class="page-title">Dashboard</h1>
+          <p class="page-subtitle" id="page-subtitle">Start a session to begin monitoring student activity.</p>
+        </div>
+        <div class="topbar-actions">
+          <button id="restart-btn" class="btn-ghost" hidden>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            New session
+          </button>
+        </div>
+      </header>
+
+      <section class="stats">
+        <div class="stat-card">
+          <div class="stat-label">Students</div>
+          <div class="stat-value" id="count-total">0</div>
+          <div class="stat-sub">In current session</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Active</div>
+          <div class="stat-value accent-green" id="count-green">0</div>
+          <div class="stat-sub">Calculator visible</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Inactive</div>
+          <div class="stat-value accent-red" id="count-red">0</div>
+          <div class="stat-sub">Tab hidden or closed</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Failed</div>
+          <div class="stat-value accent-dark" id="count-fail">0</div>
+          <div class="stat-sub">Over 15s inactive</div>
+        </div>
+      </section>
+
+      <!-- Shown only when no session is active -->
+      <section class="session-card" id="session-card">
+        <div class="no-session">
+          <div class="empty-illustration" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+          </div>
+          <h2>No active session</h2>
+          <p>Start a new session to generate a QR code for your students.</p>
+          <button id="start-btn" class="btn-primary">Start new session</button>
+        </div>
+      </section>
+
+      <section class="students-section">
+        <div class="students-header">
+          <h2>Students</h2>
+          <div class="legend">
+            <span class="legend-item"><span class="swatch sw-active"></span>Active</span>
+            <span class="legend-item"><span class="swatch sw-warning"></span>Warning (5s)</span>
+            <span class="legend-item"><span class="swatch sw-fail"></span>Fail (15s)</span>
+          </div>
+        </div>
+        <div id="students" class="students-grid"></div>
+        <p id="students-empty" class="students-empty">Waiting for students to join&hellip;</p>
+      </section>
+    </main>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="professor.js"></script>
+</body>
+</html>
