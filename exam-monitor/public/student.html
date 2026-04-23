@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0d12" id="theme-color" />
+  <title>Exam Calculator</title>
+  <link rel="stylesheet" href="student.css" />
+</head>
+<body>
+  <section id="join-section" class="join">
+    <div class="join-card">
+      <h1>Exam Calculator</h1>
+      <p class="session-hint">Session: <strong id="session-code">—</strong></p>
+      <form id="join-form" autocomplete="off">
+        <label for="name-input">Your name</label>
+        <input id="name-input" name="name" type="text" maxlength="40" required autocomplete="off" autocapitalize="words" />
+        <button type="submit" class="join-btn">Join</button>
+        <p id="join-error" class="error" hidden></p>
+      </form>
+    </div>
+  </section>
+
+  <section id="calculator-section" class="calculator" hidden>
+    <div class="calc-frame">
+      <header class="calc-header">
+        <div class="header-left">
+          <span class="conn-dot" id="conn-dot" title="Connection"></span>
+          <span class="header-title" id="me-name">Calculator</span>
+        </div>
+        <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle theme" title="Toggle theme">
+          <svg class="icon-sun" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="4"></circle>
+            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path>
+          </svg>
+          <svg class="icon-moon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+          </svg>
+        </button>
+      </header>
+
+      <div class="display" aria-live="polite">
+        <div class="expression" id="expression">0</div>
+        <div class="result placeholder" id="result">0</div>
+      </div>
+
+      <div class="keys">
+        <button class="key accent" data-action="clear">C</button>
+        <button class="key accent" data-action="paren-open">(</button>
+        <button class="key accent" data-action="paren-close">)</button>
+        <button class="key accent" data-action="op" data-value="/">&divide;</button>
+
+        <button class="key" data-action="num" data-value="7">7</button>
+        <button class="key" data-action="num" data-value="8">8</button>
+        <button class="key" data-action="num" data-value="9">9</button>
+        <button class="key accent" data-action="op" data-value="*">&times;</button>
+
+        <button class="key" data-action="num" data-value="4">4</button>
+        <button class="key" data-action="num" data-value="5">5</button>
+        <button class="key" data-action="num" data-value="6">6</button>
+        <button class="key accent" data-action="op" data-value="-">&minus;</button>
+
+        <button class="key" data-action="num" data-value="1">1</button>
+        <button class="key" data-action="num" data-value="2">2</button>
+        <button class="key" data-action="num" data-value="3">3</button>
+        <button class="key accent" data-action="op" data-value="+">+</button>
+
+        <button class="key accent" data-action="backspace" aria-label="Backspace">&#9003;</button>
+        <button class="key" data-action="num" data-value="0">0</button>
+        <button class="key" data-action="dot">.</button>
+        <button class="key accent" data-action="equals">=</button>
+      </div>
+    </div>
+
+    <p class="disclaimer">
+      This page monitors only whether it is currently visible. It does not record what you do elsewhere.
+    </p>
+  </section>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="student.js"></script>
+</body>
+</html>
