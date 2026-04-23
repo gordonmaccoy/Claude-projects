@@ -20,6 +20,7 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 app.use(express.static(path.join(__dirname, 'public')));
+app.get('/', (req, res) => res.redirect('/professor.html'));
 
 // sessionId -> { id, professorSocketId, students: Map<studentId, Student> }
 // Student = { id, name, socketId, visible, lastSeen, status, disconnectedAt }
