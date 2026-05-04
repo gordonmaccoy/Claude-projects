@@ -89,16 +89,45 @@
         </div>
       </section>
 
-      <!-- Shown only when no session is active -->
+      <!-- Session card: shown when no session is active -->
       <section class="session-card" id="session-card">
-        <div class="no-session">
+
+        <!-- Step 1: No session — choose mode -->
+        <div id="no-session" class="no-session">
           <div class="empty-illustration" aria-hidden="true">
             <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
           </div>
           <h2>No active session</h2>
-          <p>Start a new session to generate a QR code for your students.</p>
-          <button id="start-btn" class="btn-primary">Start new session</button>
+          <p>Choose a session type to get started.</p>
+          <div class="mode-picker">
+            <button id="start-btn" class="btn-ghost mode-btn">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M2 20h20"/></svg>
+              Calculator Session
+            </button>
+            <button id="test-builder-open-btn" class="btn-primary mode-btn">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></svg>
+              Build a Test
+            </button>
+          </div>
         </div>
+
+        <!-- Step 2: Test builder (shown when "Build a Test" clicked) -->
+        <div id="test-builder" class="test-builder" hidden>
+          <div class="tb-topbar">
+            <h3 class="tb-heading">New Test</h3>
+            <button id="tb-cancel-btn" class="btn-ghost btn-sm">Cancel</button>
+          </div>
+          <div class="tb-title-row">
+            <input id="tb-title" class="tb-title-input" type="text" placeholder="Test title…" maxlength="80" autocomplete="off" />
+          </div>
+          <div id="tb-questions" class="tb-questions"></div>
+          <button id="tb-add-q-btn" class="btn-ghost tb-add-q-btn">+ Add Question</button>
+          <div id="tb-error" class="tb-error" hidden></div>
+          <div class="tb-footer">
+            <button id="tb-start-btn" class="btn-primary">Start Test Session</button>
+          </div>
+        </div>
+
       </section>
 
       <section class="students-section">

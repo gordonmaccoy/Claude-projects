@@ -6,19 +6,28 @@ const params = new URLSearchParams(location.search);
 const sessionId = (params.get('session') || '').toUpperCase();
 
 const els = {
-  joinSection: document.getElementById('join-section'),
-  calcSection: document.getElementById('calculator-section'),
-  sessionCode: document.getElementById('session-code'),
-  form: document.getElementById('join-form'),
-  nameInput: document.getElementById('name-input'),
-  joinError: document.getElementById('join-error'),
-  meName: document.getElementById('me-name'),
-  connDot: document.getElementById('conn-dot'),
-  expression: document.getElementById('expression'),
-  result: document.getElementById('result'),
-  keys: document.querySelector('.keys'),
-  themeToggle: document.getElementById('theme-toggle'),
-  themeColor: document.getElementById('theme-color'),
+  joinSection:    document.getElementById('join-section'),
+  calcSection:    document.getElementById('calculator-section'),
+  testSection:    document.getElementById('test-section'),
+  sessionCode:    document.getElementById('session-code'),
+  form:           document.getElementById('join-form'),
+  nameInput:      document.getElementById('name-input'),
+  joinError:      document.getElementById('join-error'),
+  meName:         document.getElementById('me-name'),
+  connDot:        document.getElementById('conn-dot'),
+  testConnDot:    document.getElementById('test-conn-dot'),
+  expression:     document.getElementById('expression'),
+  result:         document.getElementById('result'),
+  keys:           document.querySelector('.keys'),
+  themeToggle:    document.getElementById('theme-toggle'),
+  testThemeToggle:document.getElementById('test-theme-toggle'),
+  themeColor:     document.getElementById('theme-color'),
+  testTitle:      document.getElementById('test-title'),
+  testQuestions:  document.getElementById('test-questions'),
+  testActions:    document.getElementById('test-actions'),
+  testSubmitBtn:  document.getElementById('test-submit-btn'),
+  testDone:       document.getElementById('test-done'),
+  doneScore:      document.getElementById('done-score'),
 };
 
 // --- Theme ---
@@ -38,6 +47,10 @@ els.themeToggle.addEventListener('click', () => {
   const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
   applyTheme(next);
 });
+els.testThemeToggle.addEventListener('click', () => {
+  const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+  applyTheme(next);
+});
 
 els.sessionCode.textContent = sessionId || 'missing';
 if (!sessionId) {
@@ -52,6 +65,7 @@ socket.on('disconnect', () => setConnected(false));
 socket.on('session:ended', () => {
   stopHeartbeat();
   els.calcSection.hidden = true;
+  els.testSection.hidden = true;
   els.joinSection.hidden = false;
   showJoinError('The session was ended by the professor.');
 });
@@ -59,6 +73,10 @@ socket.on('session:ended', () => {
 function setConnected(ok) {
   els.connDot.classList.toggle('offline', !ok);
   els.connDot.title = ok ? 'Connected' : 'Disconnected';
+  if (els.testConnDot) {
+    els.testConnDot.classList.toggle('offline', !ok);
+    els.testConnDot.title = ok ? 'Connected' : 'Disconnected';
+  }
 }
 
 function showJoinError(msg) {
@@ -88,8 +106,94 @@ socket.on('student:joined', (res) => {
   }
   els.meName.textContent = els.nameInput.value.trim();
   els.joinSection.hidden = true;
+  // If this is a test session, the server will immediately follow with test:data.
+  // We show the calculator temporarily; test:data handler will swap sections.
+  // Calculator mode: show calculator now and start tracking.
   els.calcSection.hidden = false;
   startVisibilityTracking();
+});
+
+// --- Test mode ---
+
+let testQuestions = [];   // question objects from test:data
+let testAnswers = {};     // { questionId: optionId }
+let testSubmitted = false;
+
+socket.on('test:data', ({ title, questions }) => {
+  testQuestions = questions;
+  testAnswers = {};
+  testSubmitted = false;
+  // Switch from calculator section to test section.
+  els.calcSection.hidden = true;
+  els.testSection.hidden = false;
+  els.testTitle.textContent = title;
+  els.testActions.hidden = false;
+  els.testDone.hidden = true;
+  renderTestQuestions(questions);
+  // Visibility tracking was already started by student:joined.
+});
+
+function renderTestQuestions(questions) {
+  els.testQuestions.innerHTML = '';
+  questions.forEach((q, idx) => {
+    const card = document.createElement('div');
+    card.className = 'tq-card';
+    card.dataset.qid = q.id;
+
+    const text = document.createElement('p');
+    text.className = 'tq-text';
+    text.textContent = `${idx + 1}. ${q.text}`;
+    card.appendChild(text);
+
+    const opts = document.createElement('div');
+    opts.className = 'tq-options';
+    q.options.forEach((o, oIdx) => {
+      const label = document.createElement('label');
+      label.className = 'tq-option';
+
+      const radio = document.createElement('input');
+      radio.type = 'radio';
+      radio.name = q.id;
+      radio.value = o.id;
+      radio.addEventListener('change', () => {
+        testAnswers[q.id] = o.id;
+      });
+
+      const letter = document.createElement('span');
+      letter.className = 'tq-opt-letter';
+      letter.textContent = String.fromCharCode(65 + oIdx);
+
+      const optText = document.createElement('span');
+      optText.className = 'tq-opt-text';
+      optText.textContent = o.text;
+
+      label.appendChild(radio);
+      label.appendChild(letter);
+      label.appendChild(optText);
+      opts.appendChild(label);
+    });
+    card.appendChild(opts);
+    els.testQuestions.appendChild(card);
+  });
+}
+
+els.testSubmitBtn.addEventListener('click', () => {
+  if (testSubmitted) return;
+  const unanswered = testQuestions.filter(q => !testAnswers[q.id]);
+  if (unanswered.length > 0) {
+    alert(`${unanswered.length} question(s) not yet answered. Please answer all questions before submitting.`);
+    return;
+  }
+  if (!confirm('Submit your answers? You cannot change them after submitting.')) return;
+  testSubmitted = true;
+  els.testSubmitBtn.disabled = true;
+  socket.emit('student:submitAnswers', { answers: testAnswers });
+});
+
+socket.on('test:result', ({ score, total }) => {
+  els.testActions.hidden = true;
+  els.testDone.hidden = false;
+  els.doneScore.textContent = `Your score: ${score} / ${total}`;
 });
 
 // --- Visibility + heartbeat ---

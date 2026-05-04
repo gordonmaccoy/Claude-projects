@@ -1,8 +1,12 @@
 // Exam Monitor MVP server.
 // Page-visibility monitoring only. Not a lockdown browser.
-// Detects whether each student's calculator tab is currently visible via
+// Detects whether each student's tab is currently visible via
 // visibilitychange, pagehide, and a 3s heartbeat. It cannot see which app
 // or website a student switched to.
+//
+// Modes:
+//   calculator — students get a basic calculator (original behaviour)
+//   test       — students get a multiple-choice test built by the professor
 
 const express = require('express');
 const http = require('http');
@@ -11,9 +15,9 @@ const { Server } = require('socket.io');
 const QRCode = require('qrcode');
 
 const PORT = process.env.PORT || 3100;
-const STALE_MS = 10_000;           // green requires a heartbeat within this window
+const STALE_MS = 10_000;            // green requires a heartbeat within this window
 const STALE_CHECK_INTERVAL_MS = 2_000;
-const DISCONNECT_GRACE_MS = 60_000; // keep student on the dashboard this long after socket disconnect
+const DISCONNECT_GRACE_MS = 60_000; // keep student on dashboard this long after disconnect
 
 const app = express();
 const server = http.createServer(app);
@@ -22,11 +26,23 @@ const io = new Server(server);
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/', (req, res) => res.redirect('/professor.html'));
 
-// sessionId -> { id, professorSocketId, students: Map<studentId, Student> }
-// Student = { id, name, socketId, visible, lastSeen, status, disconnectedAt }
+// sessionId -> { id, professorSocketId, students: Map<studentId, Student>,
+//                mode: 'calculator'|'test', testId: string|null }
+// Student = { id, name, socketId, visible, lastSeen, status, disconnectedAt, inactiveSince }
 const sessions = new Map();
+
 // professorSocketId -> sessionId (one active session per professor socket)
 const professorSession = new Map();
+
+// testId -> full Test object (including correctOptionId — never sent to students)
+// Test = { id, title, questions: [{ id, text, options:[{id,text}], correctOptionId }] }
+const tests = new Map();
+
+// sessionId -> Map<studentId, Submission>
+// Submission = { answers:{questionId:optionId}, score, total, submittedAt }
+const submissions = new Map();
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
 
 function genId(len = 6) {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I for readability
@@ -52,9 +68,6 @@ function emitUpdateIfChanged(session, student) {
   const next = computeStatus(student);
   if (next !== student.status) {
     if (next === 'red') {
-      // Start the inactivity clock. If we already have a lastSeen from before the
-      // student went quiet (heartbeat stopped while visible), anchor there; otherwise
-      // use "now" (the moment we saw the hide / disconnect).
       if (!student.inactiveSince) {
         student.inactiveSince = student.visible ? student.lastSeen : Date.now();
       }
@@ -72,44 +85,92 @@ function emitUpdateIfChanged(session, student) {
 }
 
 function originOf(socket) {
-  // Prefer the Origin header the browser sent; fall back to Host.
   const origin = socket.handshake.headers.origin;
   if (origin) return origin;
   const host = socket.handshake.headers.host || `localhost:${PORT}`;
   return `http://${host}`;
 }
 
+// Drop the professor's prior session (if any), notifying students.
+// Returns the prior session's testId if one existed (for cleanup).
+function dropPriorSession(professorSocketId) {
+  const priorId = professorSession.get(professorSocketId);
+  if (!priorId || !sessions.has(priorId)) return null;
+  const prior = sessions.get(priorId);
+  for (const s of prior.students.values()) {
+    io.to(s.socketId).emit('session:ended', {});
+  }
+  const priorTestId = prior.testId || null;
+  sessions.delete(priorId);
+  submissions.delete(priorId);
+  return priorTestId;
+}
+
+async function makeQr(joinUrl) {
+  try {
+    return await QRCode.toDataURL(joinUrl, { margin: 1, width: 256 });
+  } catch (err) {
+    console.error('QR generation failed:', err);
+    return '';
+  }
+}
+
+// ─── Socket handlers ─────────────────────────────────────────────────────────
+
 io.on('connection', (socket) => {
+
+  // ── Professor: start a calculator session ────────────────────────────────
   socket.on('professor:startSession', async () => {
-    // Drop any prior session belonging to this professor socket.
-    const priorId = professorSession.get(socket.id);
-    if (priorId && sessions.has(priorId)) {
-      const prior = sessions.get(priorId);
-      for (const s of prior.students.values()) {
-        io.to(s.socketId).emit('session:ended', {});
-      }
-      sessions.delete(priorId);
-    }
+    const priorTestId = dropPriorSession(socket.id);
+    if (priorTestId) tests.delete(priorTestId);
 
     const sessionId = newSessionId();
     const joinUrl = `${originOf(socket)}/student.html?session=${sessionId}`;
-    let qrDataUrl = '';
-    try {
-      qrDataUrl = await QRCode.toDataURL(joinUrl, { margin: 1, width: 256 });
-    } catch (err) {
-      console.error('QR generation failed:', err);
-    }
+    const qrDataUrl = await makeQr(joinUrl);
 
     sessions.set(sessionId, {
       id: sessionId,
       professorSocketId: socket.id,
       students: new Map(),
+      mode: 'calculator',
+      testId: null,
     });
     professorSession.set(socket.id, sessionId);
 
-    socket.emit('session:started', { sessionId, joinUrl, qrDataUrl });
+    socket.emit('session:started', { sessionId, joinUrl, qrDataUrl, mode: 'calculator' });
   });
 
+  // ── Professor: start a test session ─────────────────────────────────────
+  socket.on('professor:startTestSession', async ({ test } = {}) => {
+    if (!test || !test.title || !Array.isArray(test.questions) || test.questions.length === 0) {
+      socket.emit('session:error', { message: 'Invalid test data.' });
+      return;
+    }
+
+    const priorTestId = dropPriorSession(socket.id);
+    if (priorTestId) tests.delete(priorTestId);
+
+    const testId = genId(8);
+    tests.set(testId, { ...test, id: testId });
+
+    const sessionId = newSessionId();
+    const joinUrl = `${originOf(socket)}/student.html?session=${sessionId}`;
+    const qrDataUrl = await makeQr(joinUrl);
+
+    sessions.set(sessionId, {
+      id: sessionId,
+      professorSocketId: socket.id,
+      students: new Map(),
+      mode: 'test',
+      testId,
+    });
+    professorSession.set(socket.id, sessionId);
+    submissions.set(sessionId, new Map());
+
+    socket.emit('session:started', { sessionId, joinUrl, qrDataUrl, mode: 'test' });
+  });
+
+  // ── Student: join session ────────────────────────────────────────────────
   socket.on('student:join', ({ sessionId, name } = {}) => {
     const session = sessions.get(sessionId);
     if (!session) {
@@ -133,19 +194,69 @@ io.on('connection', (socket) => {
       inactiveSince: null,
     };
     session.students.set(studentId, student);
-    // Remember session+studentId on the socket for quick lookup on events/disconnect.
     socket.data.sessionId = sessionId;
     socket.data.studentId = studentId;
+
     socket.emit('student:joined', { ok: true, studentId });
+
+    // In test mode: send sanitised questions (no correct answers) to the student.
+    if (session.mode === 'test' && session.testId) {
+      const test = tests.get(session.testId);
+      if (test) {
+        const sanitised = {
+          title: test.title,
+          questions: test.questions.map(q => ({
+            id: q.id,
+            text: q.text,
+            options: q.options.map(o => ({ id: o.id, text: o.text })),
+          })),
+        };
+        socket.emit('test:data', sanitised);
+      }
+    }
+
     io.to(session.professorSocketId).emit('session:studentJoined', {
       studentId,
       name: student.name,
       status: student.status,
       lastSeen: student.lastSeen,
       inactiveSince: student.inactiveSince,
+      submitted: false,
     });
   });
 
+  // ── Student: submit test answers ─────────────────────────────────────────
+  socket.on('student:submitAnswers', ({ answers } = {}) => {
+    const { sessionId, studentId } = socket.data;
+    if (!sessionId || !studentId) return;
+    const session = sessions.get(sessionId);
+    if (!session || session.mode !== 'test') return;
+    const subMap = submissions.get(sessionId);
+    if (!subMap) return;
+    // Prevent double submission.
+    if (subMap.has(studentId)) return;
+
+    const test = tests.get(session.testId);
+    if (!test) return;
+
+    let score = 0;
+    const total = test.questions.length;
+    for (const q of test.questions) {
+      if (answers && answers[q.id] === q.correctOptionId) score++;
+    }
+
+    subMap.set(studentId, {
+      answers: answers || {},
+      score,
+      total,
+      submittedAt: new Date().toISOString(),
+    });
+
+    socket.emit('test:result', { score, total });
+    io.to(session.professorSocketId).emit('session:studentSubmitted', { studentId, score, total });
+  });
+
+  // ── Visibility / heartbeat ───────────────────────────────────────────────
   function touchFromClient(visible) {
     const { sessionId, studentId } = socket.data;
     if (!sessionId || !studentId) return;
@@ -160,8 +271,9 @@ io.on('connection', (socket) => {
   }
 
   socket.on('student:visibility', ({ visible } = {}) => touchFromClient(visible));
-  socket.on('student:heartbeat', ({ visible } = {}) => touchFromClient(visible));
+  socket.on('student:heartbeat',  ({ visible } = {}) => touchFromClient(visible));
 
+  // ── Disconnect ───────────────────────────────────────────────────────────
   socket.on('disconnect', () => {
     // Professor disconnect: drop the session and notify any students.
     const sessId = professorSession.get(socket.id);
@@ -170,7 +282,10 @@ io.on('connection', (socket) => {
       for (const s of session.students.values()) {
         io.to(s.socketId).emit('session:ended', {});
       }
+      const tid = session.testId;
       sessions.delete(sessId);
+      submissions.delete(sessId);
+      if (tid) tests.delete(tid);
       professorSession.delete(socket.id);
       return;
     }
@@ -187,8 +302,8 @@ io.on('connection', (socket) => {
   });
 });
 
-// Periodic stale check: flip to RED when heartbeats stop, and evict students
-// who have been disconnected past the grace window.
+// ─── Periodic stale check ────────────────────────────────────────────────────
+// Flip to RED when heartbeats stop; evict students past the grace window.
 setInterval(() => {
   const now = Date.now();
   for (const session of sessions.values()) {
