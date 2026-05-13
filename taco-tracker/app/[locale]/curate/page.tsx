@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { getTranslations } from 'next-intl/server'
 import { RestaurantList } from '@/components/restaurant-list'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 export const metadata: Metadata = {
   robots: { index: false, follow: false },
@@ -17,7 +17,7 @@ export default async function CuratePage({ params, searchParams }: Props) {
   const { neighborhood } = await searchParams
   const t = await getTranslations('listing')
 
-  const supabase = await createClient()
+  const supabase = createAdminClient()
   const { count } = await supabase
     .from('restaurants')
     .select('*', { count: 'exact', head: true })

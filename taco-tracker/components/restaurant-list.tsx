@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { getRestaurants, getNeighborhoods, type RestaurantStatus } from '@/lib/restaurants'
 import { getTranslations } from 'next-intl/server'
 import { RestaurantCard } from './restaurant-card'
@@ -12,7 +13,10 @@ interface Props {
 }
 
 export async function RestaurantList({ status, neighborhood, locale, basePath }: Props) {
-  const supabase = await createClient()
+  // RLS only allows anon reads of live rows. Draft/archived listings (e.g. /curate)
+  // must use the service role client. Service role usage is server-side only.
+  const supabase = status === 'live' ? await createClient() : createAdminClient()
+
   const [restaurants, neighborhoods] = await Promise.all([
     getRestaurants(supabase, {
       status,
