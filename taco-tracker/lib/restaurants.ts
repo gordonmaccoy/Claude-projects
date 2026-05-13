@@ -36,9 +36,9 @@ export async function getRestaurants(
     query = query.eq('neighborhood', filters.neighborhood)
   }
 
-  const { data, error } = await query
+  const { data, error } = await query.returns<Restaurant[]>()
   if (error) throw new Error(`Failed to fetch restaurants: ${error.message}`)
-  return (data ?? []) as Restaurant[]
+  return data ?? []
 }
 
 /**
@@ -64,7 +64,8 @@ export async function getNeighborhoods(
     .select('neighborhood')
     .eq('status', status)
     .not('neighborhood', 'is', null)
+    .returns<{ neighborhood: string | null }[]>()
 
   if (error) throw new Error(`Failed to fetch neighborhoods: ${error.message}`)
-  return dedupeNeighborhoods((data ?? []) as { neighborhood: string | null }[])
+  return dedupeNeighborhoods(data ?? [])
 }
