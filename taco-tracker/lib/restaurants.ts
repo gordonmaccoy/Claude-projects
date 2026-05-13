@@ -10,6 +10,8 @@ export interface Restaurant {
   neighborhood: string | null
   address_ko: string
   kakao_place_id: string | null
+  lat: number
+  lng: number
   dish_tags: string[]
   has_vegan_options: boolean | null
   has_vegetarian_options: boolean | null
@@ -19,7 +21,7 @@ export interface Restaurant {
 }
 
 const RESTAURANT_COLUMNS =
-  'id, slug, name_ko, name_en, neighborhood, address_ko, kakao_place_id, dish_tags, ' +
+  'id, slug, name_ko, name_en, neighborhood, address_ko, kakao_place_id, lat, lng, dish_tags, ' +
   'has_vegan_options, has_vegetarian_options, is_halal, cover_photo_url, curator_rating'
 
 export async function getRestaurants(
