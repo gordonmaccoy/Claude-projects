@@ -28,13 +28,12 @@ async function writeBatch(
   supabase: ReturnType<typeof getSupabase>,
   updates: { id: string; [key: string]: unknown }[]
 ): Promise<void> {
-  for (let i = 0; i < updates.length; i += BATCH_SIZE) {
-    const batch = updates.slice(i, i + BATCH_SIZE)
-    // Partial upsert: only diff columns are SET; unlisted columns (status, address_ko, etc.) are untouched.
-    const { error } = await supabase.from('restaurants').upsert(batch, { onConflict: 'id' })
-    if (error) throw new Error(`Upsert failed: ${error.message}`)
-    console.log(`  wrote batch ${Math.floor(i / BATCH_SIZE) + 1} (${batch.length} rows)`)
+  for (let i = 0; i < updates.length; i++) {
+    const { id, ...fields } = updates[i]
+    const { error } = await supabase.from('restaurants').update(fields).eq('id', id)
+    if (error) throw new Error(`Update failed for ${id}: ${error.message}`)
   }
+  console.log(`  wrote ${updates.length} rows`)
 }
 
 async function main() {
