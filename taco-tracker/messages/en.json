@@ -19,6 +19,11 @@
     "emptyState": "No restaurants match these filters.",
     "curatorBanner": "{count, plural, =1 {Draft mode — 1 restaurant pending review} other {Draft mode — # restaurants pending review}}",
     "curateTitle": "Curate — Draft restaurants",
+    "mapUnavailable": "Map unavailable, showing list only.",
+    "tabs": {
+      "map": "Map",
+      "list": "List"
+    },
     "dietary": {
       "halal": "Halal",
       "vegan": "Vegan",

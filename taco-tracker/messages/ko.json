@@ -19,6 +19,11 @@
     "emptyState": "조건에 맞는 식당이 없습니다.",
     "curatorBanner": "큐레이션 모드 — 검토 대기 중인 식당 {count}개",
     "curateTitle": "큐레이션 — 초안 식당",
+    "mapUnavailable": "지도를 불러올 수 없습니다. 목록만 표시합니다.",
+    "tabs": {
+      "map": "지도",
+      "list": "목록"
+    },
     "dietary": {
       "halal": "할랄",
       "vegan": "비건",
