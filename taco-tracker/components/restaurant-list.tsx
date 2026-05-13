@@ -2,8 +2,8 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getRestaurants, getNeighborhoods, type RestaurantStatus } from '@/lib/restaurants'
 import { getTranslations } from 'next-intl/server'
-import { RestaurantCard } from './restaurant-card'
 import { NeighborhoodFilter } from './neighborhood-filter'
+import { MapListView } from './map/map-list-view'
 
 interface Props {
   status: RestaurantStatus
@@ -13,8 +13,6 @@ interface Props {
 }
 
 export async function RestaurantList({ status, neighborhood, locale, basePath }: Props) {
-  // RLS only allows anon reads of live rows. Draft/archived listings (e.g. /curate)
-  // must use the service role client. Service role usage is server-side only.
   const supabase = status === 'live' ? await createClient() : createAdminClient()
 
   const [restaurants, neighborhoods] = await Promise.all([
@@ -40,17 +38,7 @@ export async function RestaurantList({ status, neighborhood, locale, basePath }:
           ? t('resultCountFiltered', { count, neighborhood })
           : t('resultCountAll', { count })}
       </p>
-      {count === 0 ? (
-        <p className="py-16 text-center text-muted">{t('emptyState')}</p>
-      ) : (
-        <ul className="flex flex-col gap-3">
-          {restaurants.map((r) => (
-            <li key={r.id}>
-              <RestaurantCard restaurant={r} locale={locale} />
-            </li>
-          ))}
-        </ul>
-      )}
+      <MapListView restaurants={restaurants} locale={locale} />
     </div>
   )
 }
