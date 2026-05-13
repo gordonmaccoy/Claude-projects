@@ -1,13 +1,16 @@
+'use client'
+
 import type { Restaurant } from '@/lib/restaurants'
-import { getTranslations } from 'next-intl/server'
+import { useTranslations } from 'next-intl'
 
 interface Props {
   restaurant: Restaurant
   locale: 'ko' | 'en'
+  isActive?: boolean
 }
 
-export async function RestaurantCard({ restaurant, locale }: Props) {
-  const t = await getTranslations('listing.dietary')
+export function RestaurantCard({ restaurant, locale, isActive = false }: Props) {
+  const t = useTranslations('listing.dietary')
   const kakaoUrl = restaurant.kakao_place_id
     ? `https://place.map.kakao.com/${restaurant.kakao_place_id}`
     : undefined
@@ -28,8 +31,12 @@ export async function RestaurantCard({ restaurant, locale }: Props) {
       : null,
   ].filter((x): x is { key: string; label: string } => x !== null)
 
+  const articleClass = isActive
+    ? 'flex overflow-hidden rounded-md bg-surface border-2 border-brand shadow-[0_4px_16px_rgba(200,75,47,0.18)] transition-shadow'
+    : 'flex overflow-hidden rounded-md bg-surface border-2 border-transparent shadow-card transition-shadow hover:shadow-[0_4px_12px_rgba(27,25,22,0.12)]'
+
   const CardContent = (
-    <article className="flex overflow-hidden rounded-md bg-surface shadow-card transition-shadow hover:shadow-[0_4px_12px_rgba(27,25,22,0.12)]">
+    <article className={articleClass}>
       <div className="relative h-[60px] w-[80px] shrink-0 bg-gradient-to-br from-[#E8DCC8] to-[#D4C4A8] sm:h-[80px] sm:w-[120px]">
         {restaurant.cover_photo_url ? (
           // eslint-disable-next-line @next/next/no-img-element
