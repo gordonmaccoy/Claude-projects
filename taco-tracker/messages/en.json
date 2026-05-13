@@ -10,5 +10,19 @@
   },
   "home": {
     "heading": "Tacos & Mexican Food in Seoul"
+  },
+  "listing": {
+    "title": "Tacos & Mexican Food in Seoul",
+    "allNeighborhoods": "All",
+    "resultCountAll": "{count, plural, =1 {1 restaurant} other {# restaurants}}",
+    "resultCountFiltered": "{count, plural, =1 {1 restaurant in {neighborhood}} other {# restaurants in {neighborhood}}}",
+    "emptyState": "No restaurants match these filters.",
+    "curatorBanner": "{count, plural, =1 {Draft mode — 1 restaurant pending review} other {Draft mode — # restaurants pending review}}",
+    "curateTitle": "Curate — Draft restaurants",
+    "dietary": {
+      "halal": "Halal",
+      "vegan": "Vegan",
+      "vegetarian": "Vegetarian"
+    }
   }
 }

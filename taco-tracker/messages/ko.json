@@ -10,5 +10,19 @@
   },
   "home": {
     "heading": "서울의 타코 & 멕시코 음식"
+  },
+  "listing": {
+    "title": "서울의 타코 & 멕시코 음식",
+    "allNeighborhoods": "전체",
+    "resultCountAll": "전체 {count}개 식당",
+    "resultCountFiltered": "{neighborhood} {count}개 식당",
+    "emptyState": "조건에 맞는 식당이 없습니다.",
+    "curatorBanner": "큐레이션 모드 — 검토 대기 중인 식당 {count}개",
+    "curateTitle": "큐레이션 — 초안 식당",
+    "dietary": {
+      "halal": "할랄",
+      "vegan": "비건",
+      "vegetarian": "채식"
+    }
   }
 }
