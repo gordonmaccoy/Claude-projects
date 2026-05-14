@@ -1,4 +1,4 @@
-# Taco Tracker Korea — Product Brief
+# Taco Map — Product Brief
 
 _Last updated: 2026-04-21_
 
@@ -50,6 +50,6 @@ Expansion is modeled on The Guinness Map's layered structure. See [roadmap.md](r
 
 ## Open Questions (revisit, don't block MVP)
 
-- **Brand at dietary expansion:** "Taco Tracker Korea" works while the focus is Mexican food. When halal/vegan/vegetarian are added, we decide whether to keep the name (with a broader tagline), introduce a parent brand, or split into sibling properties. Defer until Phase 3.
+- **Brand at dietary expansion:** "Taco Map" works while the focus is Mexican food. When halal/vegan/vegetarian are added, we either keep the name (with a broader tagline) or introduce sibling brands (Halal Map, Veggie Map, etc.) — the current logo system already anticipates the sibling-brand path. Defer the decision until Phase 3.
 - **Domain:** `tacotracker.kr` is the working assumption; confirm availability and TLD preference during Phase 0.
 - **Analytics provider:** Vercel Analytics vs. Plausible vs. neither. Pick in Phase 0.

@@ -1,4 +1,4 @@
-# Taco Tracker Korea — Architecture
+# Taco Map — Architecture
 
 _Last updated: 2026-04-21_
 

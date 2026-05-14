@@ -1,4 +1,4 @@
-# Taco Tracker Korea — Roadmap
+# Taco Map — Roadmap
 
 _Last updated: 2026-05-14_
 
@@ -62,7 +62,7 @@ Expand from Mexican-only to include halal, vegan, and vegetarian. The schema alr
 - Run fresh Kakao seeding rounds per new cuisine (keywords per language, per cuisine).
 - Curate each new cuisine to launch parity: every live row has bilingual curator note, style/dish analog, price, rating.
 - Add a top-level "cuisine" switcher (KO: 카테고리; EN: Cuisine) to the filter bar.
-- **Open question resurfaces:** keep "Taco Tracker Korea" as brand, retitle to something broader, or split into sibling properties under a parent brand. Revisit before shipping Phase 3.
+- **Brand check:** the "Taco Map" name is single-cuisine; for halal/vegan/vegetarian we either keep it (with broader tagline) or sibling under a parent brand ("Halal Map", "Veggie Map", etc.). The current logo system anticipates the sibling-brand path. Revisit before shipping Phase 3.
 
 ## Phase 4 — Geographic Expansion
 
