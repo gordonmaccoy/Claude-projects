@@ -10,7 +10,8 @@
     "test:watch": "vitest",
     "seed": "tsx scripts/seed-from-kakao.ts",
     "enrich": "tsx scripts/enrich-restaurants.ts",
-    "scrape": "tsx scripts/scrape-kakao.ts"
+    "scrape": "tsx scripts/scrape-kakao.ts",
+    "seed:urls": "tsx scripts/seed-from-urls.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
