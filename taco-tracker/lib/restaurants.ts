@@ -80,14 +80,15 @@ export async function getRestaurants(
   supabase: SupabaseClient,
   filters: RestaurantFilters
 ): Promise<Restaurant[]> {
-  const base = supabase.from('restaurants').select(RESTAURANT_COLUMNS)
-  const filtered = buildRestaurantsQuery(
-    base as unknown as Parameters<typeof buildRestaurantsQuery>[0],
-    filters
-  ) as ReturnType<typeof base.order>
-  const { data, error } = await filtered.returns<Restaurant[]>()
+  // The Supabase chain types get so complex they trigger TS's "instantiation
+  // too deep" guard. We test buildRestaurantsQuery against a typed mock
+  // (see tests/restaurants.test.ts); at runtime, we accept the cast.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const base = supabase.from('restaurants').select(RESTAURANT_COLUMNS) as any
+  const filtered = buildRestaurantsQuery(base, filters)
+  const { data, error } = await filtered
   if (error) throw new Error(`Failed to fetch restaurants: ${error.message}`)
-  return data ?? []
+  return (data ?? []) as Restaurant[]
 }
 
 export async function getRestaurantBySlug(
