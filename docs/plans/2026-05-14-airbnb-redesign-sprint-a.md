@@ -2051,6 +2051,333 @@ git commit -m "feat: stub restaurant detail page at /restaurant/[slug]"
 
 ---
 
+## Task 11 — Logo-styled pin (replaces plain teardrop)
+
+**Files:**
+- Modify: `taco-tracker/components/map/pin-icon.ts`
+- Modify: `taco-tracker/tests/pin-icon.test.ts`
+
+Add a small cream-colored taco-shell accent inside the pin head. The pin body stays terracotta with mole-brown outline (matches the brand pin shape from the logo). Active variant inverts as before.
+
+- [ ] **Step 1: Update `pinSvg` in `pin-icon.ts`**
+
+Replace the function body:
+
+```typescript
+export function pinSvg({ active }: PinOptions): string {
+  const fill = active ? '#FFFBF2' : '#C84B2F'
+  const stroke = active ? '#C84B2F' : '#3B2A1F'
+  const accent = active ? '#C84B2F' : '#FFFBF2'
+  // Teardrop body + a small curved accent inside the head ("folded taco shell")
+  // and two tiny garnish dots (cream/green). Anchored at viewBox (16, 30).
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32"><path d="M 16 2 C 9 2 4 8 4 14 C 4 22 16 30 16 30 C 16 30 28 22 28 14 C 28 8 23 2 16 2 Z" fill="${fill}" stroke="${stroke}" stroke-width="2" stroke-linejoin="round"/><path d="M 10 13 Q 16 17 22 13" fill="none" stroke="${accent}" stroke-width="2.5" stroke-linecap="round"/><circle cx="12.5" cy="11" r="1" fill="${accent}"/><circle cx="19.5" cy="11" r="1" fill="${accent}"/></svg>`
+}
+```
+
+- [ ] **Step 2: Update tests if the existing 4 still pass**
+
+Run:
+```bash
+cd taco-tracker && pnpm vitest run tests/pin-icon.test.ts
+```
+
+The existing tests check fill/stroke/viewBox — they should still pass since the body's `fill`/`stroke` and `viewBox` are unchanged. Confirm. If any fail, fix the assertion (don't change the SVG).
+
+- [ ] **Step 3: Add one new test asserting the accent stroke**
+
+Append to `tests/pin-icon.test.ts`:
+
+```typescript
+describe('pinSvg accent', () => {
+  it('default variant draws a cream taco-shell accent', () => {
+    const svg = pinSvg({ active: false })
+    expect(svg).toContain('Q 16 17 22 13')   // the accent curve path
+    expect(svg).toMatch(/stroke="#FFFBF2"/)   // cream accent on default
+  })
+
+  it('active variant inverts the accent color', () => {
+    const svg = pinSvg({ active: true })
+    expect(svg).toMatch(/stroke="#C84B2F"/)   // terracotta accent on active
+  })
+})
+```
+
+- [ ] **Step 4: Run tests**
+
+```bash
+cd taco-tracker && pnpm vitest run
+```
+Expected: all pass.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add taco-tracker/components/map/pin-icon.ts taco-tracker/tests/pin-icon.test.ts
+git commit -m "feat: logo-styled pin with taco-shell accent and garnish dots"
+```
+
+---
+
+## Task 12 — Viewport-bounded list filtering
+
+**Files:**
+- Modify: `taco-tracker/components/map/kakao-map.tsx`
+- Modify: `taco-tracker/components/map/map-list-view.tsx`
+- Create: `taco-tracker/scripts/lib/viewport-bounds.ts` (pure helper, despite the path — placed here just for ESM resolution; it'll move to `lib/` if it grows)
+- Modify: `taco-tracker/lib/restaurants.ts` (add re-export of a `Bounds` type)
+- Create: `taco-tracker/tests/viewport-bounds.test.ts`
+
+When the map pans/zooms (idle event), it reports its current bounds upward. `MapListView` filters the **card list** to restaurants inside those bounds. The **map continues to show all chip-matching pins** (no viewport filter on the map itself) — this is Option B.
+
+- [ ] **Step 1: Add pure helper for the inside-bounds check**
+
+Create `taco-tracker/scripts/lib/viewport-bounds.ts`:
+
+```typescript
+export interface ViewportBounds {
+  swLat: number
+  swLng: number
+  neLat: number
+  neLng: number
+}
+
+/**
+ * True if (lat, lng) is inside the given bounds (inclusive).
+ * The bounding box is assumed not to cross the antimeridian (irrelevant for Seoul).
+ */
+export function isInsideBounds(
+  lat: number,
+  lng: number,
+  b: ViewportBounds
+): boolean {
+  return lat >= b.swLat && lat <= b.neLat && lng >= b.swLng && lng <= b.neLng
+}
+```
+
+- [ ] **Step 2: Write unit tests**
+
+Create `taco-tracker/tests/viewport-bounds.test.ts`:
+
+```typescript
+import { describe, it, expect } from 'vitest'
+import { isInsideBounds, type ViewportBounds } from '../scripts/lib/viewport-bounds'
+
+const seoul: ViewportBounds = {
+  swLat: 37.4,
+  swLng: 126.8,
+  neLat: 37.7,
+  neLng: 127.2,
+}
+
+describe('isInsideBounds', () => {
+  it('returns true for a point inside the box', () => {
+    expect(isInsideBounds(37.55, 127.0, seoul)).toBe(true)
+  })
+  it('returns true for a point on the boundary', () => {
+    expect(isInsideBounds(37.4, 126.8, seoul)).toBe(true)
+    expect(isInsideBounds(37.7, 127.2, seoul)).toBe(true)
+  })
+  it('returns false for a point north of the box', () => {
+    expect(isInsideBounds(37.8, 127.0, seoul)).toBe(false)
+  })
+  it('returns false for a point east of the box', () => {
+    expect(isInsideBounds(37.55, 127.3, seoul)).toBe(false)
+  })
+})
+```
+
+Run: `pnpm vitest run tests/viewport-bounds.test.ts` — expect 4 pass.
+
+- [ ] **Step 3: Modify `KakaoMap` to emit bounds**
+
+Add a new optional prop:
+
+```typescript
+interface Props {
+  // ...existing
+  onBoundsChange?: (bounds: ViewportBounds) => void
+}
+```
+
+In the SDK-ready effect, after creating the map and clusterer, add:
+
+```typescript
+const reportBounds = () => {
+  if (!onBoundsChange || !mapRef.current || !namespaceRef.current) return
+  const b = mapRef.current.getBounds()  // needs adding to KakaoMap interface
+  const sw = b.getSouthWest()
+  const ne = b.getNorthEast()
+  onBoundsChange({
+    swLat: sw.getLat(),
+    swLng: sw.getLng(),
+    neLat: ne.getLat(),
+    neLng: ne.getLng(),
+  })
+}
+maps.event.addListener(mapRef.current, 'idle', reportBounds)
+// also report once initial render finishes after bounds-fit completes
+setTimeout(reportBounds, 50)
+```
+
+And add `getBounds(): KakaoLatLngBounds` to the `KakaoMap` interface in `lib/kakao-maps.ts` (also: `KakaoLatLngBounds` needs `getSouthWest(): KakaoLatLng` and `getNorthEast(): KakaoLatLng` methods).
+
+Update `lib/kakao-maps.ts`:
+
+```typescript
+export interface KakaoLatLngBounds {
+  extend(latlng: KakaoLatLng): void
+  isEmpty(): boolean
+  getSouthWest(): KakaoLatLng
+  getNorthEast(): KakaoLatLng
+}
+
+export interface KakaoMap {
+  setBounds(bounds: KakaoLatLngBounds, paddingTop?: number, paddingRight?: number, paddingBottom?: number, paddingLeft?: number): void
+  setCenter(latlng: KakaoLatLng): void
+  setLevel(level: number): void
+  getLevel(): number
+  getBounds(): KakaoLatLngBounds
+  relayout(): void
+}
+```
+
+- [ ] **Step 4: Modify `MapListView` to receive bounds and filter the list**
+
+```typescript
+'use client'
+
+import { useCallback, useMemo, useRef, useState } from 'react'
+import { useTranslations } from 'next-intl'
+import type { Restaurant } from '@/lib/restaurants'
+import { RestaurantCard } from '../restaurant-card'
+import { KakaoMap } from './kakao-map'
+import { isInsideBounds, type ViewportBounds } from '@/scripts/lib/viewport-bounds'
+
+interface Props {
+  restaurants: Restaurant[]
+  locale: 'ko' | 'en'
+}
+
+export function MapListView({ restaurants, locale }: Props) {
+  const t = useTranslations('listing')
+  const [activeId, setActiveId] = useState<string | null>(null)
+  const [tab, setTab] = useState<'map' | 'list'>('map')
+  const [bounds, setBounds] = useState<ViewportBounds | null>(null)
+
+  const handlePinClick = useCallback((id: string) => {
+    setActiveId((prev) => (prev === id ? null : id))
+  }, [])
+  const handlePopoverClose = useCallback(() => setActiveId(null), [])
+  const handleBoundsChange = useCallback((b: ViewportBounds) => setBounds(b), [])
+
+  const restaurantById = useMemo(() => {
+    const m = new Map<string, Restaurant>()
+    for (const r of restaurants) m.set(r.id, r)
+    return m
+  }, [restaurants])
+
+  const visibleRestaurants = useMemo(() => {
+    if (!bounds) return restaurants
+    return restaurants.filter((r) => isInsideBounds(r.lat, r.lng, bounds))
+  }, [restaurants, bounds])
+
+  if (restaurants.length === 0) {
+    return <p className="py-16 text-center text-muted">{t('emptyState')}</p>
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      {/* Mobile tabs */}
+      <div className="flex gap-1 self-start rounded-full border border-ink bg-surface p-1 md:hidden">
+        <button
+          type="button"
+          onClick={() => setTab('map')}
+          className={tabClass(tab === 'map')}
+          aria-pressed={tab === 'map'}
+        >
+          {t('tabs.map')}
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab('list')}
+          className={tabClass(tab === 'list')}
+          aria-pressed={tab === 'list'}
+        >
+          {t('tabs.list')}
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-[65%_35%]">
+        <div className={tab === 'map' ? 'block' : 'hidden md:block'}>
+          <div className="h-[60vh] md:sticky md:top-4 md:h-[calc(100vh-8rem)]">
+            <KakaoMap
+              restaurants={restaurants}
+              restaurantById={restaurantById}
+              activeId={activeId}
+              locale={locale}
+              onPinClick={handlePinClick}
+              onPopoverClose={handlePopoverClose}
+              onBoundsChange={handleBoundsChange}
+            />
+          </div>
+        </div>
+        <div className={tab === 'list' ? 'block' : 'hidden md:block'}>
+          {visibleRestaurants.length === 0 ? (
+            <p className="py-16 text-center text-muted">{t('emptyStateBounds')}</p>
+          ) : (
+            <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2">
+              {visibleRestaurants.map((r) => (
+                <li key={r.id}>
+                  <RestaurantCard restaurant={r} locale={locale} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function tabClass(isActive: boolean): string {
+  const base =
+    'rounded-full px-4 py-1 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg'
+  return isActive ? `${base} bg-brand text-surface` : `${base} text-ink hover:bg-bg`
+}
+```
+
+- [ ] **Step 5: Add the new i18n key `listing.emptyStateBounds`**
+
+In `messages/ko.json` and `messages/en.json` under `listing`:
+
+```json
+"emptyStateBounds": "이 지역에 식당이 없습니다. 지도를 이동하거나 축소해 보세요."
+```
+```json
+"emptyStateBounds": "No restaurants in this area — pan or zoom out."
+```
+
+Also update the result count text so it reflects the visible (viewport-filtered) count instead of the total. In `RestaurantList`, change the count source to be passed down OR (simpler) move the count display inside `MapListView` so it has access to `visibleRestaurants.length`.
+
+Recommended path: keep the existing total count in `RestaurantList` AS-IS for chip filter feedback, and add a smaller "showing N in view" text in `MapListView` above the card grid.
+
+- [ ] **Step 6: Verify TypeScript + tests**
+
+```bash
+cd taco-tracker && pnpm tsc --noEmit
+cd taco-tracker && pnpm vitest run
+```
+Expected: clean / all pass.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add taco-tracker/scripts/lib/viewport-bounds.ts taco-tracker/tests/viewport-bounds.test.ts taco-tracker/components/map/kakao-map.tsx taco-tracker/components/map/map-list-view.tsx taco-tracker/lib/kakao-maps.ts taco-tracker/messages/ko.json taco-tracker/messages/en.json
+git commit -m "feat: viewport-bounded list filtering — list updates as map pans/zooms"
+```
+
+---
+
 ## Verification
 
 After all tasks complete:
