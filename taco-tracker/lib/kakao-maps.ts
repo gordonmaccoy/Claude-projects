@@ -18,6 +18,7 @@ export interface KakaoMapsNamespace {
   Size: new (w: number, h: number) => KakaoSize
   Point: new (x: number, y: number) => KakaoPoint
   MarkerClusterer: new (options: KakaoClustererOptions) => KakaoClusterer
+  CustomOverlay: new (options: KakaoCustomOverlayOptions) => KakaoCustomOverlay
   event: {
     addListener: (target: unknown, type: string, handler: (...args: unknown[]) => void) => void
     removeListener: (target: unknown, type: string, handler: (...args: unknown[]) => void) => void
@@ -53,6 +54,22 @@ export interface KakaoClustererOptions {
 export interface KakaoClusterer {
   addMarkers(markers: KakaoMarker[]): void
   clear(): void
+}
+
+export interface KakaoCustomOverlayOptions {
+  position: KakaoLatLng
+  content: HTMLElement | string
+  xAnchor?: number
+  yAnchor?: number
+  map?: KakaoMap | null
+  zIndex?: number
+}
+
+export interface KakaoCustomOverlay {
+  setMap(map: KakaoMap | null): void
+  setPosition(latlng: KakaoLatLng): void
+  getPosition(): KakaoLatLng
+  setContent(content: HTMLElement | string): void
 }
 
 let mapsPromise: Promise<KakaoMapsNamespace> | null = null

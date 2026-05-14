@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useTranslations } from 'next-intl'
 import {
   loadKakaoMaps,
@@ -8,36 +9,45 @@ import {
   type KakaoMap as KakaoMapInstance,
   type KakaoMarker,
   type KakaoClusterer,
+  type KakaoCustomOverlay,
 } from '@/lib/kakao-maps'
 import { pinDataUri } from './pin-icon'
-
-interface MapRestaurant {
-  id: string
-  lat: number
-  lng: number
-}
+import { RestaurantPopover } from './restaurant-popover'
+import type { Restaurant } from '@/lib/restaurants'
 
 interface Props {
-  restaurants: MapRestaurant[]
+  restaurants: Restaurant[]
+  restaurantById: Map<string, Restaurant>
   activeId: string | null
+  locale: 'ko' | 'en'
   onPinClick: (id: string) => void
+  onPopoverClose: () => void
 }
 
 const SEOUL_CENTER = { lat: 37.5665, lng: 126.978 }
 const SEOUL_LEVEL = 8
 
-export function KakaoMap({ restaurants, activeId, onPinClick }: Props) {
+export function KakaoMap({
+  restaurants,
+  restaurantById,
+  activeId,
+  locale,
+  onPinClick,
+  onPopoverClose,
+}: Props) {
   const t = useTranslations('listing')
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<KakaoMapInstance | null>(null)
   const namespaceRef = useRef<KakaoMapsNamespace | null>(null)
   const markersRef = useRef<Map<string, KakaoMarker>>(new Map())
   const clustererRef = useRef<KakaoClusterer | null>(null)
+  const overlayRef = useRef<KakaoCustomOverlay | null>(null)
 
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [showLoading, setShowLoading] = useState(false)
+  const [overlayContainer, setOverlayContainer] = useState<HTMLElement | null>(null)
 
-  // Delay the loading state so it doesn't flash on fast loads
+  // Delay loading indicator to avoid flash
   useEffect(() => {
     if (status !== 'loading') return
     const timer = setTimeout(() => setShowLoading(true), 500)
@@ -92,11 +102,9 @@ export function KakaoMap({ restaurants, activeId, onPinClick }: Props) {
     const clusterer = clustererRef.current
     if (!maps || !map || !clusterer) return
 
-    // Clear old markers
     clusterer.clear()
     markersRef.current.clear()
 
-    // Build new markers
     const defaultImage = new maps.MarkerImage(
       pinDataUri({ active: false }),
       new maps.Size(32, 32),
@@ -112,7 +120,6 @@ export function KakaoMap({ restaurants, activeId, onPinClick }: Props) {
     }
     clusterer.addMarkers(newMarkers)
 
-    // Fit bounds to markers, or fall back to Seoul-wide
     if (newMarkers.length > 0) {
       const bounds = new maps.LatLngBounds()
       for (const m of newMarkers) bounds.extend(m.getPosition())
@@ -145,6 +152,44 @@ export function KakaoMap({ restaurants, activeId, onPinClick }: Props) {
     }
   }, [activeId, status])
 
+  // Manage popover CustomOverlay lifecycle
+  useEffect(() => {
+    if (status !== 'ready') return
+    const maps = namespaceRef.current
+    const map = mapRef.current
+    if (!maps || !map) return
+
+    // Tear down previous overlay (if any)
+    if (overlayRef.current) {
+      overlayRef.current.setMap(null)
+      overlayRef.current = null
+    }
+    setOverlayContainer(null)
+
+    if (activeId === null) return
+    const marker = markersRef.current.get(activeId)
+    if (!marker) return
+
+    const container = document.createElement('div')
+    const overlay = new maps.CustomOverlay({
+      position: marker.getPosition(),
+      content: container,
+      xAnchor: 0.5,
+      yAnchor: 1.1,
+      zIndex: 5,
+      map,
+    })
+    overlayRef.current = overlay
+    setOverlayContainer(container)
+
+    return () => {
+      overlay.setMap(null)
+      if (overlayRef.current === overlay) overlayRef.current = null
+    }
+  }, [activeId, status])
+
+  const activeRestaurant = activeId !== null ? restaurantById.get(activeId) ?? null : null
+
   if (status === 'error') {
     return (
       <div className="flex min-h-[200px] items-center justify-center rounded-md border border-muted bg-bg p-4 text-sm text-muted">
@@ -161,6 +206,16 @@ export function KakaoMap({ restaurants, activeId, onPinClick }: Props) {
           Loading map…
         </div>
       ) : null}
+      {overlayContainer && activeRestaurant
+        ? createPortal(
+            <RestaurantPopover
+              restaurant={activeRestaurant}
+              locale={locale}
+              onClose={onPopoverClose}
+            />,
+            overlayContainer
+          )
+        : null}
     </div>
   )
 }
