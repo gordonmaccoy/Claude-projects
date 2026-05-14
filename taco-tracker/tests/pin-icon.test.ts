@@ -26,3 +26,24 @@ describe('pinDataUri', () => {
     expect(uri).toContain('%3Csvg') // url-encoded <svg
   })
 })
+
+describe('pinSvg accent', () => {
+  it('default variant draws a cream taco-shell accent curve', () => {
+    const svg = pinSvg({ active: false })
+    expect(svg).toContain('Q 16 17 22 13')
+    // accent stroke uses cream on default
+    expect(svg).toMatch(/M 10 13[\s\S]*stroke="#FFFBF2"/)
+  })
+
+  it('active variant inverts the accent color to terracotta', () => {
+    const svg = pinSvg({ active: true })
+    expect(svg).toContain('Q 16 17 22 13')
+    expect(svg).toMatch(/M 10 13[\s\S]*stroke="#C84B2F"/)
+  })
+
+  it('includes two garnish dots', () => {
+    const svg = pinSvg({ active: false })
+    expect(svg).toContain('cx="12.5"')
+    expect(svg).toContain('cx="19.5"')
+  })
+})
