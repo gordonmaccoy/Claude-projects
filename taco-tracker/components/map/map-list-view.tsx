@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import type { Restaurant } from '@/lib/restaurants'
 import { RestaurantCard } from '../restaurant-card'
@@ -25,11 +25,18 @@ export function MapListView({ restaurants, locale }: Props) {
     el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
   }, [])
 
-  const mapRestaurants = restaurants.map((r) => ({
-    id: r.id,
-    lat: r.lat,
-    lng: r.lng,
-  }))
+  // Memoized so the array reference is stable when restaurants haven't changed.
+  // Without this, every parent re-render produces a new array → KakaoMap's
+  // marker effect re-runs and refits bounds.
+  const mapRestaurants = useMemo(
+    () =>
+      restaurants.map((r) => ({
+        id: r.id,
+        lat: r.lat,
+        lng: r.lng,
+      })),
+    [restaurants]
+  )
 
   if (restaurants.length === 0) {
     return <p className="py-16 text-center text-muted">{t('emptyState')}</p>
