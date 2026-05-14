@@ -50,12 +50,34 @@ describe('isLikelyRestaurantPhoto', () => {
 })
 
 describe('pickPhotoCandidates', () => {
-  it('dedupes the same URL with different size query params', () => {
+  it('dedupes the same URL with different size query params, keeping the original URL', () => {
     const imgs: RawImage[] = [
-      validImage({ src: 'https://t1.daumcdn.net/photo/abc.jpg?w=400&h=300' }),
-      validImage({ src: 'https://t1.daumcdn.net/photo/abc.jpg?w=200&h=150' }),
+      validImage({ src: 'https://t1.daumcdn.net/photo/abc.jpg?w=400&h=300', width: 400, height: 300 }),
+      validImage({ src: 'https://t1.daumcdn.net/photo/abc.jpg?w=200&h=150', width: 200, height: 150 }),
     ]
-    expect(pickPhotoCandidates(imgs)).toEqual(['https://t1.daumcdn.net/photo/abc.jpg'])
+    const result = pickPhotoCandidates(imgs)
+    expect(result).toHaveLength(1)
+    expect(result[0]).toBe('https://t1.daumcdn.net/photo/abc.jpg?w=400&h=300')
+  })
+
+  it('dedupes Kakao CDN variants by fname query param, keeping the largest variant', () => {
+    const fname = 'http%3A%2F%2Ft1.kakaocdn.net%2Fmystore%2F6EC73BBC48E04074994462A51E90E48C'
+    const imgs: RawImage[] = [
+      validImage({
+        src: `https://img1.kakaocdn.net/cthumb/local/C224x224.q50/?fname=${fname}`,
+        width: 224,
+        height: 224,
+      }),
+      validImage({
+        src: `https://img1.kakaocdn.net/cthumb/local/C544x408.q50/?fname=${fname}`,
+        width: 544,
+        height: 408,
+      }),
+    ]
+    const result = pickPhotoCandidates(imgs)
+    expect(result).toHaveLength(1)
+    expect(result[0]).toContain('C544x408')
+    expect(result[0]).toContain('fname=')
   })
 
   it('caps at MAX_CANDIDATES', () => {

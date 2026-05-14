@@ -111,30 +111,37 @@ async function scrapeOne(page: Page, kakaoPlaceId: string): Promise<ScrapedPage>
   // ⚠ The selectors below are intentionally broad because Kakao ships hashed
   // CSS-module class names that vary by deploy. After the first --headed run,
   // tighten these to the actual class names you observe in DevTools.
+  // IMPORTANT: the function passed to page.evaluate is serialized and run in
+  // the browser context. No named `function` declarations, no helpers from
+  // outside this closure — tsx wraps them with `__name(...)` which does not
+  // exist in the page, causing "ReferenceError: __name is not defined".
+  //
+  // Strategy: harvest the FULL body text rather than depending on hashed
+  // CSS-module class names that change between Kakao deploys. Body text on a
+  // Kakao Place page contains: place name, category line ("멕시칸,브라질"),
+  // promotional copy mentioning dishes, review snippets, hours, address.
+  // It's a noisy haystack but our keyword matchers (inferDishTags,
+  // inferDietaryFlags) only react to specific dish words, so false positives
+  // are rare.
   const raw = await page.evaluate(() => {
-    function isInGallery(el: Element): boolean {
-      return !!el.closest(
-        '[class*="photo"], [class*="gallery"], [class*="Photo"], [class*="Gallery"]'
-      )
-    }
-    const imgs = Array.from(document.querySelectorAll('img')).map((el) => ({
-      src: (el as HTMLImageElement).currentSrc || (el as HTMLImageElement).src,
-      width: (el as HTMLImageElement).naturalWidth || (el as HTMLImageElement).width,
-      height: (el as HTMLImageElement).naturalHeight || (el as HTMLImageElement).height,
-      inGallery: isInGallery(el),
-    }))
-    const menuEl = document.querySelector(
-      '[class*="menu"], [class*="Menu"]'
-    ) as HTMLElement | null
-    const categoryEl = document.querySelector(
-      '[class*="category"], [class*="Category"]'
-    ) as HTMLElement | null
+    const gallerySelector =
+      '[class*="photo"], [class*="gallery"], [class*="Photo"], [class*="Gallery"]'
+    const imgs = Array.from(document.querySelectorAll('img')).map((el) => {
+      const img = el as HTMLImageElement
+      return {
+        src: img.currentSrc || img.src,
+        width: img.naturalWidth || img.width,
+        height: img.naturalHeight || img.height,
+        inGallery: !!img.closest(gallerySelector),
+      }
+    })
     return {
       imgs,
-      menuText: menuEl?.innerText ?? '',
-      categoryText: categoryEl?.innerText ?? document.title ?? '',
+      menuText: document.body?.innerText ?? '',
+      categoryText: document.title ?? '',
     }
   })
+
 
   const images: RawImage[] = raw.imgs.map((i) => ({
     src: i.src,

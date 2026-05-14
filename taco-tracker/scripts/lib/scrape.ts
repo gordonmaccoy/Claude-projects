@@ -34,6 +34,9 @@ export const ALLOWED_HOSTS: readonly string[] = [
   't1.daumcdn.net',
   'img1.daumcdn.net',
   'img2.daumcdn.net',
+  't1.kakaocdn.net',
+  'img1.kakaocdn.net',
+  'img2.kakaocdn.net',
   'k.kakaocdn.net',
   'mk.kakaocdn.net',
 ]
@@ -64,26 +67,44 @@ export function isLikelyRestaurantPhoto(img: RawImage): boolean {
 }
 
 /**
- * Strip query string so the same image at different sizes collapses to one entry.
+ * Build a key identifying the underlying image (across size variants).
+ *
+ * For Kakao CDN URLs of the form
+ *   https://img1.kakaocdn.net/cthumb/local/C544x408.q50/?fname=<encoded-source>
+ * the `fname` query param identifies the image; different `Cwxh.q50` paths
+ * are just different rendered sizes of the same source image. Use `fname`
+ * as the dedup key in that case.
+ *
+ * For everything else, strip the query string entirely (legacy behavior;
+ * usually safe because non-Kakao URLs we care about don't use query params).
  */
-function stripQuery(url: string): string {
-  const i = url.indexOf('?')
-  return i === -1 ? url : url.slice(0, i)
+function imageDedupKey(url: string): string {
+  try {
+    const u = new URL(url)
+    const fname = u.searchParams.get('fname')
+    if (fname) return fname
+    return u.origin + u.pathname
+  } catch {
+    return url
+  }
 }
 
 /**
- * Dedupe by stripped URL, sort gallery-first then largest-first, cap at MAX_CANDIDATES.
- * Note: this does NOT pre-filter through isLikelyRestaurantPhoto; the caller is
- * expected to do that so the dedup happens on the already-validated set.
+ * Dedupe by image identity (keeping the largest variant), sort gallery-first
+ * then largest-first, cap at MAX_CANDIDATES. The returned strings are the
+ * ORIGINAL URLs (not stripped) — required because Kakao's CDN won't serve
+ * the image without the `fname` query param.
+ *
+ * Note: this does NOT pre-filter through isLikelyRestaurantPhoto; the caller
+ * is expected to do that so the dedup happens on the already-validated set.
  */
 export function pickPhotoCandidates(images: RawImage[]): string[] {
   const seen = new Map<string, RawImage>()
   for (const img of images) {
-    const key = stripQuery(img.src)
+    const key = imageDedupKey(img.src)
     const existing = seen.get(key)
-    // Keep the highest-resolution variant of the same image
     if (!existing || img.width * img.height > existing.width * existing.height) {
-      seen.set(key, { ...img, src: key })
+      seen.set(key, img)
     }
   }
   const sorted = Array.from(seen.values()).sort((a, b) => {
