@@ -100,7 +100,7 @@ export function KakaoMap({ restaurants, activeId, onPinClick }: Props) {
     const defaultImage = new maps.MarkerImage(
       pinDataUri({ active: false }),
       new maps.Size(32, 32),
-      { offset: new maps.Point(16, 26) }
+      { offset: new maps.Point(16, 30) }
     )
     const newMarkers: KakaoMarker[] = []
     for (const r of restaurants) {
@@ -132,12 +132,12 @@ export function KakaoMap({ restaurants, activeId, onPinClick }: Props) {
     const defaultImage = new maps.MarkerImage(
       pinDataUri({ active: false }),
       new maps.Size(32, 32),
-      { offset: new maps.Point(16, 26) }
+      { offset: new maps.Point(16, 30) }
     )
     const activeImage = new maps.MarkerImage(
       pinDataUri({ active: true }),
       new maps.Size(40, 40),
-      { offset: new maps.Point(20, 32) }
+      { offset: new maps.Point(20, 38) }
     )
 
     for (const [id, marker] of markersRef.current.entries()) {
