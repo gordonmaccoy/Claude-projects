@@ -24,7 +24,7 @@ export default async function CuratePage({ params, searchParams }: Props) {
     .eq('status', 'draft')
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
+    <main className="mx-auto w-full px-4 py-8 sm:px-6 sm:py-12 2xl:max-w-[1600px]">
       <div className="mb-4 rounded-md border border-brand-deep bg-bg px-4 py-2 text-sm text-brand-deep">
         {t('curatorBanner', { count: count ?? 0 })}
       </div>
