@@ -15,8 +15,9 @@
     "title": "Tacos & Mexican Food in Seoul",
     "allNeighborhoods": "All",
     "resultCountAll": "{count, plural, =1 {1 restaurant} other {# restaurants}}",
-    "resultCountFiltered": "{count, plural, =1 {1 restaurant in {neighborhood}} other {# restaurants in {neighborhood}}}",
+    "resultCountFiltered": "{count, plural, =1 {1 restaurant} other {# restaurants}}",
     "emptyState": "No restaurants match these filters.",
+    "emptyStateBounds": "No restaurants in this area — pan or zoom out.",
     "curatorBanner": "{count, plural, =1 {Draft mode — 1 restaurant pending review} other {Draft mode — # restaurants pending review}}",
     "curateTitle": "Curate — Draft restaurants",
     "mapUnavailable": "Map unavailable, showing list only.",
@@ -24,10 +25,40 @@
       "map": "Map",
       "list": "List"
     },
+    "filters": {
+      "neighborhood": "Neighborhood",
+      "dish": "Dish",
+      "dietary": "Dietary"
+    },
+    "dishes": {
+      "taco": "Tacos",
+      "burrito": "Burritos",
+      "quesadilla": "Quesadillas",
+      "fajita": "Fajitas",
+      "nachos": "Nachos",
+      "margarita": "Margaritas",
+      "enchilada": "Enchiladas",
+      "guacamole": "Guacamole",
+      "salsa": "Salsa",
+      "tortilla": "Tortillas",
+      "chipotle": "Chipotle"
+    },
     "dietary": {
       "halal": "Halal",
       "vegan": "Vegan",
       "vegetarian": "Vegetarian"
     }
+  },
+  "detail": {
+    "back": "Back",
+    "directions": "Directions",
+    "share": "Share",
+    "shareCopied": "Link copied",
+    "openInKakao": "Open in Kakao",
+    "address": "Address",
+    "phone": "Phone",
+    "gallery": "Photos",
+    "noPhotos": "No photos yet",
+    "reviewsComingSoon": "Reviews and check-ins are coming soon."
   }
 }

@@ -15,8 +15,9 @@
     "title": "서울의 타코 & 멕시코 음식",
     "allNeighborhoods": "전체",
     "resultCountAll": "전체 {count}개 식당",
-    "resultCountFiltered": "{neighborhood} {count}개 식당",
+    "resultCountFiltered": "{count}개 식당",
     "emptyState": "조건에 맞는 식당이 없습니다.",
+    "emptyStateBounds": "이 지역에 식당이 없습니다. 지도를 이동하거나 축소해 보세요.",
     "curatorBanner": "큐레이션 모드 — 검토 대기 중인 식당 {count}개",
     "curateTitle": "큐레이션 — 초안 식당",
     "mapUnavailable": "지도를 불러올 수 없습니다. 목록만 표시합니다.",
@@ -24,10 +25,40 @@
       "map": "지도",
       "list": "목록"
     },
+    "filters": {
+      "neighborhood": "지역",
+      "dish": "메뉴",
+      "dietary": "식이"
+    },
+    "dishes": {
+      "taco": "타코",
+      "burrito": "부리또",
+      "quesadilla": "케사디아",
+      "fajita": "파히타",
+      "nachos": "나초",
+      "margarita": "마르가리타",
+      "enchilada": "엔칠라다",
+      "guacamole": "과카몰리",
+      "salsa": "살사",
+      "tortilla": "토르티야",
+      "chipotle": "치폴레"
+    },
     "dietary": {
       "halal": "할랄",
       "vegan": "비건",
       "vegetarian": "채식"
     }
+  },
+  "detail": {
+    "back": "뒤로",
+    "directions": "길찾기",
+    "share": "공유",
+    "shareCopied": "주소가 복사되었습니다",
+    "openInKakao": "카카오에서 보기",
+    "address": "주소",
+    "phone": "전화",
+    "gallery": "사진",
+    "noPhotos": "사진이 아직 없습니다",
+    "reviewsComingSoon": "리뷰와 체크인 기능이 곧 추가됩니다."
   }
 }
