@@ -45,7 +45,7 @@ Defined as CSS custom properties and mirrored in Tailwind config.
 - **Real photos only.** No stock images, no illustrated tacos. If a restaurant has no usable photo yet, leave the hero empty with a neutral placeholder — never a cartoon.
 - **Aspect ratios:** 3:2 for listing cards, 16:9 for detail hero. Crop in CMS/edit time, not in CSS.
 - **Treatment:** natural color with a slight warm bias. Avoid heavy filters, vignettes, or stylized grading.
-- **Pins:** minimal vector — a flat terracotta taco-wedge silhouette with a mole-brown outline. Active pin inverts to cream fill. Cluster bubbles in terracotta with cream numerals.
+- **Pins:** minimal vector — a teardrop map pin in terracotta with a mole-brown outline, point anchored at the lat/lng. Active pin inverts to cream fill with terracotta outline. When a restaurant has a curator rating, the rating number appears in cream centered inside the pin (Phase 2). Cluster bubbles in terracotta with cream numerals.
 
 ## Component Conventions
 
