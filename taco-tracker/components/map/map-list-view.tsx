@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import type { Restaurant } from '@/lib/restaurants'
 import { RestaurantCard } from '../restaurant-card'
 import { KakaoMap } from './kakao-map'
+import { isInsideBounds, type ViewportBounds } from '@/scripts/lib/viewport-bounds'
 
 interface Props {
   restaurants: Restaurant[]
@@ -15,12 +16,14 @@ export function MapListView({ restaurants, locale }: Props) {
   const t = useTranslations('listing')
   const [activeId, setActiveId] = useState<string | null>(null)
   const [tab, setTab] = useState<'map' | 'list'>('map')
+  const [bounds, setBounds] = useState<ViewportBounds | null>(null)
 
   const handlePinClick = useCallback((id: string) => {
     setActiveId((prev) => (prev === id ? null : id))
   }, [])
 
   const handlePopoverClose = useCallback(() => setActiveId(null), [])
+  const handleBoundsChange = useCallback((b: ViewportBounds) => setBounds(b), [])
 
   const restaurantById = useMemo(() => {
     const m = new Map<string, Restaurant>()
@@ -28,13 +31,17 @@ export function MapListView({ restaurants, locale }: Props) {
     return m
   }, [restaurants])
 
+  const visibleRestaurants = useMemo(() => {
+    if (!bounds) return restaurants
+    return restaurants.filter((r) => isInsideBounds(r.lat, r.lng, bounds))
+  }, [restaurants, bounds])
+
   if (restaurants.length === 0) {
     return <p className="py-16 text-center text-muted">{t('emptyState')}</p>
   }
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Mobile tabs */}
       <div className="flex gap-1 self-start rounded-full border border-ink bg-surface p-1 md:hidden">
         <button
           type="button"
@@ -54,8 +61,6 @@ export function MapListView({ restaurants, locale }: Props) {
         </button>
       </div>
 
-      {/* Desktop: map 65% / cards 35%, with map sticky.
-          Mobile: stacked, only one visible per tab. */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-[65%_35%]">
         <div className={tab === 'map' ? 'block' : 'hidden md:block'}>
           <div className="h-[60vh] md:sticky md:top-4 md:h-[calc(100vh-8rem)]">
@@ -66,17 +71,22 @@ export function MapListView({ restaurants, locale }: Props) {
               locale={locale}
               onPinClick={handlePinClick}
               onPopoverClose={handlePopoverClose}
+              onBoundsChange={handleBoundsChange}
             />
           </div>
         </div>
         <div className={tab === 'list' ? 'block' : 'hidden md:block'}>
-          <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2">
-            {restaurants.map((r) => (
-              <li key={r.id}>
-                <RestaurantCard restaurant={r} locale={locale} />
-              </li>
-            ))}
-          </ul>
+          {visibleRestaurants.length === 0 ? (
+            <p className="py-16 text-center text-muted">{t('emptyStateBounds')}</p>
+          ) : (
+            <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2">
+              {visibleRestaurants.map((r) => (
+                <li key={r.id}>
+                  <RestaurantCard restaurant={r} locale={locale} />
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </div>
     </div>

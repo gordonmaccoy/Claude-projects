@@ -29,12 +29,15 @@ export interface KakaoLatLng { getLat(): number; getLng(): number }
 export interface KakaoLatLngBounds {
   extend(latlng: KakaoLatLng): void
   isEmpty(): boolean
+  getSouthWest(): KakaoLatLng
+  getNorthEast(): KakaoLatLng
 }
 export interface KakaoMap {
   setBounds(bounds: KakaoLatLngBounds, paddingTop?: number, paddingRight?: number, paddingBottom?: number, paddingLeft?: number): void
   setCenter(latlng: KakaoLatLng): void
   setLevel(level: number): void
   getLevel(): number
+  getBounds(): KakaoLatLngBounds
   relayout(): void
 }
 export interface KakaoMarker {

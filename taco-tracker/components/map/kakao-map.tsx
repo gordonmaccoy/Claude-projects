@@ -14,6 +14,7 @@ import {
 import { pinDataUri } from './pin-icon'
 import { RestaurantPopover } from './restaurant-popover'
 import type { Restaurant } from '@/lib/restaurants'
+import type { ViewportBounds } from '@/scripts/lib/viewport-bounds'
 
 interface Props {
   restaurants: Restaurant[]
@@ -22,6 +23,7 @@ interface Props {
   locale: 'ko' | 'en'
   onPinClick: (id: string) => void
   onPopoverClose: () => void
+  onBoundsChange?: (bounds: ViewportBounds) => void
 }
 
 const SEOUL_CENTER = { lat: 37.5665, lng: 126.978 }
@@ -34,6 +36,7 @@ export function KakaoMap({
   locale,
   onPinClick,
   onPopoverClose,
+  onBoundsChange,
 }: Props) {
   const t = useTranslations('listing')
   const containerRef = useRef<HTMLDivElement>(null)
@@ -83,6 +86,20 @@ export function KakaoMap({
             },
           ],
         })
+        // Bounds reporter: fires on idle (after pan/zoom settles)
+        const reportBounds = () => {
+          if (!onBoundsChange || !mapRef.current) return
+          const b = mapRef.current.getBounds()
+          const sw = b.getSouthWest()
+          const ne = b.getNorthEast()
+          onBoundsChange({
+            swLat: sw.getLat(),
+            swLng: sw.getLng(),
+            neLat: ne.getLat(),
+            neLng: ne.getLng(),
+          })
+        }
+        maps.event.addListener(mapRef.current, 'idle', reportBounds)
         setStatus('ready')
       })
       .catch((err) => {
@@ -123,12 +140,29 @@ export function KakaoMap({
     if (newMarkers.length > 0) {
       const bounds = new maps.LatLngBounds()
       for (const m of newMarkers) bounds.extend(m.getPosition())
-      if (!bounds.isEmpty()) map.setBounds(bounds, 40, 40, 40, 40)
+      if (!bounds.isEmpty()) {
+        map.setBounds(bounds, 40, 40, 40, 40)
+        // Report the post-fit bounds shortly after setBounds settles
+        if (onBoundsChange) {
+          setTimeout(() => {
+            if (!mapRef.current) return
+            const b = mapRef.current.getBounds()
+            const sw = b.getSouthWest()
+            const ne = b.getNorthEast()
+            onBoundsChange({
+              swLat: sw.getLat(),
+              swLng: sw.getLng(),
+              neLat: ne.getLat(),
+              neLng: ne.getLng(),
+            })
+          }, 100)
+        }
+      }
     } else {
       map.setCenter(new maps.LatLng(SEOUL_CENTER.lat, SEOUL_CENTER.lng))
       map.setLevel(SEOUL_LEVEL)
     }
-  }, [restaurants, status, onPinClick])
+  }, [restaurants, status, onPinClick, onBoundsChange])
 
   // Sync active marker styling
   useEffect(() => {
