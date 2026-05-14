@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import type { Restaurant } from '@/lib/restaurants'
 import { RestaurantCard } from '../restaurant-card'
@@ -17,11 +17,13 @@ export function MapListView({ restaurants, locale }: Props) {
   const [tab, setTab] = useState<'map' | 'list'>('map')
   const cardRefs = useRef<Map<string, HTMLLIElement>>(new Map())
 
-  const handlePinClick = (id: string) => {
+  // Stable reference so KakaoMap's marker-creation effect doesn't re-run
+  // (and thus refit bounds) on every parent re-render.
+  const handlePinClick = useCallback((id: string) => {
     setActiveId((prev) => (prev === id ? null : id))
     const el = cardRefs.current.get(id)
     el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-  }
+  }, [])
 
   const mapRestaurants = restaurants.map((r) => ({
     id: r.id,
