@@ -1,19 +1,17 @@
 'use client'
 
-import type { Restaurant } from '@/lib/restaurants'
+import { Link } from '@/i18n/navigation'
+import { Leaf, Sprout, Wheat } from 'lucide-react'
 import { useTranslations } from 'next-intl'
+import type { Restaurant } from '@/lib/restaurants'
 
 interface Props {
   restaurant: Restaurant
   locale: 'ko' | 'en'
-  isActive?: boolean
 }
 
-export function RestaurantCard({ restaurant, locale, isActive = false }: Props) {
+export function RestaurantCard({ restaurant, locale }: Props) {
   const t = useTranslations('listing.dietary')
-  const kakaoUrl = restaurant.kakao_place_id
-    ? `https://place.map.kakao.com/${restaurant.kakao_place_id}`
-    : undefined
 
   const isKorean = locale === 'ko'
   const primaryName = isKorean
@@ -23,32 +21,29 @@ export function RestaurantCard({ restaurant, locale, isActive = false }: Props) 
     ? restaurant.name_en
     : (restaurant.name_en ? restaurant.name_ko : null)
 
-  const dietaryFlags = [
-    restaurant.is_halal ? { key: 'halal', label: t('halal') } : null,
-    restaurant.has_vegan_options ? { key: 'vegan', label: t('vegan') } : null,
-    restaurant.has_vegetarian_options && !restaurant.has_vegan_options
-      ? { key: 'vegetarian', label: t('vegetarian') }
-      : null,
-  ].filter((x): x is { key: string; label: string } => x !== null)
-
-  const articleClass = isActive
-    ? 'flex overflow-hidden rounded-md bg-surface border-2 border-brand shadow-[0_4px_16px_rgba(200,75,47,0.18)] transition-shadow'
-    : 'flex overflow-hidden rounded-md bg-surface border-2 border-transparent shadow-card transition-shadow hover:shadow-[0_4px_12px_rgba(27,25,22,0.12)]'
-
-  const CardContent = (
-    <article className={articleClass}>
-      <div className="relative h-[60px] w-[80px] shrink-0 bg-gradient-to-br from-[#E8DCC8] to-[#D4C4A8] sm:h-[80px] sm:w-[120px]">
-        {restaurant.cover_photo_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={restaurant.cover_photo_url}
-            alt=""
-            className="h-full w-full object-cover"
-          />
-        ) : null}
-      </div>
-      <div className="flex min-w-0 flex-1 flex-col gap-1 px-4 py-3">
-        <div className="flex items-baseline justify-between gap-2">
+  return (
+    <Link
+      href={`/restaurant/${restaurant.slug}`}
+      className="group block focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+    >
+      <article className="overflow-hidden rounded-lg bg-surface shadow-card transition-shadow group-hover:shadow-[0_4px_12px_rgba(27,25,22,0.12)]">
+        <div className="relative aspect-[4/3] w-full bg-gradient-to-br from-[#E8DCC8] to-[#D4C4A8]">
+          {restaurant.cover_photo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={restaurant.cover_photo_url}
+              alt=""
+              className="h-full w-full object-cover"
+              loading="lazy"
+            />
+          ) : null}
+          {restaurant.curator_rating !== null ? (
+            <div className="absolute right-2 top-2 rounded-full bg-surface px-2 py-0.5 text-xs font-semibold text-brand shadow-card">
+              ★ {restaurant.curator_rating.toFixed(1)}
+            </div>
+          ) : null}
+        </div>
+        <div className="flex flex-col gap-1.5 px-3 py-3">
           <div className="min-w-0">
             <div className="truncate text-base font-bold leading-tight text-ink">
               {primaryName}
@@ -57,49 +52,44 @@ export function RestaurantCard({ restaurant, locale, isActive = false }: Props) 
               <div className="truncate text-xs text-muted">{secondaryName}</div>
             ) : null}
           </div>
-          {restaurant.curator_rating !== null ? (
-            <div className="whitespace-nowrap text-sm font-semibold text-brand">
-              ★ {restaurant.curator_rating.toFixed(1)}
-            </div>
-          ) : null}
+          <div className="flex flex-wrap items-center gap-1.5">
+            {restaurant.neighborhood ? (
+              <span className="text-xs text-muted">{restaurant.neighborhood}</span>
+            ) : null}
+            {restaurant.dish_tags.slice(0, 3).map((tag) => (
+              <span
+                key={tag}
+                className="rounded-full border border-ink bg-bg px-2 py-0.5 text-[10px] text-ink"
+              >
+                {tag}
+              </span>
+            ))}
+            {restaurant.is_halal ? (
+              <span
+                className="inline-flex items-center gap-0.5 rounded-full border border-accent bg-bg px-2 py-0.5 text-[10px] text-accent"
+                title={t('halal')}
+              >
+                <Wheat className="h-3 w-3" /> {t('halal')}
+              </span>
+            ) : null}
+            {restaurant.has_vegan_options ? (
+              <span
+                className="inline-flex items-center gap-0.5 rounded-full border border-accent bg-bg px-2 py-0.5 text-[10px] text-accent"
+                title={t('vegan')}
+              >
+                <Leaf className="h-3 w-3" /> {t('vegan')}
+              </span>
+            ) : restaurant.has_vegetarian_options ? (
+              <span
+                className="inline-flex items-center gap-0.5 rounded-full border border-accent bg-bg px-2 py-0.5 text-[10px] text-accent"
+                title={t('vegetarian')}
+              >
+                <Sprout className="h-3 w-3" /> {t('vegetarian')}
+              </span>
+            ) : null}
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          {restaurant.neighborhood ? (
-            <span className="text-xs text-muted">{restaurant.neighborhood}</span>
-          ) : null}
-          {restaurant.dish_tags.map((tag) => (
-            <span
-              key={tag}
-              className="rounded-full border border-ink bg-bg px-2.5 py-0.5 text-[11px] text-ink"
-            >
-              {tag}
-            </span>
-          ))}
-          {dietaryFlags.map((flag) => (
-            <span
-              key={flag.key}
-              className="rounded-full border border-accent bg-bg px-2.5 py-0.5 text-[11px] text-accent"
-            >
-              {flag.label}
-            </span>
-          ))}
-        </div>
-        <div className="truncate text-xs text-muted">{restaurant.address_ko}</div>
-      </div>
-    </article>
+      </article>
+    </Link>
   )
-
-  if (kakaoUrl) {
-    return (
-      <a
-        href={kakaoUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
-      >
-        {CardContent}
-      </a>
-    )
-  }
-  return CardContent
 }
