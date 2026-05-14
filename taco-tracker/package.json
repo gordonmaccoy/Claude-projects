@@ -9,7 +9,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "seed": "tsx scripts/seed-from-kakao.ts",
-    "enrich": "tsx scripts/enrich-restaurants.ts"
+    "enrich": "tsx scripts/enrich-restaurants.ts",
+    "scrape": "tsx scripts/scrape-kakao.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
@@ -32,6 +33,7 @@
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6.0.1",
     "dotenv": "^17.4.2",
+    "playwright": "^1.60.0",
     "shadcn": "^4.3.1",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
