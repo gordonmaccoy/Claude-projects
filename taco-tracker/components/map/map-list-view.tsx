@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import type { Restaurant } from '@/lib/restaurants'
 import { RestaurantCard } from '../restaurant-card'
@@ -15,28 +15,18 @@ export function MapListView({ restaurants, locale }: Props) {
   const t = useTranslations('listing')
   const [activeId, setActiveId] = useState<string | null>(null)
   const [tab, setTab] = useState<'map' | 'list'>('map')
-  const cardRefs = useRef<Map<string, HTMLLIElement>>(new Map())
 
-  // Stable reference so KakaoMap's marker-creation effect doesn't re-run
-  // (and thus refit bounds) on every parent re-render.
   const handlePinClick = useCallback((id: string) => {
     setActiveId((prev) => (prev === id ? null : id))
-    const el = cardRefs.current.get(id)
-    el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
   }, [])
 
-  // Memoized so the array reference is stable when restaurants haven't changed.
-  // Without this, every parent re-render produces a new array → KakaoMap's
-  // marker effect re-runs and refits bounds.
-  const mapRestaurants = useMemo(
-    () =>
-      restaurants.map((r) => ({
-        id: r.id,
-        lat: r.lat,
-        lng: r.lng,
-      })),
-    [restaurants]
-  )
+  const handlePopoverClose = useCallback(() => setActiveId(null), [])
+
+  const restaurantById = useMemo(() => {
+    const m = new Map<string, Restaurant>()
+    for (const r of restaurants) m.set(r.id, r)
+    return m
+  }, [restaurants])
 
   if (restaurants.length === 0) {
     return <p className="py-16 text-center text-muted">{t('emptyState')}</p>
@@ -64,32 +54,26 @@ export function MapListView({ restaurants, locale }: Props) {
         </button>
       </div>
 
-      {/* Layout: stacked on mobile (only one shown), grid on desktop */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-[3fr_2fr]">
+      {/* Desktop: map 65% / cards 35%, with map sticky.
+          Mobile: stacked, only one visible per tab. */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-[65%_35%]">
         <div className={tab === 'map' ? 'block' : 'hidden md:block'}>
           <div className="h-[60vh] md:sticky md:top-4 md:h-[calc(100vh-8rem)]">
             <KakaoMap
-              restaurants={mapRestaurants}
+              restaurants={restaurants}
+              restaurantById={restaurantById}
               activeId={activeId}
+              locale={locale}
               onPinClick={handlePinClick}
+              onPopoverClose={handlePopoverClose}
             />
           </div>
         </div>
         <div className={tab === 'list' ? 'block' : 'hidden md:block'}>
-          <ul className="flex flex-col gap-3">
+          <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2">
             {restaurants.map((r) => (
-              <li
-                key={r.id}
-                ref={(el) => {
-                  if (el) cardRefs.current.set(r.id, el)
-                  else cardRefs.current.delete(r.id)
-                }}
-              >
-                <RestaurantCard
-                  restaurant={r}
-                  locale={locale}
-                  isActive={activeId === r.id}
-                />
+              <li key={r.id}>
+                <RestaurantCard restaurant={r} locale={locale} />
               </li>
             ))}
           </ul>
@@ -102,7 +86,5 @@ export function MapListView({ restaurants, locale }: Props) {
 function tabClass(isActive: boolean): string {
   const base =
     'rounded-full px-4 py-1 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg'
-  return isActive
-    ? `${base} bg-brand text-surface`
-    : `${base} text-ink hover:bg-bg`
+  return isActive ? `${base} bg-brand text-surface` : `${base} text-ink hover:bg-bg`
 }
