@@ -33,9 +33,11 @@ export function isFilterDefault(f: MapFiltersState): boolean {
 interface Props {
   filters: MapFiltersState
   onApply: (next: MapFiltersState) => void
+  /** compact=true → smaller pill, text always visible (for the mobile control row) */
+  compact?: boolean
 }
 
-export function MapFilters({ filters, onApply }: Props) {
+export function MapFilters({ filters, onApply, compact }: Props) {
   const t = useTranslations('listing.mapFilters')
   const dialogRef = useRef<HTMLDialogElement>(null)
   const [draft, setDraft] = useState<MapFiltersState>(filters)
@@ -65,7 +67,7 @@ export function MapFilters({ filters, onApply }: Props) {
       <button
         type="button"
         onClick={open}
-        className={`inline-flex h-10 items-center gap-1.5 rounded-full border px-3 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
+        className={`inline-flex ${compact ? 'h-9' : 'h-10'} items-center gap-1.5 rounded-full border px-3 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
           active
             ? 'border-brand bg-brand text-surface'
             : 'border-ink bg-surface text-ink hover:bg-bg'
@@ -73,7 +75,8 @@ export function MapFilters({ filters, onApply }: Props) {
         aria-label={t('buttonLabel')}
       >
         <SlidersHorizontal className="h-4 w-4" />
-        <span className="hidden sm:inline">{t('buttonLabel')}</span>
+        <span className={compact ? undefined : 'hidden sm:inline'}>{t('buttonLabel')}</span>
+        {compact && active ? <span className="ml-0.5 h-1.5 w-1.5 rounded-full bg-current" /> : null}
       </button>
 
       <dialog

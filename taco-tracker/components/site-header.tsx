@@ -6,6 +6,24 @@ import { Menu, X, MessageSquare, User, LogOut, Share2 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { LogoMark } from './logo-mark'
 
+/**
+ * Shows /logo.png if the file exists in public/, otherwise falls back to the
+ * inline SVG <LogoMark />. Drop logo.png into taco-tracker/public/ to activate.
+ */
+function LogoImage({ className }: { className?: string }) {
+  const [err, setErr] = useState(false)
+  if (err) return <LogoMark className={className} />
+  return (
+    <img
+      src="/logo.png"
+      alt=""
+      className={className}
+      style={{ objectFit: 'contain' }}
+      onError={() => setErr(true)}
+    />
+  )
+}
+
 export function SiteHeader() {
   const t = useTranslations('header')
   const [open, setOpen] = useState(false)
@@ -15,7 +33,7 @@ export function SiteHeader() {
       <header className="sticky top-0 z-30 border-b border-muted/30 bg-bg/95 backdrop-blur supports-[backdrop-filter]:bg-bg/80">
         <div className="mx-auto flex w-full items-center justify-between gap-4 px-4 py-2 sm:px-6 2xl:max-w-[1600px]">
           <Link href="/" className="flex items-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand rounded-md">
-            <LogoMark className="h-7 w-7" />
+            <LogoImage className="h-7 w-7" />
             <div className="flex flex-col leading-tight">
               <span className="font-display text-lg text-ink sm:text-xl">Taco Map</span>
               <span className="hidden text-[11px] text-muted sm:block">{t('tagline')}</span>

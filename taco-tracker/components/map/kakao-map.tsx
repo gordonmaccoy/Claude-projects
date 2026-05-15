@@ -60,6 +60,15 @@ export function KakaoMap({
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [showLoading, setShowLoading] = useState(false)
   const [overlayContainer, setOverlayContainer] = useState<HTMLElement | null>(null)
+  // Resolved pin source: /logo.png if it exists in public/, else SVG data URI fallback
+  const [logoPinUrl, setLogoPinUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    const img = new Image()
+    img.onload = () => setLogoPinUrl(window.location.origin + '/logo.png')
+    img.onerror = () => setLogoPinUrl(null)
+    img.src = '/logo.png'
+  }, [])
 
   // Delay loading indicator to avoid flash
   useEffect(() => {
@@ -133,11 +142,10 @@ export function KakaoMap({
     clusterer.clear()
     markersRef.current.clear()
 
-    const defaultImage = new maps.MarkerImage(
-      pinDataUri({ active: false }),
-      new maps.Size(32, 32),
-      { offset: new maps.Point(16, 30) }
-    )
+    const defaultSrc = logoPinUrl ?? pinDataUri({ active: false })
+    const defaultSize = logoPinUrl ? new maps.Size(38, 44) : new maps.Size(32, 32)
+    const defaultOffset = logoPinUrl ? new maps.Point(19, 44) : new maps.Point(16, 30)
+    const defaultImage = new maps.MarkerImage(defaultSrc, defaultSize, { offset: defaultOffset })
     const newMarkers: KakaoMarker[] = []
     for (const r of restaurants) {
       const position = new maps.LatLng(r.lat, r.lng)
@@ -173,7 +181,7 @@ export function KakaoMap({
       map.setCenter(new maps.LatLng(SEOUL_CENTER.lat, SEOUL_CENTER.lng))
       map.setLevel(SEOUL_LEVEL)
     }
-  }, [restaurants, status, onPinClick, onBoundsChange])
+  }, [restaurants, status, onPinClick, onBoundsChange, logoPinUrl])
 
   // Sync active marker styling
   useEffect(() => {
@@ -182,20 +190,20 @@ export function KakaoMap({
     if (!maps) return
 
     const defaultImage = new maps.MarkerImage(
-      pinDataUri({ active: false }),
-      new maps.Size(32, 32),
-      { offset: new maps.Point(16, 30) }
+      logoPinUrl ?? pinDataUri({ active: false }),
+      logoPinUrl ? new maps.Size(38, 44) : new maps.Size(32, 32),
+      { offset: logoPinUrl ? new maps.Point(19, 44) : new maps.Point(16, 30) }
     )
     const activeImage = new maps.MarkerImage(
-      pinDataUri({ active: true }),
-      new maps.Size(40, 40),
-      { offset: new maps.Point(20, 38) }
+      logoPinUrl ?? pinDataUri({ active: true }),
+      logoPinUrl ? new maps.Size(46, 54) : new maps.Size(40, 40),
+      { offset: logoPinUrl ? new maps.Point(23, 54) : new maps.Point(20, 38) }
     )
 
     for (const [id, marker] of markersRef.current.entries()) {
       marker.setImage(id === activeId ? activeImage : defaultImage)
     }
-  }, [activeId, status])
+  }, [activeId, status, logoPinUrl])
 
   // Pan/zoom to restaurant when panToId changes
   useEffect(() => {

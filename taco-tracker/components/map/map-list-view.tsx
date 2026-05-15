@@ -145,10 +145,42 @@ export function MapListView({ restaurants, locale }: Props) {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <div className="flex-1">
-          <SearchBar value={query} onChange={setQuery} />
+      {/* Search bar — always full width */}
+      <SearchBar value={query} onChange={setQuery} />
+
+      {/* ── Mobile: single pill control row ── */}
+      <div className="flex items-center gap-1.5 md:hidden">
+        {/* Map / List toggle */}
+        <div className="flex rounded-full border border-ink bg-surface p-0.5">
+          <button
+            type="button"
+            onClick={() => setTab('map')}
+            className={tabClass(tab === 'map')}
+            aria-pressed={tab === 'map'}
+          >
+            {t('tabs.map')}
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab('list')}
+            className={tabClass(tab === 'list')}
+            aria-pressed={tab === 'list'}
+          >
+            {t('tabs.list')}
+          </button>
         </div>
+        <NearMeButton
+          active={nearMeActive}
+          locating={locating}
+          onClick={handleNearMeClick}
+          onClear={handleNearMeClear}
+          compact
+        />
+        <MapFilters filters={mapFilters} onApply={setMapFilters} compact />
+      </div>
+
+      {/* ── Desktop: control row ── */}
+      <div className="hidden items-center gap-2 md:flex">
         <NearMeButton
           active={nearMeActive}
           locating={locating}
@@ -160,13 +192,15 @@ export function MapListView({ restaurants, locale }: Props) {
           type="button"
           disabled
           title={t('addLocation')}
-          className="inline-flex h-10 items-center gap-1.5 rounded-full border border-dashed border-muted bg-surface px-3 text-sm text-muted opacity-70 cursor-not-allowed"
+          className="inline-flex h-10 cursor-not-allowed items-center gap-1.5 rounded-full border border-dashed border-muted bg-surface px-3 text-sm text-muted opacity-70"
         >
           <Plus className="h-4 w-4" />
-          <span className="hidden sm:inline">{t('addLocation')}</span>
+          <span>{t('addLocation')}</span>
         </button>
       </div>
-      <div className="flex items-center justify-between gap-2 text-sm text-muted">
+
+      {/* Result count + locate error — desktop */}
+      <div className="hidden items-center justify-between gap-2 text-sm text-muted md:flex">
         <span>
           {query.length > 0
             ? t('resultCountFiltered', { count: visibleRestaurants.length })
@@ -174,30 +208,13 @@ export function MapListView({ restaurants, locale }: Props) {
         </span>
         {locateError ? <span className="text-brand">{locateError}</span> : null}
       </div>
-
-      {/* Mobile tabs */}
-      <div className="flex gap-1 self-start rounded-full border border-ink bg-surface p-1 md:hidden">
-        <button
-          type="button"
-          onClick={() => setTab('map')}
-          className={tabClass(tab === 'map')}
-          aria-pressed={tab === 'map'}
-        >
-          {t('tabs.map')}
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab('list')}
-          className={tabClass(tab === 'list')}
-          aria-pressed={tab === 'list'}
-        >
-          {t('tabs.list')}
-        </button>
-      </div>
+      {/* Locate error — mobile */}
+      {locateError ? <span className="text-sm text-brand md:hidden">{locateError}</span> : null}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-[65%_35%]">
+        {/* Map column */}
         <div className={tab === 'map' ? 'block' : 'hidden md:block'}>
-          <div className="h-[60vh] md:sticky md:top-20 md:h-[calc(100vh-7rem)]">
+          <div className="relative h-[calc(100dvh-11rem)] md:sticky md:top-20 md:h-[calc(100vh-7rem)]">
             <KakaoMap
               restaurants={queryMatched}
               restaurantById={restaurantById}
@@ -211,8 +228,21 @@ export function MapListView({ restaurants, locale }: Props) {
               onLocateClick={handleLocateClick}
               onSelectDetail={handleSelectDetail}
             />
+            {/* Add a location — mobile only, floats above the locate button */}
+            <div className="absolute bottom-16 left-1/2 z-10 -translate-x-1/2 md:hidden">
+              <button
+                type="button"
+                disabled
+                className="inline-flex h-9 cursor-not-allowed items-center gap-1.5 rounded-full border border-dashed border-muted bg-surface/90 px-4 text-sm text-muted opacity-80 shadow-sm backdrop-blur-sm"
+              >
+                <Plus className="h-4 w-4" />
+                {t('addLocation')}
+              </button>
+            </div>
           </div>
         </div>
+
+        {/* List column */}
         <div className={tab === 'list' ? 'block' : 'hidden md:block'}>
           {selectedRestaurant ? (
             <RestaurantDetail
