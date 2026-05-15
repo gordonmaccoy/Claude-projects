@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useMemo, useState } from 'react'
+import { Plus } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import type { Restaurant } from '@/lib/restaurants'
 import { RestaurantCard } from '../restaurant-card'
@@ -155,6 +156,15 @@ export function MapListView({ restaurants, locale }: Props) {
           onClear={handleNearMeClear}
         />
         <MapFilters filters={mapFilters} onApply={setMapFilters} />
+        <button
+          type="button"
+          disabled
+          title={t('addLocation')}
+          className="inline-flex h-10 items-center gap-1.5 rounded-full border border-dashed border-muted bg-surface px-3 text-sm text-muted opacity-70 cursor-not-allowed"
+        >
+          <Plus className="h-4 w-4" />
+          <span className="hidden sm:inline">{t('addLocation')}</span>
+        </button>
       </div>
       <div className="flex items-center justify-between gap-2 text-sm text-muted">
         <span>

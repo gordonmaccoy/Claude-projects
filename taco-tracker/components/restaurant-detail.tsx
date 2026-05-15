@@ -10,7 +10,6 @@ import {
   ExternalLink,
   Leaf,
   Sprout,
-  Wheat,
 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { useState } from 'react'
@@ -64,12 +63,13 @@ export function RestaurantDetail({ restaurant, locale, onBack, inline = false }:
     }
   }
 
-  const galleryPhotos =
+  const galleryPhotos = (
     restaurant.photo_candidates.length > 0
       ? restaurant.photo_candidates
       : restaurant.cover_photo_url
         ? [restaurant.cover_photo_url]
         : []
+  ).slice(0, 4)
 
   return (
     <article className={inline ? 'w-full px-1 py-2' : 'mx-auto w-full max-w-3xl px-4 py-4 sm:px-6 sm:py-6'}>
@@ -118,11 +118,6 @@ export function RestaurantDetail({ restaurant, locale, onBack, inline = false }:
             {tag}
           </span>
         ))}
-        {restaurant.is_halal ? (
-          <span className="inline-flex items-center gap-1 rounded-full border border-accent bg-bg px-2.5 py-0.5 text-xs text-accent">
-            <Wheat className="h-3 w-3" /> {tDietary('halal')}
-          </span>
-        ) : null}
         {restaurant.has_vegan_options ? (
           <span className="inline-flex items-center gap-1 rounded-full border border-accent bg-bg px-2.5 py-0.5 text-xs text-accent">
             <Leaf className="h-3 w-3" /> {tDietary('vegan')}

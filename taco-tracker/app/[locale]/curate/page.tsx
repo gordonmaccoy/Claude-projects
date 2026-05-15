@@ -22,11 +22,11 @@ export default async function CuratePage({ params }: Props) {
     .eq('status', 'draft')
 
   return (
-    <main className="mx-auto w-full px-4 py-4 sm:px-6 sm:py-6 2xl:max-w-[1600px]">
-      <div className="mb-3 rounded-md border border-brand-deep bg-bg px-4 py-2 text-sm text-brand-deep">
+    <main className="mx-auto w-full px-4 py-3 sm:px-6 sm:py-4 2xl:max-w-[1600px]">
+      <div className="mb-2 rounded-md border border-brand-deep bg-bg px-3 py-1.5 text-xs text-brand-deep">
         {t('curatorBanner', { count: count ?? 0 })}
       </div>
-      <h1 className="mb-3 font-display text-2xl text-ink sm:text-3xl">{t('curateTitle')}</h1>
+      <h1 className="mb-2 font-display text-lg text-ink sm:text-xl">{t('curateTitle')}</h1>
       <RestaurantList status="draft" locale={locale} />
     </main>
   )

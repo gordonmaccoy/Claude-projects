@@ -64,6 +64,7 @@
       "reset": "초기화",
       "clear": "필터 지우기"
     },
+    "addLocation": "장소 추가",
     "backToList": "목록으로 돌아가기",
     "nearMe": {
       "buttonLabel": "내 주변 타코",
