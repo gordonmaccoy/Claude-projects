@@ -64,6 +64,7 @@
       "reset": "Reset",
       "clear": "Clear filters"
     },
+    "backToList": "Back to list",
     "nearMe": {
       "buttonLabel": "Tacos near me",
       "active": "Showing near you",

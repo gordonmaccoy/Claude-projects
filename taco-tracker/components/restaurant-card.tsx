@@ -1,6 +1,6 @@
 'use client'
 
-import { Link } from '@/i18n/navigation'
+import { useRef } from 'react'
 import { Leaf, Sprout } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import type { Restaurant } from '@/lib/restaurants'
@@ -11,15 +11,45 @@ interface Props {
   locale: 'ko' | 'en'
   distanceMeters?: number | null
   isActive?: boolean
+  onSingleClick: () => void
+  onDoubleClick: () => void
 }
+
+const DOUBLE_CLICK_DELAY_MS = 250
 
 export function RestaurantCard({
   restaurant,
   locale,
   distanceMeters = null,
   isActive = false,
+  onSingleClick,
+  onDoubleClick,
 }: Props) {
   const t = useTranslations('listing.dietary')
+  const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const handleClick = () => {
+    if (clickTimer.current) {
+      // Second click within delay window — treat as double click
+      clearTimeout(clickTimer.current)
+      clickTimer.current = null
+      onDoubleClick()
+      return
+    }
+    // First click — schedule single-click handler
+    clickTimer.current = setTimeout(() => {
+      clickTimer.current = null
+      onSingleClick()
+    }, DOUBLE_CLICK_DELAY_MS)
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      onDoubleClick() // Enter = "open" (most explicit action)
+    }
+  }
+
   const isKorean = locale === 'ko'
   const primaryName = isKorean
     ? restaurant.name_ko
@@ -33,9 +63,12 @@ export function RestaurantCard({
     : 'flex overflow-hidden rounded-lg border-2 border-transparent bg-surface shadow-card transition-shadow group-hover:shadow-[0_4px_12px_rgba(27,25,22,0.12)]'
 
   return (
-    <Link
-      href={`/restaurant/${restaurant.slug}`}
-      className="group block focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={handleClick}
+      onKeyDown={handleKeyDown}
+      className="group block cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
     >
       <article className={articleClass}>
         <div className="flex min-w-0 flex-1 flex-col gap-1.5 px-3 py-2.5 sm:px-4">
@@ -55,9 +88,7 @@ export function RestaurantCard({
             ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted">
-            {restaurant.neighborhood ? (
-              <span>{restaurant.neighborhood}</span>
-            ) : null}
+            {restaurant.neighborhood ? <span>{restaurant.neighborhood}</span> : null}
             {distanceMeters !== null ? (
               <>
                 {restaurant.neighborhood ? <span>·</span> : null}
@@ -93,6 +124,6 @@ export function RestaurantCard({
           ) : null}
         </div>
       </article>
-    </Link>
+    </div>
   )
 }

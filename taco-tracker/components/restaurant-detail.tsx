@@ -20,9 +20,11 @@ import { PhotoGallery } from './photo-gallery'
 interface Props {
   restaurant: Restaurant
   locale: 'ko' | 'en'
+  onBack?: () => void
+  inline?: boolean
 }
 
-export function RestaurantDetail({ restaurant, locale }: Props) {
+export function RestaurantDetail({ restaurant, locale, onBack, inline = false }: Props) {
   const t = useTranslations('detail')
   const tDietary = useTranslations('listing.dietary')
   const [shareNotice, setShareNotice] = useState(false)
@@ -70,13 +72,23 @@ export function RestaurantDetail({ restaurant, locale }: Props) {
         : []
 
   return (
-    <article className="mx-auto w-full max-w-3xl px-4 py-4 sm:px-6 sm:py-6">
-      <Link
-        href="/"
-        className="mb-3 inline-flex items-center gap-1 text-sm text-muted hover:text-ink"
-      >
-        <ArrowLeft className="h-4 w-4" /> {t('back')}
-      </Link>
+    <article className={inline ? 'w-full px-1 py-2' : 'mx-auto w-full max-w-3xl px-4 py-4 sm:px-6 sm:py-6'}>
+      {onBack ? (
+        <button
+          type="button"
+          onClick={onBack}
+          className="mb-3 inline-flex items-center gap-1 text-sm text-muted hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand rounded"
+        >
+          <ArrowLeft className="h-4 w-4" /> {t('back')}
+        </button>
+      ) : (
+        <Link
+          href="/"
+          className="mb-3 inline-flex items-center gap-1 text-sm text-muted hover:text-ink"
+        >
+          <ArrowLeft className="h-4 w-4" /> {t('back')}
+        </Link>
+      )}
 
       <div className="relative aspect-[16/9] w-full overflow-hidden rounded-lg bg-gradient-to-br from-[#E8DCC8] to-[#D4C4A8]">
         {restaurant.cover_photo_url ? (

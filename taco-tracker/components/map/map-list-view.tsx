@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import type { Restaurant } from '@/lib/restaurants'
 import { RestaurantCard } from '../restaurant-card'
+import { RestaurantDetail } from '../restaurant-detail'
 import { KakaoMap } from './kakao-map'
 import { isInsideBounds, type ViewportBounds } from '@/scripts/lib/viewport-bounds'
 import { SearchBar } from '../search-bar'
@@ -38,6 +39,7 @@ export function MapListView({ restaurants, locale }: Props) {
   const t = useTranslations('listing')
   const tNear = useTranslations('listing.nearMe')
   const [activeId, setActiveId] = useState<string | null>(null)
+  const [selectedDetailId, setSelectedDetailId] = useState<string | null>(null)
   const [tab, setTab] = useState<'map' | 'list'>('map')
   const [bounds, setBounds] = useState<ViewportBounds | null>(null)
   const [query, setQuery] = useState('')
@@ -52,6 +54,25 @@ export function MapListView({ restaurants, locale }: Props) {
   }, [])
 
   const handlePopoverClose = useCallback(() => setActiveId(null), [])
+
+  const handleCardSingleClick = useCallback((id: string) => {
+    setActiveId(id)
+  }, [])
+
+  const handleCardDoubleClick = useCallback((id: string) => {
+    setSelectedDetailId(id)
+    setActiveId(null)
+  }, [])
+
+  const handleSelectDetail = useCallback((id: string) => {
+    setSelectedDetailId(id)
+    setActiveId(null)
+  }, [])
+
+  const handleDetailBack = useCallback(() => {
+    setSelectedDetailId(null)
+  }, [])
+
   const handleBoundsChange = useCallback((b: ViewportBounds) => setBounds(b), [])
 
   const requestLocation = useCallback((opts: { activateNearMe: boolean }) => {
@@ -93,6 +114,8 @@ export function MapListView({ restaurants, locale }: Props) {
     for (const r of restaurants) m.set(r.id, r)
     return m
   }, [restaurants])
+
+  const selectedRestaurant = selectedDetailId !== null ? restaurantById.get(selectedDetailId) ?? null : null
 
   // Map shows everything matching the search query (search is global, not viewport-bound).
   const queryMatched = useMemo(
@@ -171,15 +194,24 @@ export function MapListView({ restaurants, locale }: Props) {
               activeId={activeId}
               locale={locale}
               userLocation={userLocation}
+              panToId={activeId}
               onPinClick={handlePinClick}
               onPopoverClose={handlePopoverClose}
               onBoundsChange={handleBoundsChange}
               onLocateClick={handleLocateClick}
+              onSelectDetail={handleSelectDetail}
             />
           </div>
         </div>
         <div className={tab === 'list' ? 'block' : 'hidden md:block'}>
-          {visibleRestaurants.length === 0 ? (
+          {selectedRestaurant ? (
+            <RestaurantDetail
+              restaurant={selectedRestaurant}
+              locale={locale}
+              onBack={handleDetailBack}
+              inline
+            />
+          ) : visibleRestaurants.length === 0 ? (
             <p className="py-16 text-center text-muted">{t('emptyStateBounds')}</p>
           ) : (
             <ul className="flex flex-col gap-2.5">
@@ -188,11 +220,14 @@ export function MapListView({ restaurants, locale }: Props) {
                   <RestaurantCard
                     restaurant={r}
                     locale={locale}
+                    isActive={activeId === r.id}
                     distanceMeters={
                       userLocation
                         ? haversineMeters(userLocation.lat, userLocation.lng, r.lat, r.lng)
                         : null
                     }
+                    onSingleClick={() => handleCardSingleClick(r.id)}
+                    onDoubleClick={() => handleCardDoubleClick(r.id)}
                   />
                 </li>
               ))}

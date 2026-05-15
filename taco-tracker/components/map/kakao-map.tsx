@@ -23,10 +23,12 @@ interface Props {
   activeId: string | null
   locale: 'ko' | 'en'
   userLocation: { lat: number; lng: number } | null
+  panToId: string | null
   onPinClick: (id: string) => void
   onPopoverClose: () => void
   onBoundsChange?: (bounds: ViewportBounds) => void
   onLocateClick: () => void
+  onSelectDetail: (id: string) => void
 }
 
 const SEOUL_CENTER = { lat: 37.5665, lng: 126.978 }
@@ -38,10 +40,12 @@ export function KakaoMap({
   activeId,
   locale,
   userLocation,
+  panToId,
   onPinClick,
   onPopoverClose,
   onBoundsChange,
   onLocateClick,
+  onSelectDetail,
 }: Props) {
   const t = useTranslations('listing')
   const tNear = useTranslations('listing.nearMe')
@@ -193,6 +197,19 @@ export function KakaoMap({
     }
   }, [activeId, status])
 
+  // Pan/zoom to restaurant when panToId changes
+  useEffect(() => {
+    if (status !== 'ready') return
+    if (panToId === null) return
+    const maps = namespaceRef.current
+    const map = mapRef.current
+    if (!maps || !map) return
+    const r = restaurantById.get(panToId)
+    if (!r) return
+    map.setLevel(4)
+    map.setCenter(new maps.LatLng(r.lat, r.lng))
+  }, [panToId, status, restaurantById])
+
   // Manage popover CustomOverlay lifecycle
   useEffect(() => {
     if (status !== 'ready') return
@@ -293,6 +310,7 @@ export function KakaoMap({
               restaurant={activeRestaurant}
               locale={locale}
               onClose={onPopoverClose}
+              onSelectDetail={() => onSelectDetail(activeRestaurant.id)}
             />,
             overlayContainer
           )
