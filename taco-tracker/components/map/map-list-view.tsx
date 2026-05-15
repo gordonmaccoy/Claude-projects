@@ -126,8 +126,9 @@ export function MapListView({ restaurants, locale }: Props) {
   )
 
   // List additionally filters by current map viewport (if known), and sorts by distance when near-me is active.
+  // When a search query is active, skip the viewport filter so all matching restaurants appear regardless of map position.
   const visibleRestaurants = useMemo(() => {
-    const inViewport = bounds
+    const inViewport = (bounds && query.length === 0)
       ? queryMatched.filter((r) => isInsideBounds(r.lat, r.lng, bounds))
       : queryMatched
     if (nearMeActive && userLocation) {
@@ -138,7 +139,7 @@ export function MapListView({ restaurants, locale }: Props) {
       )
     }
     return inViewport
-  }, [queryMatched, bounds, nearMeActive, userLocation])
+  }, [queryMatched, bounds, nearMeActive, userLocation, query])
 
   if (restaurants.length === 0) {
     return <p className="py-16 text-center text-muted">{t('emptyState')}</p>
