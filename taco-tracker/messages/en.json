@@ -63,6 +63,15 @@
       "apply": "Apply",
       "reset": "Reset",
       "clear": "Clear filters"
+    },
+    "nearMe": {
+      "buttonLabel": "Tacos near me",
+      "active": "Showing near you",
+      "clear": "Clear",
+      "locating": "Locating…",
+      "denied": "Location permission denied.",
+      "unavailable": "Could not get your location.",
+      "findMyLocation": "Find my location"
     }
   },
   "header": {

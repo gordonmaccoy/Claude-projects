@@ -8,6 +8,8 @@ import { KakaoMap } from './kakao-map'
 import { isInsideBounds, type ViewportBounds } from '@/scripts/lib/viewport-bounds'
 import { SearchBar } from '../search-bar'
 import { MapFilters, DEFAULT_MAP_FILTERS, type MapFiltersState } from '../map-filters'
+import { NearMeButton } from '../near-me-button'
+import { haversineMeters } from '@/scripts/lib/distance'
 
 interface Props {
   restaurants: Restaurant[]
@@ -34,11 +36,16 @@ function matchesQuery(r: Restaurant, q: string): boolean {
 
 export function MapListView({ restaurants, locale }: Props) {
   const t = useTranslations('listing')
+  const tNear = useTranslations('listing.nearMe')
   const [activeId, setActiveId] = useState<string | null>(null)
   const [tab, setTab] = useState<'map' | 'list'>('map')
   const [bounds, setBounds] = useState<ViewportBounds | null>(null)
   const [query, setQuery] = useState('')
   const [mapFilters, setMapFilters] = useState<MapFiltersState>(DEFAULT_MAP_FILTERS)
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null)
+  const [nearMeActive, setNearMeActive] = useState(false)
+  const [locating, setLocating] = useState(false)
+  const [locateError, setLocateError] = useState<string | null>(null)
 
   const handlePinClick = useCallback((id: string) => {
     setActiveId((prev) => (prev === id ? null : id))
@@ -46,6 +53,40 @@ export function MapListView({ restaurants, locale }: Props) {
 
   const handlePopoverClose = useCallback(() => setActiveId(null), [])
   const handleBoundsChange = useCallback((b: ViewportBounds) => setBounds(b), [])
+
+  const requestLocation = useCallback((opts: { activateNearMe: boolean }) => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      setLocateError(tNear('unavailable'))
+      return
+    }
+    setLocating(true)
+    setLocateError(null)
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude })
+        if (opts.activateNearMe) setNearMeActive(true)
+        setLocating(false)
+      },
+      (err) => {
+        setLocating(false)
+        if (err.code === err.PERMISSION_DENIED) setLocateError(tNear('denied'))
+        else setLocateError(tNear('unavailable'))
+      },
+      { enableHighAccuracy: true, timeout: 10_000 }
+    )
+  }, [tNear])
+
+  const handleNearMeClick = useCallback(() => {
+    requestLocation({ activateNearMe: true })
+  }, [requestLocation])
+
+  const handleNearMeClear = useCallback(() => {
+    setNearMeActive(false)
+  }, [])
+
+  const handleLocateClick = useCallback(() => {
+    requestLocation({ activateNearMe: false })
+  }, [requestLocation])
 
   const restaurantById = useMemo(() => {
     const m = new Map<string, Restaurant>()
@@ -59,11 +100,20 @@ export function MapListView({ restaurants, locale }: Props) {
     [restaurants, query, mapFilters]
   )
 
-  // List additionally filters by current map viewport (if known).
+  // List additionally filters by current map viewport (if known), and sorts by distance when near-me is active.
   const visibleRestaurants = useMemo(() => {
-    if (!bounds) return queryMatched
-    return queryMatched.filter((r) => isInsideBounds(r.lat, r.lng, bounds))
-  }, [queryMatched, bounds])
+    const inViewport = bounds
+      ? queryMatched.filter((r) => isInsideBounds(r.lat, r.lng, bounds))
+      : queryMatched
+    if (nearMeActive && userLocation) {
+      return [...inViewport].sort(
+        (a, b) =>
+          haversineMeters(userLocation.lat, userLocation.lng, a.lat, a.lng) -
+          haversineMeters(userLocation.lat, userLocation.lng, b.lat, b.lng)
+      )
+    }
+    return inViewport
+  }, [queryMatched, bounds, nearMeActive, userLocation])
 
   if (restaurants.length === 0) {
     return <p className="py-16 text-center text-muted">{t('emptyState')}</p>
@@ -75,12 +125,21 @@ export function MapListView({ restaurants, locale }: Props) {
         <div className="flex-1">
           <SearchBar value={query} onChange={setQuery} />
         </div>
+        <NearMeButton
+          active={nearMeActive}
+          locating={locating}
+          onClick={handleNearMeClick}
+          onClear={handleNearMeClear}
+        />
         <MapFilters filters={mapFilters} onApply={setMapFilters} />
-        <p className="text-sm text-muted">
+      </div>
+      <div className="flex items-center justify-between gap-2 text-sm text-muted">
+        <span>
           {query.length > 0
             ? t('resultCountFiltered', { count: visibleRestaurants.length })
             : t('resultCountAll', { count: visibleRestaurants.length })}
-        </p>
+        </span>
+        {locateError ? <span className="text-brand">{locateError}</span> : null}
       </div>
 
       {/* Mobile tabs */}
@@ -111,9 +170,11 @@ export function MapListView({ restaurants, locale }: Props) {
               restaurantById={restaurantById}
               activeId={activeId}
               locale={locale}
+              userLocation={userLocation}
               onPinClick={handlePinClick}
               onPopoverClose={handlePopoverClose}
               onBoundsChange={handleBoundsChange}
+              onLocateClick={handleLocateClick}
             />
           </div>
         </div>
@@ -124,7 +185,15 @@ export function MapListView({ restaurants, locale }: Props) {
             <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2">
               {visibleRestaurants.map((r) => (
                 <li key={r.id}>
-                  <RestaurantCard restaurant={r} locale={locale} />
+                  <RestaurantCard
+                    restaurant={r}
+                    locale={locale}
+                    distanceMeters={
+                      userLocation
+                        ? haversineMeters(userLocation.lat, userLocation.lng, r.lat, r.lng)
+                        : null
+                    }
+                  />
                 </li>
               ))}
             </ul>

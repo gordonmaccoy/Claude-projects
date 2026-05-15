@@ -4,13 +4,15 @@ import { Link } from '@/i18n/navigation'
 import { Leaf, Sprout, Wheat } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import type { Restaurant } from '@/lib/restaurants'
+import { formatDistance } from '@/scripts/lib/distance'
 
 interface Props {
   restaurant: Restaurant
   locale: 'ko' | 'en'
+  distanceMeters?: number | null
 }
 
-export function RestaurantCard({ restaurant, locale }: Props) {
+export function RestaurantCard({ restaurant, locale, distanceMeters = null }: Props) {
   const t = useTranslations('listing.dietary')
 
   const isKorean = locale === 'ko'
@@ -37,11 +39,18 @@ export function RestaurantCard({ restaurant, locale }: Props) {
               loading="lazy"
             />
           ) : null}
-          {restaurant.curator_rating !== null ? (
-            <div className="absolute right-2 top-2 rounded-full bg-surface px-2 py-0.5 text-xs font-semibold text-brand shadow-card">
-              ★ {restaurant.curator_rating.toFixed(1)}
-            </div>
-          ) : null}
+          <div className="absolute right-2 top-2 flex flex-col items-end gap-1">
+            {restaurant.curator_rating !== null ? (
+              <div className="rounded-full bg-surface px-2 py-0.5 text-xs font-semibold text-brand shadow-card">
+                ★ {restaurant.curator_rating.toFixed(1)}
+              </div>
+            ) : null}
+            {distanceMeters !== null ? (
+              <div className="rounded-full bg-surface px-2 py-0.5 text-xs font-medium text-ink shadow-card">
+                {formatDistance(distanceMeters)}
+              </div>
+            ) : null}
+          </div>
         </div>
         <div className="flex flex-col gap-1.5 px-3 py-3">
           <div className="min-w-0">

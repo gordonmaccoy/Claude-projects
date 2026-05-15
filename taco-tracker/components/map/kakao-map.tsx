@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslations } from 'next-intl'
+import { LocateFixed } from 'lucide-react'
 import {
   loadKakaoMaps,
   type KakaoMapsNamespace,
@@ -21,9 +22,11 @@ interface Props {
   restaurantById: Map<string, Restaurant>
   activeId: string | null
   locale: 'ko' | 'en'
+  userLocation: { lat: number; lng: number } | null
   onPinClick: (id: string) => void
   onPopoverClose: () => void
   onBoundsChange?: (bounds: ViewportBounds) => void
+  onLocateClick: () => void
 }
 
 const SEOUL_CENTER = { lat: 37.5665, lng: 126.978 }
@@ -34,17 +37,21 @@ export function KakaoMap({
   restaurantById,
   activeId,
   locale,
+  userLocation,
   onPinClick,
   onPopoverClose,
   onBoundsChange,
+  onLocateClick,
 }: Props) {
   const t = useTranslations('listing')
+  const tNear = useTranslations('listing.nearMe')
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<KakaoMapInstance | null>(null)
   const namespaceRef = useRef<KakaoMapsNamespace | null>(null)
   const markersRef = useRef<Map<string, KakaoMarker>>(new Map())
   const clustererRef = useRef<KakaoClusterer | null>(null)
   const overlayRef = useRef<KakaoCustomOverlay | null>(null)
+  const userMarkerRef = useRef<KakaoMarker | null>(null)
 
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [showLoading, setShowLoading] = useState(false)
@@ -222,6 +229,46 @@ export function KakaoMap({
     }
   }, [activeId, status])
 
+  // Sync user-location "you are here" marker
+  useEffect(() => {
+    if (status !== 'ready') return
+    const maps = namespaceRef.current
+    const map = mapRef.current
+    if (!maps || !map) return
+
+    // Tear down previous user marker if any
+    if (userMarkerRef.current) {
+      userMarkerRef.current.setMap(null)
+      userMarkerRef.current = null
+    }
+
+    if (!userLocation) return
+
+    // Inline blue-dot SVG (cream halo, blue inner dot)
+    const dotSvg =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"><circle cx="12" cy="12" r="11" fill="#ffffff" fill-opacity="0.85"/><circle cx="12" cy="12" r="6" fill="#3B82F6" stroke="#ffffff" stroke-width="2"/></svg>'
+    const userImage = new maps.MarkerImage(
+      'data:image/svg+xml;utf8,' + encodeURIComponent(dotSvg),
+      new maps.Size(24, 24),
+      { offset: new maps.Point(12, 12) }
+    )
+    const marker = new maps.Marker({
+      position: new maps.LatLng(userLocation.lat, userLocation.lng),
+      image: userImage,
+      map,
+    })
+    userMarkerRef.current = marker
+
+    // Pan map to user
+    map.setCenter(new maps.LatLng(userLocation.lat, userLocation.lng))
+    map.setLevel(4)
+
+    return () => {
+      marker.setMap(null)
+      if (userMarkerRef.current === marker) userMarkerRef.current = null
+    }
+  }, [userLocation, status])
+
   const activeRestaurant = activeId !== null ? restaurantById.get(activeId) ?? null : null
 
   if (status === 'error') {
@@ -250,6 +297,16 @@ export function KakaoMap({
             overlayContainer
           )
         : null}
+      {status === 'ready' ? (
+        <button
+          type="button"
+          onClick={onLocateClick}
+          aria-label={tNear('findMyLocation')}
+          className="absolute bottom-4 right-4 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-surface text-ink shadow-card hover:bg-bg focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+        >
+          <LocateFixed className="h-5 w-5" />
+        </button>
+      ) : null}
     </div>
   )
 }
