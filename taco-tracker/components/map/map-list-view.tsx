@@ -182,7 +182,7 @@ export function MapListView({ restaurants, locale }: Props) {
           {visibleRestaurants.length === 0 ? (
             <p className="py-16 text-center text-muted">{t('emptyStateBounds')}</p>
           ) : (
-            <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2">
+            <ul className="flex flex-col gap-2.5">
               {visibleRestaurants.map((r) => (
                 <li key={r.id}>
                   <RestaurantCard
