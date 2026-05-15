@@ -33,6 +33,7 @@ function matchesQuery(r: Restaurant, q: string): boolean {
   if (r.name_ko.toLowerCase().includes(needle)) return true
   if (r.name_en && r.name_en.toLowerCase().includes(needle)) return true
   if (r.neighborhood && r.neighborhood.toLowerCase().includes(needle)) return true
+  if (r.neighborhood_en && r.neighborhood_en.toLowerCase().includes(needle)) return true
   return false
 }
 

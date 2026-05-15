@@ -10,6 +10,7 @@ export interface Restaurant {
   name_ko: string
   name_en: string | null
   neighborhood: string | null
+  neighborhood_en: string | null
   address_ko: string
   kakao_place_id: string | null
   phone: string | null
@@ -36,7 +37,7 @@ export interface RestaurantFilters {
 }
 
 const RESTAURANT_COLUMNS =
-  'id, slug, name_ko, name_en, neighborhood, address_ko, kakao_place_id, phone, instagram, lat, lng, ' +
+  'id, slug, name_ko, name_en, neighborhood, neighborhood_en, address_ko, kakao_place_id, phone, instagram, lat, lng, ' +
   'dish_tags, has_vegan_options, has_vegetarian_options, is_halal, cover_photo_url, photo_candidates, ' +
   'curator_rating, enrichment_confidence, needs_review, review_reason'
 
