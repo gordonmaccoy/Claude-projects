@@ -14,6 +14,7 @@
   "listing": {
     "title": "Tacos & Mexican Food in Seoul",
     "allNeighborhoods": "All",
+    "searchPlaceholder": "Search by restaurant or neighborhood…",
     "resultCountAll": "{count, plural, =1 {1 restaurant} other {# restaurants}}",
     "resultCountFiltered": "{count, plural, =1 {1 restaurant} other {# restaurants}}",
     "emptyState": "No restaurants match these filters.",
