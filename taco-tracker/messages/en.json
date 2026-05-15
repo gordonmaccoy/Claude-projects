@@ -48,6 +48,21 @@
       "halal": "Halal",
       "vegan": "Vegan",
       "vegetarian": "Vegetarian"
+    },
+    "mapFilters": {
+      "buttonLabel": "Filters",
+      "modalTitle": "Map filters",
+      "showWithoutRatings": "Show locations without ratings",
+      "showWithoutRatingsHint": "Turn off to only show locations with a curator rating.",
+      "hideMyRated": "Hide locations I've rated",
+      "comingSoon": "Coming soon",
+      "ratingsTitle": "Minimum rating",
+      "ratingsHint": "Hides locations without curator ratings.",
+      "vegetarianOnly": "Show only locations with vegetarian options",
+      "veganOnly": "Show only locations with vegan options",
+      "apply": "Apply",
+      "reset": "Reset",
+      "clear": "Clear filters"
     }
   },
   "header": {

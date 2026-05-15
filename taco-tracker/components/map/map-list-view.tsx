@@ -7,10 +7,20 @@ import { RestaurantCard } from '../restaurant-card'
 import { KakaoMap } from './kakao-map'
 import { isInsideBounds, type ViewportBounds } from '@/scripts/lib/viewport-bounds'
 import { SearchBar } from '../search-bar'
+import { MapFilters, DEFAULT_MAP_FILTERS, type MapFiltersState } from '../map-filters'
 
 interface Props {
   restaurants: Restaurant[]
   locale: 'ko' | 'en'
+}
+
+function passesMapFilters(r: Restaurant, f: MapFiltersState): boolean {
+  if (!f.showWithoutRatings && r.curator_rating === null) return false
+  if (f.minRating > 0 && (r.curator_rating === null || r.curator_rating < f.minRating)) return false
+  if (f.vegetarianOnly && r.has_vegetarian_options !== true) return false
+  if (f.veganOnly && r.has_vegan_options !== true) return false
+  // hideMyRated is a placeholder; no-op for now (no auth, no user reviews yet)
+  return true
 }
 
 function matchesQuery(r: Restaurant, q: string): boolean {
@@ -28,6 +38,7 @@ export function MapListView({ restaurants, locale }: Props) {
   const [tab, setTab] = useState<'map' | 'list'>('map')
   const [bounds, setBounds] = useState<ViewportBounds | null>(null)
   const [query, setQuery] = useState('')
+  const [mapFilters, setMapFilters] = useState<MapFiltersState>(DEFAULT_MAP_FILTERS)
 
   const handlePinClick = useCallback((id: string) => {
     setActiveId((prev) => (prev === id ? null : id))
@@ -44,8 +55,8 @@ export function MapListView({ restaurants, locale }: Props) {
 
   // Map shows everything matching the search query (search is global, not viewport-bound).
   const queryMatched = useMemo(
-    () => restaurants.filter((r) => matchesQuery(r, query)),
-    [restaurants, query]
+    () => restaurants.filter((r) => matchesQuery(r, query) && passesMapFilters(r, mapFilters)),
+    [restaurants, query, mapFilters]
   )
 
   // List additionally filters by current map viewport (if known).
@@ -64,6 +75,7 @@ export function MapListView({ restaurants, locale }: Props) {
         <div className="flex-1">
           <SearchBar value={query} onChange={setQuery} />
         </div>
+        <MapFilters filters={mapFilters} onApply={setMapFilters} />
         <p className="text-sm text-muted">
           {query.length > 0
             ? t('resultCountFiltered', { count: visibleRestaurants.length })

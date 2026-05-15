@@ -48,6 +48,21 @@
       "halal": "할랄",
       "vegan": "비건",
       "vegetarian": "채식"
+    },
+    "mapFilters": {
+      "buttonLabel": "필터",
+      "modalTitle": "지도 필터",
+      "showWithoutRatings": "평점 없는 곳도 표시",
+      "showWithoutRatingsHint": "끄면 큐레이터 평점이 있는 곳만 표시됩니다.",
+      "hideMyRated": "내가 평가한 곳 숨기기",
+      "comingSoon": "준비 중",
+      "ratingsTitle": "최소 평점",
+      "ratingsHint": "평점이 없는 곳은 숨겨집니다.",
+      "vegetarianOnly": "채식 옵션이 있는 곳만",
+      "veganOnly": "비건 옵션이 있는 곳만",
+      "apply": "적용",
+      "reset": "초기화",
+      "clear": "필터 지우기"
     }
   },
   "header": {
