@@ -65,9 +65,9 @@ export function KakaoMap({
 
   useEffect(() => {
     const img = new Image()
-    img.onload = () => setLogoPinUrl(window.location.origin + '/logo.png')
+    img.onload = () => setLogoPinUrl(window.location.origin + '/map-pin.png')
     img.onerror = () => setLogoPinUrl(null)
-    img.src = '/logo.png'
+    img.src = '/map-pin.png'
   }, [])
 
   // Delay loading indicator to avoid flash
