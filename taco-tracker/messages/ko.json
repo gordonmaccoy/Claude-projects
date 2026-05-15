@@ -49,6 +49,29 @@
       "vegetarian": "채식"
     }
   },
+  "header": {
+    "tagline": "당신의 타코 스팟을 찾아보세요",
+    "menuLabel": "메뉴",
+    "platform": "플랫폼",
+    "platformLinks": {
+      "tacoMap": "타코맵",
+      "tacoFeed": "타코 피드",
+      "tacoHub": "타코 허브",
+      "tacoSpecials": "타코 스페셜",
+      "feedback": "피드백"
+    },
+    "partner": "파트너십",
+    "partnerLinks": {
+      "partnerships": "제휴 문의"
+    },
+    "account": "계정",
+    "accountLinks": {
+      "profile": "프로필",
+      "logout": "로그아웃"
+    },
+    "follow": "팔로우",
+    "comingSoon": "준비 중"
+  },
   "detail": {
     "back": "뒤로",
     "directions": "길찾기",

@@ -3,6 +3,7 @@ import { NextIntlClientProvider } from 'next-intl'
 import { getMessages } from 'next-intl/server'
 import { notFound } from 'next/navigation'
 import { routing } from '@/i18n/routing'
+import { SiteHeader } from '@/components/site-header'
 
 const fraunces = Fraunces({
   subsets: ['latin'],
@@ -28,6 +29,7 @@ export default async function LocaleLayout({
     <html lang={locale} className={fraunces.variable}>
       <body>
         <NextIntlClientProvider messages={messages}>
+          <SiteHeader />
           {children}
         </NextIntlClientProvider>
       </body>

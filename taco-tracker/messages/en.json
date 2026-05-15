@@ -49,6 +49,29 @@
       "vegetarian": "Vegetarian"
     }
   },
+  "header": {
+    "tagline": "Find Your Taco Spot",
+    "menuLabel": "Menu",
+    "platform": "Platform",
+    "platformLinks": {
+      "tacoMap": "Taco Map",
+      "tacoFeed": "Taco Feed",
+      "tacoHub": "Taco Hub",
+      "tacoSpecials": "Taco Specials",
+      "feedback": "Feedback"
+    },
+    "partner": "Partner with us",
+    "partnerLinks": {
+      "partnerships": "Partnerships"
+    },
+    "account": "Account",
+    "accountLinks": {
+      "profile": "Profile",
+      "logout": "Log out"
+    },
+    "follow": "Follow us",
+    "comingSoon": "Coming soon"
+  },
   "detail": {
     "back": "Back",
     "directions": "Directions",
