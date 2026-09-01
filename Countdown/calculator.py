@@ -18,7 +18,58 @@
 # =============================================================================
 
 import math
-from datetime import date, timedelta, datetime
+import os
+from datetime import date, timedelta, datetime, timezone
+
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:          # Python < 3.9
+    ZoneInfo = None
+
+
+# =============================================================================
+# Local time — read the clock ONLY through these helpers
+# =============================================================================
+# Every "has this class finished?" decision compares against the wall clock in
+# the department's own timezone. The deployment server (Railway) runs on UTC,
+# which is 9 hours behind Seoul, so a bare datetime.now() made 8pm Tuesday look
+# like 11am Tuesday: no class had "ended" yet, the weekly grid showed no ✗
+# marks, and Sessions Done sat at 0 all day.
+#
+# Do NOT call datetime.now() or date.today() anywhere in this app.
+#
+# Override with the APP_TIMEZONE env var if the department ever moves.
+APP_TIMEZONE = os.environ.get("APP_TIMEZONE", "Asia/Seoul")
+
+# Used only if the tz database is unavailable (see requirements.txt: tzdata).
+# Korea does not observe DST, so a fixed +9 offset is exact year-round.
+_FALLBACK_UTC_OFFSET_HOURS = float(os.environ.get("APP_UTC_OFFSET", "9"))
+
+
+def now_local():
+    """
+    Current time as a timezone-aware datetime in APP_TIMEZONE.
+
+    Falls back to a fixed UTC offset rather than to the server clock: reverting
+    to UTC is what caused the bug this helper exists to prevent.
+    """
+    if ZoneInfo is not None:
+        try:
+            return datetime.now(ZoneInfo(APP_TIMEZONE))
+        except Exception:
+            pass
+    return datetime.now(timezone(timedelta(hours=_FALLBACK_UTC_OFFSET_HOURS)))
+
+
+def today_local_str():
+    """Today's date in APP_TIMEZONE as 'YYYY-MM-DD'."""
+    return now_local().strftime("%Y-%m-%d")
+
+
+def now_local_time_str():
+    """Current wall-clock time in APP_TIMEZONE as 'HH:MM'."""
+    return now_local().strftime("%H:%M")
+
 
 # Map day-of-week names to Python's date.weekday() integers
 # (Monday = 0, Sunday = 6)
@@ -72,7 +123,7 @@ _DONUT_CIRCUMFERENCE = round(2 * math.pi * _DONUT_RADIUS, 2)  # ≈ 282.74
 # Main entry point
 # =============================================================================
 
-def calculate_stats(schedule_rows, semester_start, semester_end, holidays, today):
+def calculate_stats(schedule_rows, semester_start, semester_end, holidays, today, now_time=None):
     """
     Calculate all countdown statistics for one professor.
 
@@ -82,6 +133,9 @@ def calculate_stats(schedule_rows, semester_start, semester_end, holidays, today
         semester_end   (str): "YYYY-MM-DD" — last day of semester.
         holidays       (list): List of "YYYY-MM-DD" strings for no-class dates.
         today          (str): "YYYY-MM-DD" — today's date (passed in for testability).
+        now_time       (str): "HH:MM" — current wall-clock time, used to decide
+                              which of TODAY's classes have already ended.
+                              Defaults to the current time in APP_TIMEZONE.
 
     Returns:
         dict with all calculated stats, or an error dict if inputs are invalid.
@@ -99,6 +153,10 @@ def calculate_stats(schedule_rows, semester_start, semester_end, holidays, today
     if end < start:
         return _empty_stats("Semester end date is before the start date. Please fix your settings.")
 
+    # Wall-clock time used to decide which of today's classes are already over.
+    if now_time is None:
+        now_time = now_local_time_str()
+
     # Build a set of holiday dates for fast O(1) lookups
     holiday_set = set()
     for h in holidays:
@@ -110,10 +168,19 @@ def calculate_stats(schedule_rows, semester_start, semester_end, holidays, today
     # An "occurrence" = one class session on one specific date
     all_occurrences = _generate_occurrences(schedule_rows, start, end, holiday_set)
 
-    # --- Split into completed (past) vs remaining (today + future) ---
-    # We count today's classes as "remaining" — they haven't happened yet today
-    completed = [o for o in all_occurrences if o["date"] <  today_date]
-    remaining = [o for o in all_occurrences if o["date"] >= today_date]
+    # --- Split into completed vs remaining ---
+    # A session counts as complete once its END time has passed. Comparing only
+    # dates (the previous behaviour) meant a class that finished at 17:50 was
+    # still counted as "remaining" at 8pm, so Sessions Done stayed at 0 for the
+    # whole teaching day and only caught up at midnight.
+    #
+    # Tuple comparison does the right thing on both axes: the date is compared
+    # first, and end_time only breaks the tie when the class falls on today.
+    def _has_ended(occurrence):
+        return (occurrence["date"], occurrence["end_time"]) <= (today_date, now_time)
+
+    completed = [o for o in all_occurrences if     _has_ended(o)]
+    remaining = [o for o in all_occurrences if not _has_ended(o)]
 
     # --- On-campus days = count of unique dates in the remaining list ---
     # If a professor has 3 classes on Monday, that's still just 1 campus day
@@ -144,9 +211,12 @@ def calculate_stats(schedule_rows, semester_start, semester_end, holidays, today
         status_label = "Semester in progress"
 
     # --- Find the next upcoming class (by date + start time) ---
-    # Sort remaining by (date, start_time) so we find the truly next class
-    now = datetime.now()
-    today_time_str = now.strftime("%H:%M")
+    # Sort remaining by (date, start_time) so we find the truly next class.
+    # "now" is built from the injected today + now_time rather than read from
+    # the server clock, so the countdown always agrees with the completed/
+    # remaining split above (and stays deterministic under test).
+    now = datetime.combine(today_date, datetime.strptime(now_time, "%H:%M").time())
+    today_time_str = now_time
     remaining_sorted = sorted(remaining, key=lambda o: (o["date"], o["start_time"]))
 
     next_class_info = None
@@ -712,7 +782,8 @@ def _summarize_time_leader(prof_counts):
     }
 
 
-def calculate_department_stats(all_rows, professors, semester_start, semester_end, holidays, today):
+def calculate_department_stats(all_rows, professors, semester_start, semester_end, holidays, today,
+                               now_time=None):
     """
     Aggregate department-wide analytics across ALL professors.
 
@@ -728,6 +799,8 @@ def calculate_department_stats(all_rows, professors, semester_start, semester_en
         semester_end   (str): "YYYY-MM-DD"
         holidays (list):      "YYYY-MM-DD" strings (already merged with SEMESTER_HOLIDAYS).
         today (str):          "YYYY-MM-DD" today's date.
+        now_time (str):       "HH:MM" current wall-clock time, used to decide which
+                              of today's classes have ended. Defaults to APP_TIMEZONE now.
 
     Returns:
         dict of aggregated stats, or {"error": msg, ...} on bad inputs.
@@ -749,6 +822,10 @@ def calculate_department_stats(all_rows, professors, semester_start, semester_en
                 "most_4pm": None, "most_diverse": None, "total_sessions": 0,
                 "remaining_sessions": 0, "completed_sessions": 0, "professor_count": 0,
                 "busiest_day": None}
+
+    # Wall-clock time used to decide which of today's classes are already over.
+    if now_time is None:
+        now_time = now_local_time_str()
 
     # Build holiday set (same logic as calculate_stats)
     holiday_set = set()
@@ -782,7 +859,12 @@ def calculate_department_stats(all_rows, professors, semester_start, semester_en
     for prof in professors:
         occs      = prof_occurrences[prof]
         total     = len(occs)
-        completed = sum(1 for o in occs if o["date"] < today_date)
+        # Same end-time rule as calculate_stats: a session is done once it has
+        # actually ended, not merely once the calendar has rolled over.
+        completed = sum(
+            1 for o in occs
+            if (o["date"], o["end_time"]) <= (today_date, now_time)
+        )
         remaining = total - completed
         pct       = round(completed / total * 100, 1) if total > 0 else 0.0
         prof_stats_list.append({

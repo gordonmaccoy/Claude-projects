@@ -2,3 +2,6 @@ flask>=3.0.0
 pandas>=2.0.0
 openpyxl>=3.1.0
 gunicorn>=21.0.0
+# Ships the IANA tz database so zoneinfo.ZoneInfo("Asia/Seoul") resolves even on
+# slim container images that omit the system tzdata package.
+tzdata>=2024.1

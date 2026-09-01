@@ -5,7 +5,6 @@
 import os
 import re
 import json
-from datetime import date, datetime
 
 from flask import (
     Flask, render_template, request, redirect,
@@ -181,8 +180,11 @@ def dashboard():
     config    = load_config()
     prof_rows = [r for r in cache["rows"] if r["professor_name"] == professor_name]
 
-    now          = datetime.now()
-    today_str    = str(date.today())
+    # Read the clock in the department's timezone, never the server's — this
+    # box runs on UTC, 9 hours behind Seoul. One call so date and time can't
+    # straddle midnight.
+    now          = calculator.now_local()
+    today_str    = now.strftime("%Y-%m-%d")
     now_time_str = now.strftime("%H:%M")
 
     # Merge holidays from Settings with built-in semester holidays.
@@ -194,7 +196,8 @@ def dashboard():
         semester_start=config["semester_start"],
         semester_end=config["semester_end"],
         holidays=all_holidays,
-        today=today_str
+        today=today_str,
+        now_time=now_time_str,
     )
 
     semester_week = calculator.calculate_semester_week(
@@ -276,7 +279,9 @@ def department():
         return redirect(url_for("settings"))
 
     config       = load_config()
-    today_str    = str(date.today())
+    now          = calculator.now_local()
+    today_str    = now.strftime("%Y-%m-%d")
+    now_time_str = now.strftime("%H:%M")
     all_holidays = list(set(config.get("holidays", []) + calculator.SEMESTER_HOLIDAYS))
 
     dept = calculator.calculate_department_stats(
@@ -286,6 +291,7 @@ def department():
         semester_end   = config["semester_end"],
         holidays       = all_holidays,
         today          = today_str,
+        now_time       = now_time_str,
     )
 
     prof_photos   = {p: get_professor_photo(p) for p in cache["professors"]}
