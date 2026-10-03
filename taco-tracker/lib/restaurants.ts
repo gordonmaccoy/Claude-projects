@@ -89,13 +89,16 @@ export async function getRestaurants(
   const filtered = buildRestaurantsQuery(base, filters)
   const { data, error } = await filtered
   if (error) throw new Error(`Failed to fetch restaurants: ${error.message}`)
-  return (data ?? []) as Restaurant[]
+  // Keep the known joke listing off the public map until the archive SQL has
+  // been run in Supabase. The database status remains the source of truth.
+  return ((data ?? []) as Restaurant[]).filter((row) => row.slug !== 'just-some-empty-building')
 }
 
 export async function getRestaurantBySlug(
   supabase: SupabaseClient,
   slug: string
 ): Promise<Restaurant | null> {
+  if (slug === 'just-some-empty-building') return null
   const { data, error } = await supabase
     .from('restaurants')
     .select(RESTAURANT_COLUMNS)

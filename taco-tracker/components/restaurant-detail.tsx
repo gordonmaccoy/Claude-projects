@@ -14,6 +14,7 @@ import {
 import { useTranslations } from 'next-intl'
 import { useState } from 'react'
 import type { Restaurant } from '@/lib/restaurants'
+import { editorialBySlug } from '@/lib/editorial'
 import { PhotoGallery } from './photo-gallery'
 
 interface Props {
@@ -29,6 +30,8 @@ export function RestaurantDetail({ restaurant, locale, onBack, inline = false }:
   const [shareNotice, setShareNotice] = useState(false)
 
   const isKorean = locale === 'ko'
+  const editorial = editorialBySlug[restaurant.slug]
+  const validPhone = restaurant.phone && /^[+\d()\s-]{7,}$/.test(restaurant.phone)
   const primaryName = isKorean
     ? restaurant.name_ko
     : (restaurant.name_en ?? restaurant.name_ko)
@@ -167,6 +170,23 @@ export function RestaurantDetail({ restaurant, locale, onBack, inline = false }:
         ) : null}
       </div>
 
+      {editorial ? (
+        <section className="mt-6 rounded-2xl border border-ink/10 bg-bg px-5 py-4">
+          <h2 className="font-display text-xl text-ink">{t('about')}</h2>
+          <p className="mt-2 text-sm leading-7 text-ink">{editorial.intro[locale]}</p>
+          {editorial.hours ? (
+            <div className="mt-4 border-t border-ink/10 pt-4">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">{t('hours')}</h3>
+              <p className="mt-1 text-sm text-ink">{editorial.hours[locale]}</p>
+              <p className="mt-1 text-xs text-muted">{t('hoursMayChange')}</p>
+            </div>
+          ) : null}
+          <a href={editorial.sourceUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-brand-deep underline underline-offset-2">
+            {t('source')} · {editorial.checkedAt} <ExternalLink className="h-3 w-3" />
+          </a>
+        </section>
+      ) : null}
+
       <dl className="mt-7 grid grid-cols-1 gap-5 sm:grid-cols-2">
         <div>
           <dt className="text-xs font-medium uppercase tracking-wide text-muted">
@@ -177,7 +197,7 @@ export function RestaurantDetail({ restaurant, locale, onBack, inline = false }:
             <span>{restaurant.address_ko}</span>
           </dd>
         </div>
-        {restaurant.phone ? (
+        {validPhone ? (
           <div>
             <dt className="text-xs font-medium uppercase tracking-wide text-muted">
               {t('phone')}
