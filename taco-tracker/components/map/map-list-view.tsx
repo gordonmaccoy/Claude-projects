@@ -57,15 +57,6 @@ export function MapListView({ restaurants, locale }: Props) {
 
   const handlePopoverClose = useCallback(() => setActiveId(null), [])
 
-  const handleCardSingleClick = useCallback((id: string) => {
-    setActiveId(id)
-  }, [])
-
-  const handleCardDoubleClick = useCallback((id: string) => {
-    setSelectedDetailId(id)
-    setActiveId(null)
-  }, [])
-
   const handleSelectDetail = useCallback((id: string) => {
     setSelectedDetailId(id)
     setActiveId(null)
@@ -146,14 +137,14 @@ export function MapListView({ restaurants, locale }: Props) {
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
       {/* Search bar — always full width */}
       <SearchBar value={query} onChange={setQuery} />
 
       {/* ── Mobile: single pill control row ── */}
-      <div className="flex items-center gap-1.5 md:hidden">
+      <div className="flex items-center gap-2 md:hidden">
         {/* Map / List toggle */}
-        <div className="flex rounded-full border border-ink bg-surface p-0.5">
+        <div className="flex rounded-full border border-ink/15 bg-surface p-1 shadow-sm">
           <button
             type="button"
             onClick={() => setTab('map')}
@@ -212,11 +203,14 @@ export function MapListView({ restaurants, locale }: Props) {
       </div>
       {/* Locate error — mobile */}
       {locateError ? <span className="text-sm text-brand md:hidden">{locateError}</span> : null}
+      <p className="text-xs font-medium text-muted md:hidden">
+        {t('resultCountFiltered', { count: visibleRestaurants.length })}
+      </p>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-[65%_35%]">
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-[minmax(0,1.6fr)_minmax(320px,1fr)]">
         {/* Map column */}
         <div className={tab === 'map' ? 'block' : 'hidden md:block'}>
-          <div className="relative h-[calc(100dvh-11rem)] md:sticky md:top-20 md:h-[calc(100vh-7rem)]">
+          <div className="relative h-[calc(100dvh-18rem)] min-h-[430px] overflow-hidden rounded-[22px] border border-ink/10 bg-surface p-1.5 shadow-card md:sticky md:top-20 md:h-[calc(100vh-7rem)]">
             <KakaoMap
               restaurants={queryMatched}
               restaurantById={restaurantById}
@@ -256,7 +250,12 @@ export function MapListView({ restaurants, locale }: Props) {
           ) : visibleRestaurants.length === 0 ? (
             <p className="py-16 text-center text-muted">{t('emptyStateBounds')}</p>
           ) : (
-            <ul className="flex flex-col gap-2.5">
+            <div>
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="font-display text-xl text-ink">{t('explore')}</h2>
+                <span className="text-xs text-muted">{t('resultCountFiltered', { count: visibleRestaurants.length })}</span>
+              </div>
+              <ul className="flex flex-col gap-3">
               {visibleRestaurants.map((r) => (
                 <li key={r.id}>
                   <RestaurantCard
@@ -268,21 +267,30 @@ export function MapListView({ restaurants, locale }: Props) {
                         ? haversineMeters(userLocation.lat, userLocation.lng, r.lat, r.lng)
                         : null
                     }
-                    onSingleClick={() => handleCardSingleClick(r.id)}
-                    onDoubleClick={() => handleCardDoubleClick(r.id)}
+                    onSelect={() => handleSelectDetail(r.id)}
                   />
                 </li>
               ))}
-            </ul>
+              </ul>
+            </div>
           )}
         </div>
       </div>
+      {selectedRestaurant ? (
+        <div className="fixed inset-0 z-40 overflow-y-auto bg-bg md:hidden">
+          <RestaurantDetail
+            restaurant={selectedRestaurant}
+            locale={locale}
+            onBack={handleDetailBack}
+          />
+        </div>
+      ) : null}
     </div>
   )
 }
 
 function tabClass(isActive: boolean): string {
   const base =
-    'rounded-full px-4 py-1 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg'
-  return isActive ? `${base} bg-brand text-surface` : `${base} text-ink hover:bg-bg`
+    'rounded-full px-4 py-1.5 text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg'
+  return isActive ? `${base} bg-brand-deep text-white` : `${base} text-ink hover:bg-bg`
 }

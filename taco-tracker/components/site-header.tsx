@@ -30,20 +30,20 @@ export function SiteHeader() {
 
   return (
     <>
-      <header className="sticky top-0 z-30 border-b border-muted/30 bg-bg/95 backdrop-blur supports-[backdrop-filter]:bg-bg/80">
-        <div className="mx-auto flex w-full items-center justify-between gap-4 px-4 py-2 sm:px-6 2xl:max-w-[1600px]">
+      <header className="sticky top-0 z-30 border-b border-ink/10 bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/85">
+        <div className="mx-auto flex w-full items-center justify-between gap-4 px-4 py-3 sm:px-6 2xl:max-w-[1600px]">
           <Link href="/" className="flex items-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand rounded-md">
-            <LogoImage className="h-7 w-7" />
+            <LogoImage className="h-9 w-9" />
             <div className="flex flex-col leading-tight">
-              <span className="font-display text-lg text-ink sm:text-xl">Taco Map</span>
-              <span className="hidden text-[11px] text-muted sm:block">{t('tagline')}</span>
+              <span className="font-display text-xl leading-none tracking-[-0.04em] text-ink sm:text-2xl">Taco Map<span className="text-brand">.</span></span>
+              <span className="mt-1 hidden text-[10px] font-medium uppercase tracking-[0.12em] text-muted sm:block">{t('tagline')}</span>
             </div>
           </Link>
           <button
             type="button"
             onClick={() => setOpen(true)}
             aria-label={t('menuLabel')}
-            className="flex h-9 w-9 items-center justify-center rounded-md text-ink hover:bg-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-ink/10 text-ink hover:bg-bg focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
           >
             <Menu className="h-5 w-5" />
           </button>

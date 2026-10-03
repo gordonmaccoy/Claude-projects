@@ -4,14 +4,13 @@
 @import "tailwindcss";
 
 @theme {
-  /* Colors — from design-rules.md */
-  --color-bg: #F7F2E8;
-  --color-surface: #FFFBF2;
-  --color-ink: #1B1916;
-  --color-muted: #8A8177;
-  --color-brand: #C84B2F;
-  --color-brand-deep: #3B2A1F;
-  --color-accent: #7A9F3A;
+  --color-bg: #F5F1EA;
+  --color-surface: #FFFDF8;
+  --color-ink: #252821;
+  --color-muted: #716F67;
+  --color-brand: #B4432D;
+  --color-brand-deep: #1D3D36;
+  --color-accent: #5B7658;
 
   /* Border radius */
   --radius-md: 8px;
@@ -19,7 +18,7 @@
   --radius-full: 9999px;
 
   /* Shadow */
-  --shadow-card: 0 2px 8px rgba(27, 25, 22, 0.08);
+  --shadow-card: 0 8px 28px rgba(37, 40, 33, 0.07);
 
   /* Fonts */
   --font-sans: 'Pretendard Variable', 'Pretendard', system-ui, sans-serif;
@@ -32,4 +31,13 @@ html {
   font-family: var(--font-sans);
   font-size: 16px;
   line-height: 1.55;
+}
+
+body {
+  min-width: 320px;
+}
+
+::selection {
+  background: #E8CFC2;
+  color: var(--color-ink);
 }

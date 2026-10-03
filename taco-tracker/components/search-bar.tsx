@@ -12,14 +12,14 @@ export function SearchBar({ value, onChange }: Props) {
   const t = useTranslations('listing')
   return (
     <div className="relative w-full">
-      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+      <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
       <input
         type="search"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={t('searchPlaceholder')}
         aria-label={t('searchPlaceholder')}
-        className="h-10 w-full rounded-full border border-ink bg-surface pl-10 pr-10 text-sm text-ink placeholder:text-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+        className="h-12 w-full rounded-2xl border border-ink/15 bg-surface pl-11 pr-10 text-sm text-ink shadow-sm placeholder:text-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
       />
       {value.length > 0 ? (
         <button
