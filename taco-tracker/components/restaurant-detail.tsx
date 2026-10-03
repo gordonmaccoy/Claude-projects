@@ -16,6 +16,7 @@ import { useState } from 'react'
 import type { Restaurant } from '@/lib/restaurants'
 import { editorialBySlug } from '@/lib/editorial'
 import { PhotoGallery } from './photo-gallery'
+import { RestaurantPhoto } from './restaurant-photo'
 
 interface Props {
   restaurant: Restaurant
@@ -96,14 +97,7 @@ export function RestaurantDetail({ restaurant, locale, onBack, inline = false }:
       )}
 
       <div className="relative aspect-[16/10] w-full overflow-hidden rounded-[22px] bg-gradient-to-br from-[#E8DCC8] to-[#D4C4A8] sm:aspect-[16/8]">
-        {restaurant.cover_photo_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={restaurant.cover_photo_url}
-            alt=""
-            className="h-full w-full object-cover"
-          />
-        ) : null}
+        <RestaurantPhoto coverPhotoUrl={restaurant.cover_photo_url} photoCandidates={restaurant.photo_candidates} className="absolute inset-0" loading="eager" />
       </div>
 
       <h1 className="mt-6 font-display text-4xl leading-tight tracking-[-0.03em] text-ink sm:text-5xl">{primaryName}</h1>

@@ -3,6 +3,7 @@
 import { Leaf, Sprout, X } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import type { Restaurant } from '@/lib/restaurants'
+import { RestaurantPhoto } from '../restaurant-photo'
 
 interface Props {
   restaurant: Restaurant
@@ -29,10 +30,7 @@ export function RestaurantPopover({ restaurant, locale, onClose, onSelectDetail 
         className="block w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
       >
         <div className="relative aspect-[4/3] w-full bg-gradient-to-br from-[#E8DCC8] to-[#D4C4A8]">
-          {restaurant.cover_photo_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={restaurant.cover_photo_url} alt="" className="h-full w-full object-cover" />
-          ) : null}
+          <RestaurantPhoto coverPhotoUrl={restaurant.cover_photo_url} photoCandidates={restaurant.photo_candidates} className="absolute inset-0" loading="eager" />
           <span
             role="button"
             onClick={(e) => {
