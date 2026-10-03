@@ -101,7 +101,8 @@
       "logout": "Log out"
     },
     "follow": "Follow us",
-    "comingSoon": "Coming soon"
+    "comingSoon": "Coming soon",
+    "closeMenu": "Close menu"
   },
   "detail": {
     "back": "Back",
@@ -120,5 +121,26 @@
     "noPhotos": "No photos yet",
     "photoUnavailable": "Photo unavailable",
     "reviewsComingSoon": "Reviews and check-ins are coming soon."
+  },
+  "auth": {
+    "title": "Welcome to Taco Map",
+    "description": "Sign in to create your account. Check-ins, reviews and photo uploads are being built next. You can browse every restaurant without an account.",
+    "google": "Continue with Google",
+    "kakao": "Continue with Kakao",
+    "signIn": "Sign in",
+    "signedIn": "Signed in",
+    "loading": "Checking account…",
+    "loggingOut": "Logging out…",
+    "logoutError": "Could not log out. Please try again.",
+    "browse": "Keep exploring restaurants",
+    "privacy": "Your email address and login details are never displayed on the public map.",
+    "setupPending": "Account sign-in is being set up. You can keep browsing the map in the meantime.",
+    "someProvidersPending": "The dimmed sign-in option is not available yet.",
+    "errors": {
+      "failed": "Sign-in could not be completed. Please try again.",
+      "cancelled": "Sign-in was cancelled. Try again when you are ready.",
+      "unavailable": "Sign-in is temporarily unavailable. Please try again shortly.",
+      "notEnabled": "This sign-in option is not available yet. Choose another option or keep browsing."
+    }
   }
 }
