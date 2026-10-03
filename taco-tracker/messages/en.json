@@ -118,6 +118,7 @@
     "gallery": "Photos",
     "curatorScore": "Editor's score",
     "noPhotos": "No photos yet",
+    "photoUnavailable": "Photo unavailable",
     "reviewsComingSoon": "Reviews and check-ins are coming soon."
   }
 }

@@ -118,6 +118,7 @@
     "gallery": "사진",
     "curatorScore": "에디터 평점",
     "noPhotos": "사진이 아직 없습니다",
+    "photoUnavailable": "사진 준비 중",
     "reviewsComingSoon": "리뷰와 체크인 기능이 곧 추가됩니다."
   }
 }

@@ -4,6 +4,7 @@ import { ArrowUpRight, Leaf, Sprout } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import type { Restaurant } from '@/lib/restaurants'
 import { formatDistance } from '@/scripts/lib/distance'
+import { RestaurantPhoto } from './restaurant-photo'
 
 interface Props {
   restaurant: Restaurant
@@ -86,15 +87,7 @@ export function RestaurantCard({
           </div>
         </div>
         <div className="relative w-28 shrink-0 bg-gradient-to-br from-[#E8DCC8] to-[#D4C4A8] sm:w-32">
-          {restaurant.cover_photo_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={restaurant.cover_photo_url}
-              alt=""
-              className="h-full w-full object-cover"
-              loading="lazy"
-            />
-          ) : null}
+          <RestaurantPhoto coverPhotoUrl={restaurant.cover_photo_url} photoCandidates={restaurant.photo_candidates} className="absolute inset-0" />
         </div>
       </div>
     </button>
