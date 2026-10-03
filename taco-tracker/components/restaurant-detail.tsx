@@ -42,7 +42,9 @@ export function RestaurantDetail({ restaurant, locale, onBack, inline = false }:
   const directionsUrl = `https://map.kakao.com/?eName=${encodeURIComponent(restaurant.name_ko)}&eLat=${restaurant.lat}&eLng=${restaurant.lng}`
 
   const handleShare = async () => {
-    const url = typeof window !== 'undefined' ? window.location.href : ''
+    const url = typeof window !== 'undefined'
+      ? `${window.location.origin}/${locale}/restaurant/${encodeURIComponent(restaurant.slug)}`
+      : ''
     const title = primaryName
     if (typeof navigator !== 'undefined' && navigator.share) {
       try {
@@ -72,25 +74,25 @@ export function RestaurantDetail({ restaurant, locale, onBack, inline = false }:
   ).slice(0, 4)
 
   return (
-    <article className={inline ? 'w-full px-1 py-2' : 'mx-auto w-full max-w-3xl px-4 py-4 sm:px-6 sm:py-6'}>
+    <article className={inline ? 'w-full rounded-[22px] border border-ink/10 bg-surface p-4 shadow-card' : 'mx-auto w-full max-w-3xl px-4 py-5 sm:px-6 sm:py-8'}>
       {onBack ? (
         <button
           type="button"
           onClick={onBack}
-          className="mb-3 inline-flex items-center gap-1 text-sm text-muted hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand rounded"
+          className="mb-4 inline-flex items-center gap-2 rounded-full border border-ink/10 bg-surface px-3 py-1.5 text-sm font-medium text-ink hover:border-brand focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
         >
           <ArrowLeft className="h-4 w-4" /> {t('back')}
         </button>
       ) : (
         <Link
           href="/"
-          className="mb-3 inline-flex items-center gap-1 text-sm text-muted hover:text-ink"
+          className="mb-4 inline-flex items-center gap-2 rounded-full border border-ink/10 bg-surface px-3 py-1.5 text-sm font-medium text-ink hover:border-brand"
         >
           <ArrowLeft className="h-4 w-4" /> {t('back')}
         </Link>
       )}
 
-      <div className="relative aspect-[16/9] w-full overflow-hidden rounded-lg bg-gradient-to-br from-[#E8DCC8] to-[#D4C4A8]">
+      <div className="relative aspect-[16/10] w-full overflow-hidden rounded-[22px] bg-gradient-to-br from-[#E8DCC8] to-[#D4C4A8] sm:aspect-[16/8]">
         {restaurant.cover_photo_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -101,19 +103,24 @@ export function RestaurantDetail({ restaurant, locale, onBack, inline = false }:
         ) : null}
       </div>
 
-      <h1 className="mt-4 font-display text-3xl text-ink sm:text-4xl">{primaryName}</h1>
+      <h1 className="mt-6 font-display text-4xl leading-tight tracking-[-0.03em] text-ink sm:text-5xl">{primaryName}</h1>
       {secondaryName ? (
         <p className="mt-1 text-sm text-muted">{secondaryName}</p>
       ) : null}
 
-      <div className="mt-2 flex flex-wrap items-center gap-2">
+      <div className="mt-3 flex flex-wrap items-center gap-2">
         {restaurant.neighborhood ? (
-          <span className="text-sm text-muted">{restaurant.neighborhood}</span>
+          <span className="mr-1 text-sm font-medium text-muted">{restaurant.neighborhood}</span>
+        ) : null}
+        {restaurant.curator_rating !== null ? (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-deep px-3 py-1 text-xs font-semibold text-white">
+            ★ {restaurant.curator_rating.toFixed(1)} <span className="font-normal text-white/80">{t('curatorScore')}</span>
+          </span>
         ) : null}
         {restaurant.dish_tags.map((tag) => (
           <span
             key={tag}
-            className="rounded-full border border-ink bg-bg px-2.5 py-0.5 text-xs text-ink"
+            className="rounded-full border border-ink/10 bg-bg px-2.5 py-0.5 text-xs text-ink"
           >
             {tag}
           </span>
@@ -129,19 +136,19 @@ export function RestaurantDetail({ restaurant, locale, onBack, inline = false }:
         ) : null}
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="mt-6 flex flex-wrap gap-2 border-b border-ink/10 pb-6">
         <a
           href={directionsUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 rounded-full border border-ink bg-surface px-4 py-1.5 text-sm font-medium text-ink hover:bg-bg"
+          className="inline-flex items-center gap-2 rounded-full bg-brand-deep px-5 py-2.5 text-sm font-semibold text-white hover:bg-ink"
         >
           <Navigation className="h-4 w-4" /> {t('directions')}
         </a>
         <button
           type="button"
           onClick={handleShare}
-          className="inline-flex items-center gap-1.5 rounded-full border border-ink bg-surface px-4 py-1.5 text-sm font-medium text-ink hover:bg-bg"
+          className="inline-flex items-center gap-2 rounded-full border border-ink/15 bg-surface px-5 py-2.5 text-sm font-medium text-ink hover:border-brand"
         >
           <Share2 className="h-4 w-4" /> {t('share')}
         </button>
@@ -150,7 +157,7 @@ export function RestaurantDetail({ restaurant, locale, onBack, inline = false }:
             href={kakaoUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-full border border-ink bg-surface px-4 py-1.5 text-sm font-medium text-ink hover:bg-bg"
+            className="inline-flex items-center gap-2 rounded-full border border-ink/15 bg-surface px-5 py-2.5 text-sm font-medium text-ink hover:border-brand"
           >
             <ExternalLink className="h-4 w-4" /> {t('openInKakao')}
           </a>
@@ -160,7 +167,7 @@ export function RestaurantDetail({ restaurant, locale, onBack, inline = false }:
         ) : null}
       </div>
 
-      <dl className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <dl className="mt-7 grid grid-cols-1 gap-5 sm:grid-cols-2">
         <div>
           <dt className="text-xs font-medium uppercase tracking-wide text-muted">
             {t('address')}
@@ -190,7 +197,7 @@ export function RestaurantDetail({ restaurant, locale, onBack, inline = false }:
         <PhotoGallery photos={galleryPhotos} />
       </section>
 
-      <section className="mt-8 rounded-lg border border-muted bg-bg px-4 py-6 text-center">
+      <section className="mt-8 rounded-2xl border border-ink/10 bg-bg px-4 py-6 text-center">
         <p className="text-sm text-muted">{t('reviewsComingSoon')}</p>
       </section>
     </article>

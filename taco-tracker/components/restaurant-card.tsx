@@ -1,7 +1,6 @@
 'use client'
 
-import { useRef } from 'react'
-import { Leaf, Sprout } from 'lucide-react'
+import { ArrowUpRight, Leaf, Sprout } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import type { Restaurant } from '@/lib/restaurants'
 import { formatDistance } from '@/scripts/lib/distance'
@@ -11,44 +10,18 @@ interface Props {
   locale: 'ko' | 'en'
   distanceMeters?: number | null
   isActive?: boolean
-  onSingleClick: () => void
-  onDoubleClick: () => void
+  onSelect: () => void
 }
-
-const DOUBLE_CLICK_DELAY_MS = 250
 
 export function RestaurantCard({
   restaurant,
   locale,
   distanceMeters = null,
   isActive = false,
-  onSingleClick,
-  onDoubleClick,
+  onSelect,
 }: Props) {
   const t = useTranslations('listing.dietary')
-  const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const handleClick = () => {
-    if (clickTimer.current) {
-      // Second click within delay window — treat as double click
-      clearTimeout(clickTimer.current)
-      clickTimer.current = null
-      onDoubleClick()
-      return
-    }
-    // First click — schedule single-click handler
-    clickTimer.current = setTimeout(() => {
-      clickTimer.current = null
-      onSingleClick()
-    }, DOUBLE_CLICK_DELAY_MS)
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      onDoubleClick() // Enter = "open" (most explicit action)
-    }
-  }
+  const tListing = useTranslations('listing')
 
   const isKorean = locale === 'ko'
   const primaryName = isKorean
@@ -59,35 +32,30 @@ export function RestaurantCard({
     : (restaurant.name_en ? restaurant.name_ko : null)
 
   const articleClass = isActive
-    ? 'flex overflow-hidden rounded-lg border-2 border-brand bg-bg shadow-card transition-shadow'
-    : 'flex overflow-hidden rounded-lg border-2 border-transparent bg-surface shadow-card transition-shadow group-hover:shadow-[0_4px_12px_rgba(27,25,22,0.12)]'
+    ? 'flex min-h-28 overflow-hidden rounded-2xl border border-brand bg-surface shadow-card transition-all'
+    : 'flex min-h-28 overflow-hidden rounded-2xl border border-ink/10 bg-surface shadow-card transition-all hover:border-brand/40 hover:shadow-[0_12px_30px_rgba(37,40,33,0.12)]'
 
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={handleClick}
-      onKeyDown={handleKeyDown}
-      className="group block cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+    <button
+      type="button"
+      onClick={onSelect}
+      className="group block w-full cursor-pointer text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+      aria-label={primaryName}
     >
-      <article className={articleClass}>
-        <div className="flex min-w-0 flex-1 flex-col gap-1.5 px-3 py-2.5 sm:px-4">
+      <div className={articleClass}>
+        <div className="flex min-w-0 flex-1 flex-col gap-2 px-4 py-3.5 sm:px-5">
           <div className="flex items-baseline gap-1.5">
             <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-bold leading-tight text-ink sm:text-base">
+              <div className="truncate text-base font-semibold leading-tight text-ink sm:text-lg">
                 {primaryName}
               </div>
               {secondaryName ? (
-                <div className="truncate text-[11px] text-muted">{secondaryName}</div>
+                <div className="mt-0.5 truncate text-xs text-muted">{secondaryName}</div>
               ) : null}
             </div>
-            {restaurant.curator_rating !== null ? (
-              <div className="whitespace-nowrap text-xs font-semibold text-brand">
-                ★ {restaurant.curator_rating.toFixed(1)}
-              </div>
-            ) : null}
+            <ArrowUpRight className="h-4 w-4 shrink-0 text-muted transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" aria-hidden />
           </div>
-          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted">
+          <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted">
             {restaurant.neighborhood ? <span>{restaurant.neighborhood}</span> : null}
             {distanceMeters !== null ? (
               <>
@@ -96,11 +64,16 @@ export function RestaurantCard({
               </>
             ) : null}
           </div>
-          <div className="flex flex-wrap items-center gap-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {restaurant.curator_rating !== null ? (
+              <span className="rounded-full bg-brand-deep px-2.5 py-1 text-[11px] font-semibold text-white" title={tListing('curatorScore')}>
+                ★ {restaurant.curator_rating.toFixed(1)} <span className="sr-only">{tListing('curatorScore')}</span>
+              </span>
+            ) : null}
             {restaurant.dish_tags.slice(0, 3).map((tag) => (
               <span
                 key={tag}
-                className="rounded-full border border-ink bg-bg px-1.5 py-0.5 text-[10px] text-ink"
+                className="rounded-full border border-ink/10 bg-bg px-2 py-0.5 text-[11px] text-ink"
               >
                 {tag}
               </span>
@@ -112,7 +85,7 @@ export function RestaurantCard({
             ) : null}
           </div>
         </div>
-        <div className="relative h-20 w-20 shrink-0 self-center bg-gradient-to-br from-[#E8DCC8] to-[#D4C4A8] sm:h-24 sm:w-24">
+        <div className="relative w-28 shrink-0 bg-gradient-to-br from-[#E8DCC8] to-[#D4C4A8] sm:w-32">
           {restaurant.cover_photo_url ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -123,7 +96,7 @@ export function RestaurantCard({
             />
           ) : null}
         </div>
-      </article>
-    </div>
+      </div>
+    </button>
   )
 }

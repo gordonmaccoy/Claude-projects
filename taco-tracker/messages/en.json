@@ -9,7 +9,9 @@
     "about": "About"
   },
   "home": {
-    "heading": "Tacos & Mexican Food in Seoul"
+    "eyebrow": "Taco Map · Seoul",
+    "heading": "Find your next taco spot.",
+    "description": "A local guide to tacos and Mexican food around Seoul. Explore the map, discover a place, and go eat something good."
   },
   "listing": {
     "title": "Tacos & Mexican Food in Seoul",
@@ -17,6 +19,8 @@
     "searchPlaceholder": "Search by restaurant or neighborhood…",
     "resultCountAll": "{count, plural, =1 {1 restaurant} other {# restaurants}}",
     "resultCountFiltered": "{count, plural, =1 {1 restaurant} other {# restaurants}}",
+    "explore": "Explore places",
+    "curatorScore": "Editor's score",
     "emptyState": "No restaurants match these filters.",
     "emptyStateBounds": "No restaurants in this area — pan or zoom out.",
     "curatorBanner": "{count, plural, =1 {Draft mode — 1 restaurant pending review} other {Draft mode — # restaurants pending review}}",
@@ -108,6 +112,7 @@
     "address": "Address",
     "phone": "Phone",
     "gallery": "Photos",
+    "curatorScore": "Editor's score",
     "noPhotos": "No photos yet",
     "reviewsComingSoon": "Reviews and check-ins are coming soon."
   }
