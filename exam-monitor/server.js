@@ -13,6 +13,7 @@ const http = require('http');
 const path = require('path');
 const { Server } = require('socket.io');
 const QRCode = require('qrcode');
+const persistence = require('./persistence');
 
 const PORT = process.env.PORT || 3100;
 const STALE_MS = 10_000;            // green requires a heartbeat within this window
@@ -173,14 +174,15 @@ io.on('connection', (socket) => {
 
   // ── Professor: start a test session ─────────────────────────────────────
   socket.on('professor:startTestSession', async ({ test } = {}) => {
+    if (!persistence.configured) {
+      socket.emit('session:error', { message: 'Test Mode requires DATABASE_URL for durable exam storage.' });
+      return;
+    }
     const validatedTest = validateTest(test);
     if (!validatedTest) {
       socket.emit('session:error', { message: 'Invalid test data.' });
       return;
     }
-
-    const priorTestId = dropPriorSession(socket.id);
-    if (priorTestId) tests.delete(priorTestId);
 
     const testId = genId(8);
     tests.set(testId, { ...validatedTest, id: testId });
@@ -189,6 +191,17 @@ io.on('connection', (socket) => {
     const joinUrl = `${originOf(socket)}/student.html?session=${sessionId}`;
     const qrDataUrl = await makeQr(joinUrl);
 
+    try {
+      await persistence.saveTestAndSession(tests.get(testId), { id: sessionId, mode: 'test', testId });
+    } catch (error) {
+      tests.delete(testId);
+      console.error('Unable to persist test session:', error);
+      socket.emit('session:error', { message: 'Unable to save test. Session was not started.' });
+      return;
+    }
+
+    const priorTestId = dropPriorSession(socket.id);
+    if (priorTestId) tests.delete(priorTestId);
     sessions.set(sessionId, {
       id: sessionId,
       professorSocketId: socket.id,
@@ -203,7 +216,7 @@ io.on('connection', (socket) => {
   });
 
   // ── Student: join session ────────────────────────────────────────────────
-  socket.on('student:join', ({ sessionId, name } = {}) => {
+  socket.on('student:join', async ({ sessionId, name } = {}) => {
     const session = sessions.get(sessionId);
     if (!session) {
       socket.emit('student:joined', { ok: false, error: 'session-not-found' });
@@ -225,6 +238,15 @@ io.on('connection', (socket) => {
       disconnectedAt: null,
       inactiveSince: null,
     };
+    if (session.mode === 'test') {
+      try {
+        await persistence.saveStudent(sessionId, studentId, cleanName);
+      } catch (error) {
+        console.error('Unable to persist student:', error);
+        socket.emit('student:joined', { ok: false, error: 'storage-unavailable' });
+        return;
+      }
+    }
     session.students.set(studentId, student);
     socket.data.sessionId = sessionId;
     socket.data.studentId = studentId;
@@ -258,7 +280,7 @@ io.on('connection', (socket) => {
   });
 
   // ── Student: submit test answers ─────────────────────────────────────────
-  socket.on('student:submitAnswers', ({ answers } = {}) => {
+  socket.on('student:submitAnswers', async ({ answers } = {}) => {
     const { sessionId, studentId } = socket.data;
     if (!sessionId || !studentId) return;
     const session = sessions.get(sessionId);
@@ -297,12 +319,24 @@ io.on('connection', (socket) => {
       if (validAnswers[q.id] === q.correctOptionId) score++;
     }
 
-    subMap.set(studentId, {
+    const submission = {
       answers: validAnswers,
       score,
       total,
       submittedAt: new Date().toISOString(),
-    });
+    };
+    try {
+      const inserted = await persistence.saveSubmission(sessionId, studentId, submission);
+      if (!inserted) {
+        socket.emit('test:error', { message: 'This student has already submitted.' });
+        return;
+      }
+    } catch (error) {
+      console.error('Unable to persist submission:', error);
+      socket.emit('test:error', { message: 'Submission could not be saved. Please retry.' });
+      return;
+    }
+    subMap.set(studentId, submission);
 
     socket.emit('test:result', { score, total });
     io.to(session.professorSocketId).emit('session:studentSubmitted', { studentId, score, total });
@@ -370,7 +404,13 @@ setInterval(() => {
   }
 }, STALE_CHECK_INTERVAL_MS);
 
-server.listen(PORT, () => {
-  console.log(`exam-monitor listening on http://localhost:${PORT}`);
-  console.log(`  professor: http://localhost:${PORT}/professor.html`);
+persistence.init().then(() => {
+  server.listen(PORT, () => {
+    console.log(`exam-monitor listening on http://localhost:${PORT}`);
+    console.log(`  professor: http://localhost:${PORT}/professor.html`);
+    console.log(`  persistent test storage: ${persistence.configured ? 'enabled' : 'not configured'}`);
+  });
+}).catch(error => {
+  console.error('Database initialization failed; refusing to start:', error);
+  process.exitCode = 1;
 });
