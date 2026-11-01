@@ -115,6 +115,37 @@ async function makeQr(joinUrl) {
   }
 }
 
+// Validate and normalize test data on the server, not only in the professor UI.
+function validateTest(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
+  if (typeof input.title !== 'string' || !input.title.trim() || input.title.length > 80) return null;
+  if (!Array.isArray(input.questions) || input.questions.length < 1 || input.questions.length > 100) return null;
+
+  const seenQuestions = new Set();
+  const questions = [];
+  for (const q of input.questions) {
+    if (!q || typeof q !== 'object' || typeof q.id !== 'string' ||
+        !q.id || q.id.length > 100 || seenQuestions.has(q.id) ||
+        typeof q.text !== 'string' || !q.text.trim() || q.text.length > 300 ||
+        !Array.isArray(q.options) || q.options.length < 2 || q.options.length > 5 ||
+        typeof q.correctOptionId !== 'string') return null;
+    seenQuestions.add(q.id);
+
+    const seenOptions = new Set();
+    const options = [];
+    for (const o of q.options) {
+      if (!o || typeof o.id !== 'string' || !o.id || o.id.length > 100 ||
+          seenOptions.has(o.id) || typeof o.text !== 'string' ||
+          !o.text.trim() || o.text.length > 200) return null;
+      seenOptions.add(o.id);
+      options.push({ id: o.id, text: o.text.trim() });
+    }
+    if (!seenOptions.has(q.correctOptionId)) return null;
+    questions.push({ id: q.id, text: q.text.trim(), options, correctOptionId: q.correctOptionId });
+  }
+  return { title: input.title.trim(), questions };
+}
+
 // ─── Socket handlers ─────────────────────────────────────────────────────────
 
 io.on('connection', (socket) => {
@@ -142,7 +173,8 @@ io.on('connection', (socket) => {
 
   // ── Professor: start a test session ─────────────────────────────────────
   socket.on('professor:startTestSession', async ({ test } = {}) => {
-    if (!test || !test.title || !Array.isArray(test.questions) || test.questions.length === 0) {
+    const validatedTest = validateTest(test);
+    if (!validatedTest) {
       socket.emit('session:error', { message: 'Invalid test data.' });
       return;
     }
@@ -151,7 +183,7 @@ io.on('connection', (socket) => {
     if (priorTestId) tests.delete(priorTestId);
 
     const testId = genId(8);
-    tests.set(testId, { ...test, id: testId });
+    tests.set(testId, { ...validatedTest, id: testId });
 
     const sessionId = newSessionId();
     const joinUrl = `${originOf(socket)}/student.html?session=${sessionId}`;
@@ -239,14 +271,34 @@ io.on('connection', (socket) => {
     const test = tests.get(session.testId);
     if (!test) return;
 
+    if (!answers || typeof answers !== 'object' || Array.isArray(answers)) {
+      socket.emit('test:error', { message: 'Invalid answers.' });
+      return;
+    }
+    const validAnswers = {};
+    for (const q of test.questions) {
+      if (Object.prototype.hasOwnProperty.call(answers, q.id)) {
+        const option = q.options.find(o => o.id === answers[q.id]);
+        if (!option) {
+          socket.emit('test:error', { message: 'Invalid answer option.' });
+          return;
+        }
+        validAnswers[q.id] = option.id;
+      }
+    }
+    if (Object.keys(answers).some(id => !test.questions.some(q => q.id === id))) {
+      socket.emit('test:error', { message: 'Unknown question.' });
+      return;
+    }
+
     let score = 0;
     const total = test.questions.length;
     for (const q of test.questions) {
-      if (answers && answers[q.id] === q.correctOptionId) score++;
+      if (validAnswers[q.id] === q.correctOptionId) score++;
     }
 
     subMap.set(studentId, {
-      answers: answers || {},
+      answers: validAnswers,
       score,
       total,
       submittedAt: new Date().toISOString(),
