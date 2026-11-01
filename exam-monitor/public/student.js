@@ -190,6 +190,12 @@ els.testSubmitBtn.addEventListener('click', () => {
   socket.emit('student:submitAnswers', { answers: testAnswers });
 });
 
+socket.on('test:error', ({ message }) => {
+  testSubmitted = false;
+  els.testSubmitBtn.disabled = false;
+  alert(message || 'Submission failed. Please try again.');
+});
+
 socket.on('test:result', ({ score, total }) => {
   els.testActions.hidden = true;
   els.testDone.hidden = false;
