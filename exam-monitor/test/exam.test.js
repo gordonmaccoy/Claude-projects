@@ -1,0 +1,61 @@
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const exam = require('../exam');
+const fixture = () => exam.newSession('p1', { title: 'Quiz', questions: [{ id: 'q', text: '2+2?', options: [{ id: 'a', text: '4' }, { id: 'b', text: '5' }], correctOptionId: 'a' }] }, 1000);
+test('waiting room withholds questions and failure; public view never leaks private data', () => {
+  const s = fixture(); const j = exam.join(s, { name: 'Kim', number: '001' }, 1000);
+  exam.visibility(s, j.studentId, false, 1100); exam.sweep(s, 20000);
+  assert.equal(s.students[0].failedAt, null);
+  assert.equal(exam.studentView(s, s.students[0]).test, null);
+  const pub = exam.publicView(s, 20000);
+  assert.deepEqual(Object.keys(pub.students[0]).sort(), ['name', 'status']);
+  assert.equal(JSON.stringify(pub).includes('001'), false);
+  assert.equal(JSON.stringify(pub).includes('correctOptionId'), false);
+  assert.throws(() => exam.submit(s, j.studentId, { q: 'a' }, 20000), /not running/);
+});
+test('strict >5 second confirmed hidden rule retains raw score and supports audited override', () => {
+  const s = fixture(); const j = exam.join(s, { name: 'Kim', number: '001' }, 1000);
+  exam.start(s, 2000); exam.visibility(s, j.studentId, false, 3000);
+  exam.sweep(s, 8000); assert.equal(s.students[0].failedAt, null);
+  exam.visibility(s, j.studentId, true, 8001);
+  const r = exam.submit(s, j.studentId, { q: 'a' }, 8002);
+  assert.deepEqual({ score: r.score, originalScore: r.originalScore, percentage: r.percentage }, { score: 0, originalScore: 1, percentage: 0 });
+  assert.equal(exam.publicView(s, 8002).students[0].status, 'red');
+  exam.override(s, j.studentId, 'p1', 'OS interruption', 9000);
+  assert.equal(exam.studentView(s, s.students[0]).result.score, 1);
+  assert.equal(s.students[0].events.at(-1).type, 'override');
+  assert.equal(exam.publicView(s, 9000).students[0].status, 'green');
+  assert.throws(() => exam.submit(s, j.studentId, { q: 'b' }, 9001), /already submitted/);
+});
+test('network silence alone never fails; returning before threshold clears hidden interval; submitted students stop accruing failures', () => {
+  const s = fixture(); const j = exam.join(s, { name: 'Kim', number: '001' }, 1000);
+  exam.start(s, 2000); exam.sweep(s, 30000);
+  assert.equal(s.students[0].failedAt, null);
+  assert.equal(exam.publicView(s, 30000).students[0].status, 'red');
+  exam.visibility(s, j.studentId, false, 31000); exam.visibility(s, j.studentId, true, 35000); exam.sweep(s, 40000);
+  assert.equal(s.students[0].failedAt, null);
+  exam.submit(s, j.studentId, { q: 'a' }, 40001);
+  exam.visibility(s, j.studentId, false, 41000); exam.sweep(s, 50000);
+  assert.equal(s.students[0].failedAt, null);
+});
+test('join requires text number and name; duplicate number needs original resume token; answers and tests are validated', () => {
+  const s = fixture();
+  assert.throws(() => exam.join(s, { name: 'Kim', number: '' }, 1000));
+  const j = exam.join(s, { name: 'Kim', number: '001' }, 1000);
+  assert.throws(() => exam.join(s, { name: 'Imposter', number: '001' }, 1000), /already joined/);
+  assert.equal(exam.join(s, { resumeToken: j.resumeToken }, 1100).studentId, j.studentId);
+  exam.start(s, 2000);
+  assert.throws(() => exam.submit(s, j.studentId, { unknown: 'a' }, 2100));
+  assert.throws(() => exam.submit(s, j.studentId, { q: 'c' }, 2100));
+  assert.equal(exam.validateTest({ title: 'Invalid', questions: [] }), null);
+  assert.equal(exam.studentView(s, s.students[0]).test.questions[0].correctOptionId, undefined);
+});
+test('override forgives current hidden interval; a later hidden transition can fail again', () => {
+  const s = fixture(); const j = exam.join(s, { name: 'Kim', number: '001' }, 1000);
+  exam.start(s, 2000); exam.visibility(s, j.studentId, false, 3000); exam.sweep(s, 8001);
+  exam.override(s, j.studentId, 'p1', 'Approved interruption', 9000);
+  exam.visibility(s, j.studentId, false, 12000); exam.sweep(s, 20000);
+  assert.equal(exam.isFailed(s.students[0]), false);
+  exam.visibility(s, j.studentId, true, 21000); exam.visibility(s, j.studentId, false, 22000); exam.sweep(s, 27001);
+  assert.equal(exam.isFailed(s.students[0]), true);
+});
