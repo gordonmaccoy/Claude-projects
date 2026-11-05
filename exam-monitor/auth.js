@@ -1,6 +1,11 @@
 const { createClient } = require('@supabase/supabase-js');
 function authConfig(env = process.env) {
-  return { url: env.SUPABASE_URL || '', key: env.SUPABASE_PUBLISHABLE_KEY || '', origin: env.APP_ORIGIN || '' };
+  const key = env.SUPABASE_PUBLISHABLE_KEY || '';
+  let role;
+  try { role = JSON.parse(Buffer.from(key.split('.')[1] || '', 'base64url').toString()).role; } catch {}
+  if (key.startsWith('sb_secret_') || role === 'service_role') throw new Error('Use the Supabase publishable key, never a secret/service_role key');
+  return { url: env.SUPABASE_URL || '', key,
+    origin: env.APP_ORIGIN || (env.RAILWAY_PUBLIC_DOMAIN ? `https://${env.RAILWAY_PUBLIC_DOMAIN}` : '') };
 }
 function createVerifier(config) {
   if (!config.url || !config.key) return async () => null;

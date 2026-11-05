@@ -59,3 +59,14 @@ test('override forgives current hidden interval; a later hidden transition can f
   exam.visibility(s, j.studentId, true, 21000); exam.visibility(s, j.studentId, false, 22000); exam.sweep(s, 27001);
   assert.equal(exam.isFailed(s.students[0]), true);
 });
+test('pre-saved join capability recovers a lost enrollment ACK and resumes final score after session end', () => {
+  const s = fixture(); const resumeToken = 'client-generated-private-random-capability-123456789';
+  const first = exam.join(s, { name: 'Kim', number: '001', resumeToken }, 1000);
+  const retry = exam.join(s, { resumeToken }, 1100);
+  assert.equal(first.studentId, retry.studentId); assert.equal(s.students.length, 1);
+  exam.start(s, 2000); exam.submit(s, first.studentId, { q: 'a' }, 3000);
+  s.phase = 'ended';
+  assert.equal(exam.join(s, { resumeToken }, 4000).studentId, first.studentId);
+  assert.equal(exam.studentView(s, s.students[0]).result.score, 1);
+  assert.throws(() => exam.join(s, { name: 'Other', number: '002' }, 4000), /ended/);
+});

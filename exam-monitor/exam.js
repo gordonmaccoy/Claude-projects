@@ -38,18 +38,19 @@ function newSession(ownerId, test, now = Date.now()) {
     endedAt: null, students: [] };
 }
 function join(s, input, now = Date.now()) {
-  if (s.phase === 'ended') throw new Error('Session ended');
   if (typeof input.resumeToken === 'string') {
+    if (!/^[A-Za-z0-9_-]{32,128}$/.test(input.resumeToken)) throw new Error('Invalid resume token');
     const st = s.students.find(x => x.tokenHash === hash(input.resumeToken));
-    if (!st) throw new Error('Invalid resume token');
-    return { studentId: st.id, resumeToken: input.resumeToken };
+    if (st) return { studentId: st.id, resumeToken: input.resumeToken };
+    if (!input.name || !input.number) throw new Error('Invalid resume token');
   }
+  if (s.phase === 'ended') throw new Error('Session ended');
   const name = typeof input.name === 'string' ? input.name.trim() : '';
   const number = typeof input.number === 'string' ? input.number.trim() : '';
   if (!name || name.length > 80 || !number || number.length > 64 || /[\x00-\x1f]/.test(name + number)) throw new Error('Student number and name are required (maximum 64 / 80 characters)');
   if (s.students.some(x => x.number === number)) throw new Error('Student number already joined. Resume on the original browser or ask your professor.');
   if (s.students.length >= 1000) throw new Error('Classroom is full');
-  const resumeToken = token();
+  const resumeToken = input.resumeToken || token();
   const st = { id: token(), tokenHash: hash(resumeToken), number, name, visible: true, lastSeen: now,
     hiddenSince: null, failedAt: null, overrideAt: null, draft: {}, submission: null, events: [] };
   s.students.push(st);

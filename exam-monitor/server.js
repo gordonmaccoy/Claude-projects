@@ -203,7 +203,10 @@ function createApp({ store, verifyUser, config = {}, sweepInterval = 1000 }) {
 async function main() {
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required. Configure Railway Development PostgreSQL.');
   const config = authConfig();
-  if (!config.origin) throw new Error('APP_ORIGIN is required (the Development app HTTPS URL)');
+  if (process.env.RAILWAY_ENVIRONMENT_NAME && process.env.RAILWAY_ENVIRONMENT_NAME.toLowerCase() !== 'development') {
+    throw new Error('This V2 build is restricted to Railway Development');
+  }
+  if (!config.url || !config.key) console.warn('Professor sign-in disabled: configure Development Supabase Auth.');
   const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 10, connectionTimeoutMillis: 10000 });
   const store = createStore(pool); await store.init();
   const runtime = createApp({ store, config, verifyUser: createVerifier(config) });

@@ -40,7 +40,8 @@ test('HTTP/socket exam flow enforces ownership, recovers after restart, sanitize
     assert.equal(joined.ok, true); assert.equal(joined.view.test, null);
     assert.equal((await emit(a, 'student:join', { sessionId: sid, name: 'Kim', number: '0010' })).ok, false);
     const b = await socket();
-    assert.equal((await emit(b, 'student:join', { sessionId: sid, name: 'Park', number: '0002' })).ok, true);
+    const joinedB = await emit(b, 'student:join', { sessionId: sid, name: 'Park', number: '0002' });
+    assert.equal(joinedB.ok, true);
     const updated = once(publicSocket, 'display:update');
     await request(`/api/sessions/${sid}/start`, 'POST', {});
     const [pub] = await updated;
@@ -57,6 +58,18 @@ test('HTTP/socket exam flow enforces ownership, recovers after restart, sanitize
     const responses = await Promise.all([emit(reconnect, 'student:submit', { answers: { q: 'a' } }), emit(reconnect, 'student:submit', { answers: { q: 'a' } })]);
     assert.equal(responses.filter(r => r.ok).length, 1);
     assert.equal(responses.find(r => r.ok).view.result.percentage, 100);
+    const reconnectB = await socket();
+    await emit(reconnectB, 'student:join', { sessionId: sid, resumeToken: joinedB.resumeToken });
+    await emit(reconnectB, 'student:visibility', { visible: false });
+    await store.mutate(sid, s => { s.students.find(st => st.id === joinedB.studentId).hiddenSince = Date.now() - 6000; });
+    await running.tick();
+    const failedResult = await emit(reconnectB, 'student:submit', { answers: { q: 'a' } });
+    assert.equal(failedResult.view.result.score, 0);
+    assert.equal(failedResult.view.result.failed, true);
+    const overridden = await request(`/api/sessions/${sid}/override`, 'POST', { studentId: joinedB.studentId, reason: 'Verified OS interruption' });
+    const restoredStudent = overridden.body.students.find(st => st.id === joinedB.studentId);
+    assert.equal(restoredStudent.result.originalScore, 1); assert.equal(restoredStudent.score, 1);
+    assert.equal(restoredStudent.events.at(-1).reason, 'Verified OS interruption');
     const failed = await request(`/api/sessions/${sid}/override`, 'POST', { studentId: joined.studentId, reason: 'invalid' }, 'bob');
     assert.equal(failed.status, 404);
     const download = await fetch(`${base}/api/sessions/${sid}/export`, { headers: { Authorization: 'Bearer alice' } });
@@ -69,5 +82,6 @@ test('HTTP/socket exam flow enforces ownership, recovers after restart, sanitize
     assert.ok(sheet.includes('student number')); assert.ok(sheet.includes('percentage'));
     await request(`/api/sessions/${sid}/end`, 'POST', {});
     assert.equal((await request(`/api/sessions/${sid}`)).body.phase, 'ended');
+    assert.equal((await emit(reconnect, 'student:join', { sessionId: sid, resumeToken: joined.resumeToken })).view.result.score, 1);
   } finally { sockets.forEach(s => s.disconnect()); await running.close(); await db.close(); }
 });
