@@ -3,13 +3,13 @@
 ## Goal
 Help new professors understand OnScreen and try a small test immediately. Development environment only.
 
-## Approach
-The user chose a short skippable walkthrough with a replay button over an interactive spotlight tour. Use the existing responsive dialog styling rather than adding a tour dependency.
+## Approach — revised after user feedback
+The initial prose walkthrough was too long. The user now requests short instructions, screenshots or video, click-on-X interaction, and a clear distinction between the professor laptop, public classroom display, and student phone/tablet. Use real app screenshots and interactive demo targets with large touch/keyboard alternatives; no tour dependency or real exam side effects.
 
 ## Walkthrough
-Show five brief steps after the first successful professor login: (1) Welcome and your own Practice Test; (2) Library: edit, organize, upload, or create questions with AI and review answers; (3) Launch: choose settings, let students join by QR with number and name, then Start test; (4) Classroom display versus private dashboard: public names/status only, private student numbers/progress, hidden-page failure after more than five seconds and professor unlock/finalize controls; (5) Results: rename, review, and download Excel after a test.
+Eight visual scenes: select Practice Test; launch settings and a separate class-display window; move that window to the projector and expand its QR; student name/number join; private professor Start test; student answer, submit and confirmation; student receipt with optional score; private professor progress/scores, ending the session and Results/Excel. Each frame has one short instruction. Screenshots use a disposable local fixture (fictional Alex, example number 1001), never real student data. The classroom QR is an example, not a joinable class.
 
-Provide Back, Next, Skip tour, and a final Get started button. A Take tour button remains available in the signed-in workspace. Replaying explains controls without creating sessions, launching popups, starting timers, modifying answers, or spending AI credits. Restore focus when the dialog closes; support Escape and small screens.
+Always label the screen role and that this is an interactive demo with no real session. Screenshot highlights and large action buttons advance local scenes only. Retain Back, Skip, Escape, replay, persistent dismissal and focus restoration. Show a fallback action if an image fails to load. No real popup, download, AI call, enrollment, timer or score change occurs during the tour.
 
 ## Account persistence
 Store onboarding version and dismissal/completion per verified professor in PostgreSQL, so refresh, another device, or token refresh does not restart the tour. Initial setup and starter-test creation must be transactional and idempotent across concurrent logins. Deleted starter copies must not reappear. Each new professor owns an independent editable copy, with fresh question and test IDs; never copy results, sessions, student information, or the original professor's folder.

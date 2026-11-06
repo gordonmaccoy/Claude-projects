@@ -113,6 +113,8 @@ Existing drafts have Determine answers with AI, with a confirmation explaining t
 Generate-new-questions, AI import and answer-key completion share the5-per-hour professor AI budget. Error messages distinguish exhausted API credits, spend/usage limits, request throttling and model access. API billing still must be active; ChatGPT/Codex chat status does not establish the API account balance.
 # First-login orientation
 
-New professors with no prior tests or sessions receive their own editable two-question Practice Test (South Korea's capital and 2 + 2) and a five-step, skippable walkthrough. Skip/finish is saved per account in PostgreSQL. Existing professors keep their library and can use **Take tour** to replay the guide. Deleting a starter test never recreates it. Library **Manage folders** provides Rename and Delete folder; deleting a folder keeps its tests in Uncategorized Test.
+New professors with no prior tests or sessions receive their own editable two-question Practice Test (South Korea's capital and 2 + 2) and a visual, skippable click-through tour. Skip/finish is saved per account in PostgreSQL. Existing professors keep their library and can use **Take tour** to replay the guide. Deleting a starter test never recreates it. Library **Manage folders** provides Rename and Delete folder; deleting a folder keeps its tests in Uncategorized Test.
 
 No new configuration is required. Startup creates the additive `onscreen_v2_onboarding` table using the existing Development database. Initialization and starter creation commit together under a unique owner key.
+
+Tour screenshot assets live in public/tour and use only fictional local-fixture data. Regenerate them with `node test/capture-tour.js` using a local browser; this script never connects to Development or Production. The generated frames.js stores screenshot-relative click bounds. Tour actions advance examples only; no real exam, popup, download or AI request is made.
