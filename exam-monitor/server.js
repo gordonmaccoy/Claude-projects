@@ -62,6 +62,12 @@ function createApp({ store, verifyUser, config = {}, sweepInterval = 1000, gener
     for (const st of s.students) changed(`student:${s.id}:${st.id}`, 'student:update', exam.studentView(s, st),true);
   }
   api.get('/me', (req, res) => res.json(req.user));
+  api.post('/onboarding',wrap(async(req,res)=>res.json(await store.initializeOnboarding(req.user.id,require('./onboarding').createStarterTest()))));
+  api.post('/onboarding/dismiss',wrap(async(req,res)=>{
+    const state=await store.dismissOnboarding(req.user.id);
+    if(!state)return res.status(409).json({error:'Please reload the workspace before dismissing the tour.'});
+    res.json(state);
+  }));
   const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:MAX_BYTES,files:1,fields:8,fieldSize:MAX_TEXT*4}}).single('file');
   const work=new Map();
   function beginWork(req,res,isAI){const key=req.user.id+':'+(isAI?'ai':'import'),now=Date.now(),previous=work.get(key),interval=isAI?3600000:60000,limit=isAI?5:20;

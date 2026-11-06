@@ -16,8 +16,8 @@ Store onboarding version and dismissal/completion per verified professor in Post
 
 Existing professors keep their tests unchanged and get the replay button; the automatic tour and starter copy apply to accounts with no existing tests or sessions when initialized. Record existing-account initialization so deleting their library later does not reseed it. Builder call: create the starter in Uncategorized Test, avoiding an extra class folder.
 
-## Starter content — unresolved
-The first question is "What is the capital of South Korea?" with Seoul (correct), Beijing, and Tokyo, worth one point. The requested second question claims a country controls the world's media; it has no factual correct answer and will not be distributed as a keyed factual question. A neutral second question still needs agreement. Do not change the user's existing saved test.
+## Starter content — approved
+The first question is "What is the capital of South Korea?" with Seoul (correct), Beijing, and Tokyo, worth one point. The user approved replacing the second question with "What is 2 + 2?", choices 3, 4 (correct), and 5, worth one point. Do not change the user's existing saved test. The user approved this design on November 6, 2026.
 
 ## Validation
 Verify first login versus repeat login and existing accounts, account isolation, durable dismissal across reconnect/repository restart, concurrent initialization without duplicate copies, deletion without reseeding, replay without side effects, and keyboard/mobile dialog behavior. Deploy only to Railway Development after tests pass.

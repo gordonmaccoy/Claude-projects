@@ -5,7 +5,7 @@ let auth, account, current, historySession, library = [], folders = [], aiConfig
 let accountGeneration = 0,creationVersion=0,professorTimerSnapshot=null;
 let popupSessionId = null, openingDisplay = false, launching = false;
 function clearPrivateWorkspace() {
-  accountGeneration++;creationVersion++;professorTimerSnapshot=null;if($('answer-ai-dialog').open)$('answer-ai-dialog').close();$('answer-ai-status').textContent='';closeEntry();launchTest=null;$('new-title').value='';$('folder-list').replaceChildren();$('folder-menu').open=false;for(const id of ['tb-folder','new-folder-choice'])$(id).replaceChildren();$('launch-test-title').textContent='';if($('launch-dialog').open)$('launch-dialog').close();$('creation-choice').hidden=true;
+  tour.reset();accountGeneration++;creationVersion++;professorTimerSnapshot=null;if($('answer-ai-dialog').open)$('answer-ai-dialog').close();$('answer-ai-status').textContent='';closeEntry();launchTest=null;$('new-title').value='';$('folder-list').replaceChildren();$('folder-menu').open=false;for(const id of ['tb-folder','new-folder-choice'])$(id).replaceChildren();$('launch-test-title').textContent='';if($('launch-dialog').open)$('launch-dialog').close();$('creation-choice').hidden=true;
   current=null; historySession=null; library=[]; folders=[]; sessionList=[]; $('import-source').value='';$('import-file').value='';$('import-panel').hidden=true;$('draft-review').textContent=''; editingId=null; tbQuestions=[];
   for(const id of ['launch-tests','library-tests','active-sessions','result-sessions','live-students','result-students','tb-questions']) $(id).replaceChildren();
   for(const id of ['dashboard','result-detail','test-builder']) $(id).hidden=true;
@@ -24,6 +24,7 @@ async function api(route, method = 'GET', body) {
   if (!response.ok) throw new Error(data.error || 'Request failed');
   return data;
 }
+const tour=window.createOnScreenTour(api);
 function action(fn) { return async event => { try { notice(''); await fn(event); } catch (e) { notice(e.message); } }; }
 function tab(name) {
   document.querySelectorAll('.tab').forEach(el => el.hidden = el.id !== name);
@@ -222,8 +223,18 @@ socket.on('disconnect',()=> { if (account) notice('Live connection lost. Session
 socket.on('professor:update',view=> { const listed=sessionList.find(s=>s.id===view.id);if(view.phase==='ended'||(listed&&(listed.title!==view.title||listed.phase!==view.phase)))refresh().catch(e=>notice(e.message));if (current?.id === view.id) { current={...current,...view}; renderDashboard(); } if (historySession?.id===view.id) { historySession={...historySession,...view}; renderResults(); } });
 socket.on('auth:expired',()=> { notice('Please sign in again to reconnect the private dashboard.'); });
 async function signedIn() {
-  try { const verified=await api('/me'); if(account && account.id!==verified.id) clearPrivateWorkspace(); account=verified; socket.connect(); $('account-name').textContent=account.email; $('login').hidden=recoveringPassword ? false : true; $('workspace').hidden=recoveringPassword; $('signout').hidden=false; await refresh(); await watch(); }
-  catch(e) { account=null; $('login').hidden=false; $('workspace').hidden=true; $('signout').hidden=true; $('auth-message').textContent=e.message; }
+  let generation=accountGeneration;
+  try {
+    const verified=await api('/me');
+    if(account && account.id!==verified.id) clearPrivateWorkspace();
+    generation=accountGeneration;account=verified;
+    if(recoveringPassword)return;
+    const onboarding=await api('/onboarding','POST',{});
+    if(generation!==accountGeneration)return;
+    socket.connect();$('account-name').textContent=account.email;$('login').hidden=true;$('workspace').hidden=false;$('signout').hidden=false;
+    await refresh();await watch();
+    if(generation===accountGeneration)tour.offer(onboarding);
+  }catch(e){if(generation!==accountGeneration)return;account=null;$('login').hidden=false;$('workspace').hidden=true;$('signout').hidden=true;$('auth-message').textContent=e.message;}
 }
 async function initAuth() {
   const config=await (await fetch('/api/config')).json();

@@ -111,3 +111,8 @@ Upload a test now defaults to an AI-assisted preparation flow after explicit sou
 Existing drafts have Determine answers with AI, with a confirmation explaining the OpenAI transmission and API charge. It fills missing answers without re-uploading or changing current title/folder. Uncertain keys remain unresolved and include a private rationale for professor review. Correct keys and rationales never enter student/public payloads.
 
 Generate-new-questions, AI import and answer-key completion share the5-per-hour professor AI budget. Error messages distinguish exhausted API credits, spend/usage limits, request throttling and model access. API billing still must be active; ChatGPT/Codex chat status does not establish the API account balance.
+# First-login orientation
+
+New professors with no prior tests or sessions receive their own editable two-question Practice Test (South Korea's capital and 2 + 2) and a five-step, skippable walkthrough. Skip/finish is saved per account in PostgreSQL. Existing professors keep their library and can use **Take tour** to replay the guide. Deleting a starter test never recreates it. Library **Manage folders** provides Rename and Delete folder; deleting a folder keeps its tests in Uncategorized Test.
+
+No new configuration is required. Startup creates the additive `onscreen_v2_onboarding` table using the existing Development database. Initialization and starter creation commit together under a unique owner key.

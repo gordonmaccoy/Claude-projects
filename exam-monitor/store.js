@@ -4,6 +4,9 @@ function createStore(pool) {
   if (!pool) throw new Error('DATABASE_URL is required');
   return {
     async init() {
+      await pool.query(`CREATE TABLE IF NOT EXISTS onscreen_v2_onboarding (
+        owner_id TEXT PRIMARY KEY, data JSONB NOT NULL
+      )`);
       await pool.query(`CREATE TABLE IF NOT EXISTS onscreen_v2_tests (
         id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, data JSONB NOT NULL,
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -18,6 +21,25 @@ function createStore(pool) {
         id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, name TEXT NOT NULL,
         UNIQUE(owner_id,name)
       )`);
+    },
+    async initializeOnboarding(ownerId,starter){
+      const client=await pool.connect();
+      try{
+        await client.query('BEGIN');
+        // Concurrent logins wait on the same owner key; seed and marker commit together.
+        const inserted=await client.query(`INSERT INTO onscreen_v2_onboarding(owner_id,data) VALUES($1,'{}'::jsonb) ON CONFLICT(owner_id) DO NOTHING RETURNING owner_id`,[ownerId]);
+        if(inserted.rows.length){
+          const existing=(await client.query(`SELECT EXISTS(SELECT 1 FROM onscreen_v2_tests WHERE owner_id=$1) OR EXISTS(SELECT 1 FROM onscreen_v2_sessions WHERE owner_id=$1) AS used`,[ownerId])).rows[0].used;
+          const state={version:1,tourDismissed:existing};
+          if(!existing)await client.query('INSERT INTO onscreen_v2_tests(id,owner_id,data) VALUES($1,$2,$3)',[starter.id,ownerId,JSON.stringify(starter)]);
+          await client.query('UPDATE onscreen_v2_onboarding SET data=$2 WHERE owner_id=$1',[ownerId,JSON.stringify(state)]);
+        }
+        const state=(await client.query('SELECT data FROM onscreen_v2_onboarding WHERE owner_id=$1 FOR UPDATE',[ownerId])).rows[0].data;
+        await client.query('COMMIT');return state;
+      }catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}
+    },
+    async dismissOnboarding(ownerId){
+      return (await pool.query(`UPDATE onscreen_v2_onboarding SET data=jsonb_set(data,'{tourDismissed}','true'::jsonb) WHERE owner_id=$1 RETURNING data`,[ownerId])).rows[0]?.data||null;
     },
     async listFolders(ownerId) { return (await pool.query('SELECT id,name FROM onscreen_v2_folders WHERE owner_id=$1 ORDER BY name',[ownerId])).rows; },
     async getFolder(ownerId,id) { return (await pool.query('SELECT id,name FROM onscreen_v2_folders WHERE id=$1 AND owner_id=$2',[id,ownerId])).rows[0] || null; },
