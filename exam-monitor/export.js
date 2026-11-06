@@ -18,4 +18,8 @@ function workbook(session) {
   };
   return Buffer.from(zipSync(Object.fromEntries(Object.entries(files).map(([p, content]) => [p, strToU8(content)]))));
 }
-module.exports = { workbook };
+function exportFilename(session) {
+ const title=privateView(session).title.replace(/[<>:"/\\|?*\x00-\x1f]/g,'_').replace(/[. ]+$/g,'').trim().slice(0,120)||'OnScreen results';
+ return (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(title)?'_'+title:title)+'.xlsx';
+}
+module.exports = { workbook,exportFilename };

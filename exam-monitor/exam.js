@@ -127,34 +127,53 @@ function submit(s, id, answers, now = Date.now()) {
   st.draft = {};
   return result(s, st);
 }
+function progress(s,id,questionId) {
+ const st=student(s,id);
+ if(s.mode!=='test'||s.phase!=='running'||st.submission||isFailed(st))throw new Error('Invalid progress state');
+ if(typeof questionId!=='string'||!s.test.questions.some(q=>q.id===questionId))throw new Error('Invalid question');
+ st.progressQuestionId=questionId;
+}
+function finalizeFail(s,id,professorId,reason,now=Date.now()) {
+ if(s.ownerId!==professorId)throw new Error('Session not found');
+ const st=student(s,id);
+ if(s.mode!=='test'||!isFailed(st)||st.submission)throw new Error('Invalid failed test enrollment');
+ if(typeof reason!=='string'||!reason.trim()||reason.length>500)throw new Error('Reason required (maximum 500 characters)');
+ const answers=validateAnswers(s,st.draft||{});
+ st.submission={answers,originalScore:scoreAnswers(s.test,answers),submittedAt:now,professorFinalized:true};st.draft={};
+ st.events.push({type:'fail-submitted',at:now,professorId,reason:reason.trim()});
+}
 function override(s, id, professorId, reason, now = Date.now()) {
   if (s.ownerId !== professorId) throw new Error('Session not found');
   const st = student(s, id);
+  if(st.submission?.professorFinalized)throw new Error('Finalized fail score cannot be unlocked');
   if (!isFailed(st)) throw new Error('Student has no active failure');
+  if(!st.submission && s.phase!=='running')throw new Error('Session ended; continuation is unavailable');
   if (typeof reason !== 'string' || !reason.trim() || reason.length > 500) throw new Error('Override reason required (maximum 500 characters)');
   st.overrideAt = now;
   // Forgive the existing interval; any later hidden transition can create a new incident.
   st.hiddenSince = null;
   st.events.push({ type: 'override', at: now, professorId, reason: reason.trim() });
 }
-function status(st, now) { if(st.submission) return 'green'; return isFailed(st) || !st.visible || now - st.lastSeen > 10000 ? 'red' : 'green'; }
+function status(st, now) { if(st.submission) return isFailed(st)?'red':'green'; return isFailed(st) || !st.visible || now - st.lastSeen > 10000 ? 'red' : 'green'; }
 function publicView(s, now = Date.now()) {
-  return { title: s.test?.title || 'Classroom calculator', phase: s.phase,
-    students: s.students.map(st => ({ name: st.name, status: st.submission ? 'submitted' : isFailed(st) ? 'failed' : status(st, now) })) };
+  return { title: s.resultTitle || s.test?.title || 'Classroom calculator', phase: s.phase,
+    students: s.students.map(st => ({ name: st.name, status: st.submission?.professorFinalized && isFailed(st) ? 'failed' : st.submission ? 'submitted' : isFailed(st) ? 'failed' : status(st, now) })) };
 }
 function privateView(s, now = Date.now()) {
   return { id: s.id, mode: s.mode, title: s.resultTitle || s.test?.title || 'Classroom calculator', phase: s.phase,
     createdAt: s.createdAt, startedAt: s.startedAt, endedAt: s.endedAt, displayToken: s.displayToken,
     students: s.students.map(st => ({ id: st.id, number: st.number, name: st.name, status: status(st, now),
       failed: isFailed(st), result: result(s, st), events: st.events,
+      finalized:Boolean(st.submission?.professorFinalized),
+      progress:s.mode==='test'?{question:Math.max(0,s.test.questions.findIndex(q=>q.id===st.progressQuestionId)+1),answered:s.test.questions.filter(q=>{const a=(st.submission?.answers||st.draft||{})[q.id];return typeof a==='string'&&a.trim();}).length,total:s.test.questions.length}:null,
       score: result(s, st)?.score ?? (isFailed(st) ? 0 : null), total: s.test?.questions.length || 0 })) };
 }
 function studentView(s, st) {
-  return { phase: s.phase, mode: s.mode, name: st.name, failed: isFailed(st),
-    test: s.test && s.phase === 'running' && !st.submission ? { title: s.test.title,
+  return { phase: s.phase, mode: s.mode, name: st.name, failed: isFailed(st), terminal:Boolean(st.submission?.professorFinalized),
+    test: s.test && s.phase === 'running' && !st.submission ? { title: s.resultTitle || s.test.title,
       questions: s.test.questions.map(q => ({ id: q.id, type:q.type || 'mc', text: q.text, ...(q.type === 'blank' ? {} : {options:q.options}) })) } : null,
     draft: st.submission ? {} : st.draft, result: result(s, st) };
 }
 module.exports = { validateTest, newSession, join, student, start, sweep, visibility, submit, override,
-  scoreAnswers, validateAnswers, publicView, privateView, studentView, hash, isFailed };
+  finalizeFail, progress, scoreAnswers, validateAnswers, publicView, privateView, studentView, hash, isFailed };
 

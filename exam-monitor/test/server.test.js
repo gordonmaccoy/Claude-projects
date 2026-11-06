@@ -46,7 +46,7 @@ test('HTTP/socket exam flow enforces ownership, recovers after restart, sanitize
     const launched = await request('/api/sessions', 'POST', { testId: saved.body.id });
     const sid = launched.body.id;
     assert.equal((await request(`/api/sessions/${sid}`, 'DELETE')).status, 409);
-    assert.equal((await request(`/api/sessions/${sid}`,'PATCH',{title:'Too early'})).status,409);
+    assert.equal((await request(`/api/sessions/${sid}`,'PATCH',{title:'Section A'})).body.title,'Section A');assert.equal((await store.getSession(sid)).test.title,'Quiz');
     assert.equal((await request(`/api/sessions/${sid}`, 'GET', undefined, 'bob')).status, 404);
     assert.equal((await request('/api/tests', 'GET', undefined, 'bob')).body.length, 0);
     assert.equal((await request(`/api/tests/${saved.body.id}`, 'DELETE', undefined, 'bob')).status, 404);
@@ -68,7 +68,7 @@ test('HTTP/socket exam flow enforces ownership, recovers after restart, sanitize
     assert.equal(JSON.stringify(pub).includes('0010'), false);
     const resumedView = (await emit(a, 'student:join', { sessionId: sid, resumeToken: joined.resumeToken })).view;
     assert.equal(resumedView.test.questions[0].correctOptionId, undefined);
-    await emit(a, 'student:draft', { answers: { q: 'a' } });
+    await emit(a, 'student:draft', { answers: { q: 'a' } });assert.equal((await emit(a,'student:progress',{questionId:'q'})).ok,true);assert.equal((await emit(a,'student:progress',{questionId:'invalid'})).ok,false);assert.equal((await request(`/api/sessions/${sid}`)).body.students.find(st=>st.id===joined.studentId).progress.answered,1);
     sockets.forEach(s => s.disconnect()); await running.close();
     base = await boot();
     const reconnect = await socket();
@@ -109,9 +109,15 @@ test('HTTP/socket exam flow enforces ownership, recovers after restart, sanitize
     assert.ok(sheet.includes('t="inlineStr"><is><t xml:space="preserve">0010'));
     assert.ok(sheet.includes('=Kim &amp; Lee')); assert.equal(sheet.includes('<f>'), false);
     assert.ok(sheet.includes('student number')); assert.ok(sheet.includes('percentage'));
+    const rejected=await socket();const rejectedJoin=await emit(rejected,'student:join',{sessionId:sid,name:'Failed student',number:'0099'});await emit(rejected,'student:draft',{answers:{q:'a'}});await store.mutate(sid,s=>{const st=s.students.find(st=>st.id===rejectedJoin.studentId);st.hiddenSince=Date.now()-6000;});await running.tick();
+    assert.equal((await request(`/api/sessions/${sid}/finalize-fail`,'POST',{studentId:rejectedJoin.studentId,reason:'Confirmed'},'bob')).status,404);
+    const disconnected=once(rejected,'disconnect');const final=await request(`/api/sessions/${sid}/finalize-fail`,'POST',{studentId:rejectedJoin.studentId,reason:'Confirmed'});assert.equal(final.status,200);await disconnected;
+    const finalStudent=final.body.students.find(st=>st.id===rejectedJoin.studentId);assert.equal(finalStudent.result.percentage,0);assert.equal(finalStudent.result.originalScore,1);assert.equal(finalStudent.finalized,true);
+    const lastSocket=await socket();const terminal=await emit(lastSocket,'student:join',{sessionId:sid,resumeToken:rejectedJoin.resumeToken});assert.equal(terminal.view.terminal,true);assert.equal(terminal.view.result.percentage,0);assert.equal((await emit(lastSocket,'student:draft',{answers:{q:'b'}})).ok,false);
     await request(`/api/sessions/${sid}/end`, 'POST', {});
     assert.equal((await request(`/api/sessions/${sid}`,'PATCH',{title:'Economics — Section B'})).body.title,'Economics — Section B');
     assert.equal((await store.getSession(sid)).test.title,'Quiz');
+    const namedExport=await fetch(base+`/api/sessions/${sid}/export`,{headers:{Authorization:'Bearer alice'}});assert.match(decodeURIComponent(namedExport.headers.get('content-disposition')),/Economics — Section B.xlsx/);
     assert.equal((await request(`/api/sessions/${sid}`,'PATCH',{title:'Other'},'bob')).status,404);
     assert.equal((await request(`/api/sessions/${sid}`)).body.phase, 'ended');
     assert.equal((await emit(reconnect, 'student:join', { sessionId: sid, resumeToken: joined.resumeToken })).view.result.score, 1);

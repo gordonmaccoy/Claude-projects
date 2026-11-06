@@ -7,7 +7,7 @@ const { Pool } = require('pg');
 const { createStore } = require('./store');
 const { authConfig, createVerifier } = require('./auth');
 const exam = require('./exam');
-const { workbook } = require('./export');
+const { workbook,exportFilename } = require('./export');
 const multer=require('multer');
 const {extractDocument,parseTest,MAX_BYTES}=require('./documents');
 const {createGenerator}=require('./generation');
@@ -112,7 +112,7 @@ function createApp({ store, verifyUser, config = {}, sweepInterval = 1000, gener
     if(!title || title.length>120 || /[\x00-\x1f]/.test(title)) return res.status(400).json({error:'Result name must be 1–120 characters.'});
     const {session}=await store.mutate(req.params.id,s=>{
       if(s.ownerId!==req.user.id) throw new Error('Session not found');
-      if(s.mode!=='test' || s.phase!=='ended') {const e=new Error('Only completed test results can be renamed');e.status=409;throw e;}
+      if(s.mode!=='test') {const e=new Error('Only tests can be renamed');e.status=409;throw e;}
       s.resultTitle=title;
     });
     await broadcast(session);res.json(await decorate(session,req));
@@ -127,22 +127,27 @@ function createApp({ store, verifyUser, config = {}, sweepInterval = 1000, gener
     });
     res.json({ ok: true });
   }));
-  for (const action of ['start', 'end', 'override']) api.post(`/sessions/:id/${action}`, wrap(async (req, res) => {
+  for (const action of ['start', 'end', 'override','finalize-fail']) api.post(`/sessions/:id/${action}`, wrap(async (req, res) => {
     await owned(req.params.id, req.user);
     const { session } = await store.mutate(req.params.id, s => {
       if (s.ownerId !== req.user.id) throw new Error('Session not found');
       if (action === 'start') exam.start(s);
       if (action === 'end') { exam.sweep(s); s.phase = 'ended'; s.endedAt = Date.now(); }
+      if(action==='finalize-fail')exam.finalizeFail(s,req.body.studentId,req.user.id,req.body.reason);
       if (action === 'override') exam.override(s, req.body.studentId, req.user.id, req.body.reason);
     });
-    await broadcast(session); res.json(await decorate(session, req));
+    await broadcast(session);
+    if(action==='finalize-fail') {
+      for(const client of io.sockets.sockets.values())if(client.data.student?.sessionId===session.id && client.data.student.studentId===req.body.studentId){client.emit('student:finished',exam.studentView(session,exam.student(session,req.body.studentId)));client.disconnect(true);}
+    }
+    res.json(await decorate(session, req));
   }));
   api.get('/sessions/:id/export', wrap(async (req, res) => {
     const original = await owned(req.params.id, req.user);
     if (original.mode !== 'test') return res.status(400).json({ error: 'Calculator sessions have no test scores to export.' });
     const { session } = await store.mutate(req.params.id, s => exam.sweep(s));
     res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.set('Content-Disposition', `attachment; filename="onscreen-${session.id}.xlsx"`);
+    res.set('Content-Disposition', `attachment; filename="onscreen-${session.id}.xlsx"; filename*=UTF-8''${encodeURIComponent(exportFilename(session)).replace(/['()*]/g,c=>"%"+c.charCodeAt(0).toString(16).toUpperCase())}`);
     res.send(workbook(session));
   }));
   app.use('/api', api);
@@ -204,6 +209,7 @@ function createApp({ store, verifyUser, config = {}, sweepInterval = 1000, gener
         // One row-locked operation has one decision time, including nested rules.
         const now=Date.now();
         exam.sweep(s,now);
+        if(exam.student(s,identity.studentId).submission?.professorFinalized)return {blocked:true};
         if(!allowLocked && exam.isFailed(exam.student(s,identity.studentId))) return {blocked:true};
         return fn(s, identity.studentId,now);
       });
@@ -211,6 +217,7 @@ function createApp({ store, verifyUser, config = {}, sweepInterval = 1000, gener
       return { ...(result?.blocked ? {ok:false,error:'Call professor: activity is locked'} : {}), view: exam.studentView(session, exam.student(session, identity.studentId)) };
     }
     on('student:visibility', ({ visible }) => studentMutation((s, id, now) => exam.visibility(s, id, visible,now),true));
+    on('student:progress',({questionId})=>studentMutation((s,id)=>exam.progress(s,id,questionId)));
     on('student:draft', ({ answers }) => studentMutation((s, id) => {
       if (s.phase !== 'running') throw new Error('Test is not running');
       const st = exam.student(s, id);

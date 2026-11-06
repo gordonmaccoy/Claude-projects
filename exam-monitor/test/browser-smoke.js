@@ -25,12 +25,14 @@ async function main() {
   await context.addInitScript(({jwt})=>localStorage.setItem('sb-127-auth-token',JSON.stringify({access_token:jwt,refresh_token:'test-refresh',expires_at:Math.floor(Date.now()/1000)+3600,expires_in:3600,token_type:'bearer',user:{id:'alice',email:'professor@example.com',email_confirmed_at:new Date().toISOString(),app_metadata:{provider:'email'},user_metadata:{}}})),{jwt});
   // Embedded browsers may ignore named targets. Reuse must still work without them.
   await context.addInitScript(()=> { const open=window.open.bind(window); window.open=(url,name,features)=>open(url,'_blank',features); });
-  page.on('dialog',d=>d.accept('Approved interruption'));
+  await context.addInitScript(()=>{window.prompt=()=>{throw new Error('prompt() is not supported');};});
+  page.on('dialog',d=>d.accept());
+  async function enterForm(value){await page.locator('#entry-value').fill(value);await page.locator('#entry-save').click();await page.locator('#entry-dialog').waitFor({state:'hidden'});}
   const out=path.join(__dirname,'../../.tmp/onscreen-v2');fs.mkdirSync(out,{recursive:true});
   try {
     await page.goto(base+'/professor.html');await page.locator('#workspace').waitFor({state:'visible'});
     await page.getByRole('button',{name:'Library',exact:true}).click();await page.getByRole('button',{name:'Create new test',exact:true}).click();
-    await page.locator('#new-folder').click();await page.locator('#tb-folder').selectOption({label:'Approved interruption'});
+    await page.locator('#new-folder').click();await enterForm('Approved interruption');await page.locator('#tb-folder').selectOption({label:'Approved interruption'});
     await page.locator('#tb-title').fill('Economics · Week 3');await page.locator('.tb-q-text').fill('What is 2 + 2?');
     await page.locator('.tb-opt-text').nth(0).fill('4');await page.locator('.tb-opt-text').nth(1).fill('5');await page.locator('#tb-questions input[type=radio]').first().check();
     await page.locator('#tb-add-q-btn').click();await page.locator('.tb-q-type').nth(1).selectOption('blank');await page.locator('.tb-q-text').nth(1).fill('The capital of France is ____');await page.locator('.tb-accepted').fill('Paris\nCity of Paris');
@@ -53,16 +55,17 @@ async function main() {
     await page.waitForFunction(()=>!document.getElementById('display-open').disabled);
     assert.equal(context.pages().length,2,'Existing classroom must also be reused after professor reload');
     await display.locator('#qr-toggle').click();assert.equal(await display.locator('#qr-toggle').getAttribute('aria-expanded'),'true');await display.locator('#qr-toggle').click();
+    await page.locator('#session-rename').click();await enterForm('Economics Section B');await page.locator('#session-title').getByText('Economics Section B',{exact:true}).waitFor();
     const session=(await store.listSessions('alice'))[0];
-    const studentContext=await browser.newContext({viewport:{width:390,height:844}});const student=await studentContext.newPage();student.on('pageerror',e=>errors.push(e.message));student.on('dialog',d=>d.accept());
+    const studentContext=await browser.newContext({viewport:{width:390,height:280}});const student=await studentContext.newPage();student.on('pageerror',e=>errors.push(e.message));student.on('dialog',d=>d.accept());
     await student.goto(base+`/student.html?session=${session.id}`);await student.locator('#number-input').fill('Wrong Name');assert.equal(await student.locator('#number-input').evaluate(el=>el.checkValidity()),false);await student.locator('#number-input').fill('001234');await student.locator('#name-input').fill('Kim Minjun');await student.getByRole('button',{name:'Join',exact:true}).click();await student.locator('#waiting-section').waitFor({state:'visible'});
     await page.bringToFront();await page.getByRole('button',{name:'Start test',exact:true}).click();
-    await student.bringToFront();await student.locator('.tq-option').first().waitFor({state:'visible'});await student.locator('.tq-option').first().click();await student.locator('.blank-answer').fill(' paris ');
+    await student.bringToFront();await student.locator('.tq-option').first().waitFor({state:'visible'});await page.locator('#live-students').getByText('Question 1 of 2 · 0/2 answered',{exact:true}).waitFor();await student.locator('.blank-answer').evaluate(el=>el.scrollIntoView({block:'start'}));await page.locator('#live-students').getByText('Question 2 of 2 · 0/2 answered',{exact:true}).waitFor({timeout:3000});await student.locator('.tq-option').first().click();await student.locator('.blank-answer').fill(' paris ');await page.locator('#live-students').getByText('Question 2 of 2 · 2/2 answered',{exact:true}).waitFor({timeout:3000});
     await student.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:true});document.dispatchEvent(new Event('visibilitychange'));});
     await student.locator('#activity-lock').waitFor({state:'visible',timeout:10000});await display.locator('.student.failed').getByText('FAIL',{exact:true}).waitFor();
     assert.equal(await student.locator('#test-section').evaluate(el=>el.inert),true);await page.locator('#live-students').getByText('FAILED',{exact:true}).waitFor();
     await student.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:false});document.dispatchEvent(new Event('visibilitychange'));});
-    await page.locator('#live-students').getByRole('button',{name:'Unlock & continue',exact:true}).click();await student.locator('#activity-lock').waitFor({state:'hidden'});assert.equal(await student.locator('.blank-answer').inputValue(),' paris ');
+    await page.locator('#live-students').getByRole('button',{name:'Unlock & continue',exact:true}).click();await enterForm('Approved interruption');await student.locator('#activity-lock').waitFor({state:'hidden'});assert.equal(await student.locator('.blank-answer').inputValue(),' paris ');
     await student.getByRole('button',{name:'Submit Answers'}).click();await student.locator('#test-done').waitFor({state:'visible'});
     assert.match(await student.locator('#done-score').textContent(),/2 \/ 2 · 100%/);
     await student.reload();await student.locator('#test-done').waitFor({state:'visible'});assert.match(await student.locator('#done-score').textContent(),/100%/);
@@ -72,15 +75,16 @@ async function main() {
     const submittedBefore=(await store.getSession(session.id)).students[0].events.length;
     await display.screenshot({path:path.join(out,'classroom.png'),fullPage:true});
     await student.screenshot({path:path.join(out,'student-result.png'),fullPage:true});
+    const failedContext=await browser.newContext();const rejected=await failedContext.newPage();await rejected.goto(base+'/student.html?session='+session.id);await rejected.locator('#number-input').fill('0099');await rejected.locator('#name-input').fill('Failed student');await rejected.getByRole('button',{name:'Join',exact:true}).click();await rejected.locator('.tq-option').first().waitFor();await rejected.locator('.tq-option').first().click();await rejected.waitForTimeout(600);await store.mutate(session.id,s=>{const st=s.students.find(st=>st.number==='0099');st.visible=false;st.hiddenSince=Date.now()-6000;});await runtime.tick();await rejected.locator('#activity-lock').waitFor({state:'visible'});await page.locator('#live-students').getByRole('button',{name:'Submit Fail score',exact:true}).click();await enterForm('Confirmed misconduct');await rejected.locator('#done-score').getByText(/0 \/ 2 · 0%/).waitFor();assert.equal(await rejected.evaluate(()=>document.querySelector('#activity-lock').hidden),true);await rejected.reload();await rejected.locator('#done-score').getByText(/0 \/ 2 · 0%/).waitFor();await failedContext.close();
     await page.bringToFront();await page.locator('#live-students').getByText('2 / 2 · 100%',{exact:true}).waitFor();await page.screenshot({path:path.join(out,'professor.png'),fullPage:true});
     await page.getByRole('button',{name:'Results',exact:true}).click();await page.getByRole('button',{name:'View results',exact:true}).click();await page.locator('#result-detail').waitFor({state:'visible'});
-    const downloadPromise=page.waitForEvent('download');await page.locator('#result-export').click();const download=await downloadPromise;assert.match(download.suggestedFilename(),/\.xlsx$/);
+    const downloadPromise=page.waitForEvent('download');await page.locator('#result-export').click();const download=await downloadPromise;assert.equal(download.suggestedFilename(),'Economics Section B.xlsx');
     assert.equal(await page.locator('#result-delete').isVisible(),false,'Running test results cannot be deleted');
     await page.getByRole('button',{name:'Launch',exact:true}).click();
-    await page.locator('#session-end').click();
+    await (await fetch(base+'/api/sessions/'+session.id+'/end',{method:'POST',headers:{Authorization:'Bearer '+jwt,'Content-Type':'application/json'},body:'{}'})).json();await page.waitForFunction(()=>document.getElementById('dashboard').hidden && document.getElementById('active-sessions').textContent==='');
     await page.getByRole('button',{name:'Results',exact:true}).click();
     await page.getByRole('button',{name:'View results',exact:true}).click();
-    await page.locator('#result-rename').click();await page.locator('#result-title').getByText('Approved interruption',{exact:true}).waitFor();assert.equal((await store.getSession(session.id)).test.title,'Economics · Week 3');
+    await page.locator('#result-rename').click();await enterForm('Approved interruption');await page.locator('#result-title').getByText('Approved interruption',{exact:true}).waitFor();assert.equal((await store.getSession(session.id)).test.title,'Economics · Week 3');
     assert.equal((await store.getSession(session.id)).students[0].events.length,submittedBefore,'Submitted students stop monitoring');
     await page.locator('#result-delete').click();
     await page.getByText('No test results yet',{exact:true}).waitFor();
@@ -97,7 +101,7 @@ async function main() {
     assert.equal((await page.locator('#live-summary').textContent()).includes('submitted'),false);
     const calc=(await store.listSessions('alice')).find(s=>s.mode==='calculator'&&s.phase==='running');const calcStudent=await studentContext.newPage();await calcStudent.goto(base+'/student.html?session='+calc.id);await calcStudent.locator('#number-input').fill('0055');await calcStudent.locator('#name-input').fill('Calculator student');await calcStudent.getByRole('button',{name:'Join',exact:true}).click();await calcStudent.locator('#calculator-section').waitFor({state:'visible'});await calcStudent.locator('[data-action=num][data-value="7"]').click();
     await calcStudent.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:true});document.dispatchEvent(new Event('visibilitychange'));});await calcStudent.locator('#activity-lock').waitFor({state:'visible',timeout:10000});await calcStudent.keyboard.press('8');assert.equal(await calcStudent.locator('#expression').textContent(),'7');await calcStudent.reload();await calcStudent.locator('#activity-lock').waitFor({state:'visible'});assert.equal(await calcStudent.locator('#expression').textContent(),'7','Calculator work survives reload while locked');
-    await calcStudent.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:false});document.dispatchEvent(new Event('visibilitychange'));});await page.locator('#live-students').getByRole('button',{name:'Unlock & continue',exact:true}).click();await calcStudent.locator('#activity-lock').waitFor({state:'hidden'});assert.equal(await calcStudent.locator('#expression').textContent(),'7');await calcStudent.close();
+    await calcStudent.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:false});document.dispatchEvent(new Event('visibilitychange'));});await page.locator('#live-students').getByRole('button',{name:'Unlock & continue',exact:true}).click();await enterForm('Approved interruption');await calcStudent.locator('#activity-lock').waitFor({state:'hidden'});assert.equal(await calcStudent.locator('#expression').textContent(),'7');await calcStudent.close();
     await page.screenshot({path:path.join(out,'calculator-controls.png'),fullPage:true});
     await display.close();
     const replacementPromise=context.waitForEvent('page'); await page.locator('#display-open').click();
@@ -120,7 +124,7 @@ async function main() {
     console.log('Screenshots:',out);
     await studentContext.close();
   } catch(error) {
-    console.error('Browser diagnostics:', JSON.stringify({ errors, notice:await page.locator('#notice').textContent(),
+    console.error('Browser diagnostics:', JSON.stringify({ privateStudents:(await store.listSessions('alice')).flatMap(s=>s.students.map(st=>({draft:st.draft,question:st.progressQuestionId}))),studentPages:await Promise.all(browser.contexts().flatMap(c=>c.pages()).filter(p=>p.url().includes('/student.html')).map(p=>p.evaluate(()=>({active:document.activeElement?.outerHTML,cards:[...document.querySelectorAll('.tq-card')].map(el=>({id:el.dataset.questionId,top:el.getBoundingClientRect().top,bottom:el.getBoundingClientRect().bottom}))})))),errors, notice:await page.locator('#notice').textContent(),
       sessions:(await store.listSessions('alice')).map(s=>({mode:s.mode,phase:s.phase,title:s.test?.title})),
       dashboard:await page.locator('#session-title').textContent(),
       pages:await Promise.all(context.pages().map(async p=>({ title:await p.title(), url:p.url().split('#')[0], phase:await p.evaluate(()=>document.getElementById('phase')?.textContent || null) }))) }));

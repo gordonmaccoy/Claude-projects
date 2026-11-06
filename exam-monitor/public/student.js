@@ -35,11 +35,12 @@ socket.on('connect',async()=> {
   setConnected(true); const resumeToken=savedToken();
   if(resumeToken) await join({resumeToken});
 });
-socket.on('disconnect',()=> { setConnected(false); message('Connection interrupted. Your saved enrollment will resume when you reconnect.'); });
+socket.on('disconnect',()=> { setConnected(false); if(currentView?.result)return;message('Connection interrupted. Your saved enrollment will resume when you reconnect.'); });
 function setConnected(ok) { for (const el of [els.connDot,els.testConnDot]) { el.classList.toggle('offline',!ok); el.title=ok?'Connected':'Disconnected'; } }
 els.form.onsubmit=async e=> { e.preventDefault(); const b=els.form.querySelector('button'); b.disabled=true; try { await join({name:els.nameInput.value.trim(),number:$('number-input').value.trim()}); } finally { b.disabled=false; } };
 function showView(view) {
   currentView=view;
+  if(view.terminal){clearTimeout(draftTimer);socket.disconnect();}
   const locked=Boolean(view.failed && !view.result && view.phase==='running');
   $('activity-lock').hidden=!locked;
   els.calcSection.inert=locked; els.testSection.inert=locked;
@@ -61,11 +62,13 @@ function showView(view) {
     renderTestQuestions(view.test.questions);
   }
 }
+socket.on('student:finished',view=>{showView(view);socket.disconnect();});
 socket.on('student:update',view=> { if(joined) showView(view); });
 function renderTestQuestions(questions) {
   els.testQuestions.replaceChildren();
   questions.forEach((q,i)=> {
     const card=document.createElement('div');card.className='tq-card';const p=document.createElement('p');p.className='tq-text';p.textContent=`${i+1}. ${q.text}`;card.append(p);
+    card.dataset.questionId=q.id;card.addEventListener('focusin',()=>focusQuestion(q.id));card.addEventListener('click',()=>focusQuestion(q.id));
     const options=document.createElement('div'); options.className='tq-options';
     if(q.type==='blank') {
       const input=document.createElement('input');input.type='text';input.className='blank-answer';input.maxLength=300;input.setAttribute('aria-label',`Answer to question ${i+1}`);input.autocomplete='off';input.value=testAnswers[q.id]||'';
@@ -78,7 +81,22 @@ function renderTestQuestions(questions) {
       const text=document.createElement('span');text.className='tq-opt-text';text.textContent=o.text;label.append(radio,letter,text);options.append(label);
     });card.append(options);els.testQuestions.append(card);
   });
+  requestAnimationFrame(reportVisibleQuestion);
 }
+let reportedQuestion=null,progressTimer,focusedQuestion=null;
+function focusQuestion(id){focusedQuestion=id;clearTimeout(progressTimer);reportProgress(id);}
+for(const event of ['wheel','touchmove'])window.addEventListener(event,()=>{focusedQuestion=null;},{passive:true});
+window.addEventListener('pointerdown',e=>{if(!e.target.closest?.('.tq-card'))focusedQuestion=null;});
+window.addEventListener('keydown',e=>{if(['PageDown','PageUp','Home','End','ArrowDown','ArrowUp',' '].includes(e.key)&&!e.target.matches('input,textarea'))focusedQuestion=null;});
+function reportVisibleQuestion(){
+ if(els.testSection.hidden)return;
+ const cards=[...els.testQuestions.children].map(el=>{const r=el.getBoundingClientRect();return {el,visible:Math.max(0,Math.min(r.bottom,innerHeight)-Math.max(r.top,0))};}).filter(x=>x.visible>=50).sort((a,b)=>b.visible-a.visible);
+ const focused=cards.find(x=>x.el.dataset.questionId===focusedQuestion);
+ if(focused)reportProgress(focusedQuestion);else if(cards[0]){focusedQuestion=null;reportProgress(cards[0].el.dataset.questionId);}
+}
+window.addEventListener('scroll',()=>{clearTimeout(progressTimer);progressTimer=setTimeout(reportVisibleQuestion,180);},{passive:true});
+window.addEventListener('resize',()=>requestAnimationFrame(reportVisibleQuestion));
+function reportProgress(questionId){if(!joined||currentView?.failed||currentView?.result||currentView?.phase!=='running'||reportedQuestion===questionId)return;reportedQuestion=questionId;emit('student:progress',{questionId}).then(r=>{if(!r.ok)reportedQuestion=null;});}
 async function uploadDraft() {
   if(!joined || currentView?.failed || currentView?.result || currentView?.phase!=='running' || currentView?.mode!=='test') return;
   const version=updateVersion;const res=await emit('student:draft',{answers:testAnswers});

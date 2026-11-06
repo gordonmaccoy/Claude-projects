@@ -97,3 +97,16 @@ test('pre-saved join capability recovers a lost enrollment ACK and resumes final
   assert.equal(exam.studentView(s, s.students[0]).result.score, 1);
   assert.throws(() => exam.join(s, { name: 'Other', number: '002' }, 4000), /ended/);
 });
+
+test('professor finalizes a failed test as terminal zero while preserving original draft grade',()=>{
+ const s=fixture(),j=exam.join(s,{name:'Kim',number:'001'},1000);exam.start(s,2000);s.students[0].draft={q:'a'};exam.visibility(s,j.studentId,false,3000);exam.sweep(s,8001);
+ assert.throws(()=>exam.finalizeFail(s,j.studentId,'other','Reviewed',9000));
+ exam.finalizeFail(s,j.studentId,'p1','Reviewed with student',9000);
+ assert.equal(exam.privateView(s).students[0].result.score,0);assert.equal(exam.privateView(s).students[0].result.originalScore,1);
+ assert.equal(exam.studentView(s,s.students[0]).terminal,true);assert.throws(()=>exam.override(s,j.studentId,'p1','Stale unlock',9001),/final/i);assert.equal(exam.privateView(s).students[0].result.percentage,0);assert.equal(exam.publicView(s).students[0].status,'failed');
+ assert.throws(()=>exam.finalizeFail(s,j.studentId,'p1','Again',9001));const n=s.students[0].events.length;exam.visibility(s,j.studentId,false,20000);assert.equal(s.students[0].events.length,n);
+});
+
+test('progress validates question IDs and remains private',()=>{const s=fixture(),j=exam.join(s,{name:'Kim',number:'001'},1000);exam.start(s,2000);s.students[0].draft={q:'a'};exam.progress(s,j.studentId,'q');assert.deepEqual(exam.privateView(s).students[0].progress,{question:1,answered:1,total:1});assert.throws(()=>exam.progress(s,j.studentId,'invalid'));assert.equal(exam.publicView(s).students[0].progress,undefined);exam.submit(s,j.studentId,{q:'a'},3000);assert.throws(()=>exam.progress(s,j.studentId,'q'));});
+
+test('ended failed attempt cannot be unlocked for continuation',()=>{const s=fixture(),j=exam.join(s,{name:'Kim',number:'001'},1000);exam.start(s,2000);exam.visibility(s,j.studentId,false,3000);exam.sweep(s,8001);s.phase='ended';assert.throws(()=>exam.override(s,j.studentId,'p1','Continue',9000),/ended/);});

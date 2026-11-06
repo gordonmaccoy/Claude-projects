@@ -75,3 +75,13 @@ Two separate review-first import options:
 - **Create with AI:** paste source or upload PDF/DOCX, select 1–30 questions, types and difficulty, consent to sending source to OpenAI, then review questions, answer keys and source excerpts. Does not save automatically. Server requires OPENAI_API_KEY and OPENAI_MODEL in the **Railway Development app environment only**. Set these directly in Railway; never paste a secret into chat or browser code. Choose a model supporting Responses structured outputs. The AI service is limited per professor to five requests/hour per running app instance. Existing-test extraction is limited to 20/minute.
 
 AI is implemented but live generation is unverified until Development credentials/model are configured; automated provider-boundary tests use simulated responses and the browser uses a test-only generator. Uploads are processed in memory and are not stored by OnScreen. The AI request sets store:false; provider retention is governed by the API account's applicable policy.
+
+## Session controls and embedded browser compatibility
+
+Folder creation, session/result renaming and override reasons use an accessible in-page form; native prompt() is not required. Launch shows Choose a test to launch, Uncategorized Test, and Tests In Session. Ended dashboards are cleared from Launch and remain available in Results.
+
+Rename session labels a launched test independently of the Library title. The label carries through the public/student/private views, Results and sanitized Unicode Excel filenames. Completed results can still be renamed.
+
+For a failed, unsubmitted test attempt, Submit Fail score records a terminal 0%, preserves saved answers and their original calculated score privately, records the professor/reason, and disconnects the student. Reloading resumes only the final score. Calculator sessions remain ungraded. Unlock & continue is offered only while continuation is possible in a running session.
+
+Private Student progress shows the current viewed/focused question plus answered/total count. It is based on page interactions and saved answers, not a claim of student understanding. No question progress or answer data is added to the public roster.

@@ -5,7 +5,7 @@ let auth, account, current, historySession, library = [], folders = [], aiConfig
 let accountGeneration = 0;
 let popupSessionId = null, openingDisplay = false, launching = false;
 function clearPrivateWorkspace() {
-  accountGeneration++;
+  accountGeneration++;closeEntry();
   current=null; historySession=null; library=[]; folders=[]; sessionList=[]; $('import-source').value='';$('import-file').value='';$('import-panel').hidden=true;$('draft-review').textContent=''; editingId=null; tbQuestions=[];
   for(const id of ['launch-tests','library-tests','active-sessions','result-sessions','live-students','result-students','tb-questions']) $(id).replaceChildren();
   for(const id of ['dashboard','result-detail','test-builder']) $(id).hidden=true;
@@ -41,7 +41,7 @@ async function refresh() {
     $('library-tests').append(card('Your library starts here', 'Save a test and use it again with any class.'));
   }
   const groups={};
-  for(const root of ['launch-tests','library-tests']) for(const folder of [...folders,{id:'',name:'Unfiled'}]) {
+  for(const root of ['launch-tests','library-tests']) for(const folder of [...folders,{id:'',name:'Uncategorized Test'}]) {
     const count=library.filter(t=>(t.folderId||'')===folder.id).length;
     if(!count && !folders.some(f=>f.id===folder.id))continue;
     const detail=document.createElement('details');detail.className='folder';detail.open=true;
@@ -67,7 +67,7 @@ async function refresh() {
     if (s.phase !== 'ended') $('active-sessions').append(button(`${s.title} · ${s.phase}`, () => openSession(s.id)));
   }
   if (!sessionList.some(s => s.mode === 'test')) $('result-sessions').append(card('No test results yet', 'Results from tests will be saved here. Calculator sessions do not create results.'));
-  if (!sessionList.some(s => s.phase !== 'ended')) $('active-sessions').textContent = 'No open sessions.';
+  if(current && !sessionList.some(s=>s.id===current.id && s.phase!=='ended')){current=null;renderDashboard();}
 }
 function openBuilder(test) {
   tab('library'); editingId = test?.id || null;
@@ -148,17 +148,16 @@ $('test-start').onclick = action(async () => { if (!confirm('Start this test now
 $('session-end').onclick = action(async () => {
   if (!confirm('End this session?')) return;
   current = await api(`/sessions/${current.id}/end`, 'POST', {});
-  if(current.mode === 'calculator') { current=null; $('dashboard').hidden=true; $('calculator-card').hidden=false; }
-  else renderDashboard();
+  current=null;renderDashboard();
   await refresh();
 });
 function renderDashboard() {
-  if (!current) return;
+  if (!current || current.phase==='ended') {current=null;$('dashboard').hidden=true;$('live-students').replaceChildren();$('calculator-card').hidden=false;return;}
   $('dashboard').hidden = false; $('session-title').textContent = current.title;
   $('calculator-card').hidden = current.mode === 'calculator' && current.phase !== 'ended';
   $('session-phase').textContent = current.phase === 'waiting' ? 'Waiting room open · Questions appear when you start the test.' : current.phase === 'running' ? 'Session in progress' : 'Session ended · Results saved';
   $('test-start').hidden = current.phase !== 'waiting'; $('session-end').hidden = current.phase === 'ended';
-  $('live-export').hidden = current.mode !== 'test';
+  $('live-export').hidden = current.mode !== 'test';$('session-rename').hidden=current.mode!=='test';
   const scores = current.students.filter(s => s.result).map(s => s.result.percentage);
   $('live-summary').textContent = `${current.students.length} joined · ${current.students.filter(s => s.status === 'green').length} active` +
     (current.mode === 'test' ? ` · ${scores.length} submitted · ${current.students.filter(s => s.failed).length} FAIL${scores.length ? ` · Average ${Math.round(scores.reduce((a,b) => a+b,0)/scores.length)}%` : ''}` : '');
@@ -172,19 +171,21 @@ function renderTable(container, session) {
     for(const s of session.students) {
       const row=document.createElement('tr');
       for(const value of [s.number,s.name,s.failed ? 'FAILED' : s.status === 'green' ? 'Active' : 'Inactive']) { const cell=document.createElement('td'); cell.textContent=value; row.append(cell); }
-      const review=document.createElement('td');if(s.failed)review.append(button('Unlock & continue',()=>unlockStudent(session,s)));row.append(review);body.append(row);
+      const review=document.createElement('td');if(s.failed && session.phase==='running')review.append(button('Unlock & continue',()=>unlockStudent(session,s)));row.append(review);body.append(row);
     }
     table.append(body); container.replaceChildren(table); return;
   }
-  table.innerHTML = '<thead><tr><th>Student number</th><th>Name</th><th>Status</th><th>Score</th><th>Original score</th><th>Review</th></tr></thead>';
+  table.innerHTML = '<thead><tr><th>Student number</th><th>Name</th><th>Status</th><th>Student progress</th><th>Score</th><th>Original score</th><th>Review</th></tr></thead>';
   const tbody = document.createElement('tbody');
   for (const s of [...session.students].sort((a,b) => a.number.localeCompare(b.number, undefined, { numeric:true }))) {
     const tr = document.createElement('tr');
     for (const text of [s.number,s.name]) { const td=document.createElement('td'); td.textContent=text; tr.append(td); }
     const state=document.createElement('td'); const pill=document.createElement('span'); pill.className=`pill ${s.status === 'red' ? 'red' : ''}`; pill.textContent=s.failed ? 'FAILED' : s.result ? 'Test Submitted' : s.status === 'green' ? 'Active' : 'Inactive'; state.append(pill); tr.append(state);
+    const progress=document.createElement('td');progress.textContent=s.progress?`${s.result?'Finished':s.progress.question?'Question '+s.progress.question+' of '+s.progress.total:'Not started'} · ${s.progress.answered}/${s.progress.total} answered`:'—';tr.append(progress);
     for (const text of [s.score === null ? 'Pending' : `${s.score} / ${s.total}${s.result ? ` · ${s.result.percentage}%` : ''}`, s.result ? `${s.result.originalScore} / ${s.total}` : '—']) { const td=document.createElement('td'); td.textContent=text; tr.append(td); }
     const review=document.createElement('td');
-    if(s.failed) review.append(button(s.result?'Override FAIL':'Unlock & continue',()=>unlockStudent(session,s)));
+    if(s.failed && !s.finalized && (s.result || session.phase==='running')) review.append(button(s.result?'Override FAIL':'Unlock & continue',()=>unlockStudent(session,s)));
+    if(s.failed && !s.result)review.append(button('Submit Fail score',()=>submitFail(session,s),'danger'));
     const details=document.createElement('details'); const summary=document.createElement('summary'); summary.textContent=`${s.events.length} monitoring events`; details.append(summary);
     const list=document.createElement('ul'); for (const e of s.events) { const li=document.createElement('li'); li.textContent=`${new Date(e.at).toLocaleTimeString()} · ${e.type}${e.reason ? ` · ${e.reason}` : ''}`; list.append(li); } details.append(list); review.append(details); tr.append(review); tbody.append(tr);
   }
@@ -202,12 +203,12 @@ $('result-delete').onclick=action(()=>deleteResults(historySession));
 async function download(s) {
   const response=await fetch(`/api/sessions/${s.id}/export`,{headers:{Authorization:`Bearer ${await token()}`}});
   if (!response.ok) throw new Error('Could not download results. Please sign in and retry.');
-  const url=URL.createObjectURL(await response.blob()); const a=document.createElement('a'); a.href=url; a.download=`onscreen-${s.id}.xlsx`; a.click(); setTimeout(()=>URL.revokeObjectURL(url),10000);
+  const url=URL.createObjectURL(await response.blob()); const a=document.createElement('a'); a.href=url; a.download=decodeURIComponent(response.headers.get('content-disposition')?.split("filename*=UTF-8''")[1]||'OnScreen results.xlsx'); a.click(); setTimeout(()=>URL.revokeObjectURL(url),10000);
 }
 $('live-export').onclick=action(()=>download(current)); $('result-export').onclick=action(()=>download(historySession)); $('results-refresh').onclick=action(refresh);
 socket.on('connect',()=> { if (account) watch().catch(e=>notice(e.message)); });
 socket.on('disconnect',()=> { if (account) notice('Live connection lost. Sessions remain saved; reconnecting…'); });
-socket.on('professor:update',view=> { if (current?.id === view.id) { current={...current,...view}; renderDashboard(); } if (historySession?.id===view.id) { historySession={...historySession,...view}; renderResults(); } });
+socket.on('professor:update',view=> { const listed=sessionList.find(s=>s.id===view.id);if(view.phase==='ended'||(listed&&(listed.title!==view.title||listed.phase!==view.phase)))refresh().catch(e=>notice(e.message));if (current?.id === view.id) { current={...current,...view}; renderDashboard(); } if (historySession?.id===view.id) { historySession={...historySession,...view}; renderResults(); } });
 socket.on('auth:expired',()=> { notice('Please sign in again to reconnect the private dashboard.'); });
 async function signedIn() {
   try { const verified=await api('/me'); if(account && account.id!==verified.id) clearPrivateWorkspace(); account=verified; socket.connect(); $('account-name').textContent=account.email; $('login').hidden=recoveringPassword ? false : true; $('workspace').hidden=recoveringPassword; $('signout').hidden=false; await refresh(); await watch(); }
@@ -236,18 +237,21 @@ initAuth().catch(e=>$('auth-message').textContent=e.message);
 function renderFolderOptions(selected=$('tb-folder').value) {
   $('tb-folder').replaceChildren(...[{id:'',name:'Unfiled'},...folders].map(f=>{const o=document.createElement('option');o.value=f.id;o.textContent=f.name;return o;}));$('tb-folder').value=selected;
 }
-$('new-folder').onclick=action(async()=> { const name=prompt('Class folder name:');if(!name?.trim())return;await api('/folders','POST',{name:name.trim()});await refresh(); });
-async function unlockStudent(session,student) {
-  const reason=prompt(`Reason for unlocking or overriding ${student.name}’s FAIL:`);if(!reason?.trim())return;
-  const updated=await api(`/sessions/${session.id}/override`,'POST',{studentId:student.id,reason});
-  if(current?.id===updated.id){current=updated;renderDashboard();}if(historySession?.id===updated.id){historySession=updated;renderResults();}
+let entryAction=null;
+function closeEntry(){entryAction=null;if($('entry-dialog').open)$('entry-dialog').close();}
+function openEntry({title,label='Name',value='',max=120,help='',save='Save'},fn){
+ $('entry-title').textContent=title;$('entry-label').firstChild.textContent=label;$('entry-value').value=value;$('entry-value').maxLength=max;$('entry-help').textContent=help;$('entry-error').textContent='';$('entry-save').textContent=save;$('entry-save').disabled=false;$('entry-cancel').disabled=false;entryAction=fn;$('entry-dialog').showModal();$('entry-value').focus();
 }
-async function renameResults(session) {
-  const title=prompt('Name these results (for example, class and section):',session.title);if(!title?.trim())return;
-  const updated=await api(`/sessions/${session.id}`,'PATCH',{title:title.trim()});
-  if(current?.id===updated.id){current=updated;renderDashboard();}if(historySession?.id===updated.id){historySession=updated;renderResults();}await refresh();
-}
-$('result-rename').onclick=action(()=>renameResults(historySession));
+$('entry-cancel').onclick=closeEntry;$('entry-dialog').addEventListener('cancel',()=>{entryAction=null;});
+$('entry-form').onsubmit=async e=>{e.preventDefault();const value=$('entry-value').value.trim();if(!value)return;const fn=entryAction,generation=accountGeneration;if(!fn)return;$('entry-save').disabled=true;$('entry-cancel').disabled=true;
+ try{await fn(value);if(generation===accountGeneration)closeEntry();}catch(e){if(generation===accountGeneration)$('entry-error').textContent=e.message;}finally{if(generation===accountGeneration){$('entry-save').disabled=false;$('entry-cancel').disabled=false;}}
+};
+$('new-folder').onclick=()=>openEntry({title:'New class folder',max:80},async name=>{await api('/folders','POST',{name});await refresh();});
+function updateSession(updated){if(current?.id===updated.id){current=updated;renderDashboard();}if(historySession?.id===updated.id){historySession=updated;renderResults();}}
+function unlockStudent(session,student){openEntry({title:student.result?'Override FAIL':'Unlock & continue',label:'Reason',max:500,help:'Review '+student.name+'’s incident, then record why you are allowing continuation.',save:student.result?'Override FAIL':'Unlock & continue'},async reason=>updateSession(await api('/sessions/'+session.id+'/override','POST',{studentId:student.id,reason})));}
+function submitFail(session,student){openEntry({title:'Submit Fail score',label:'Reason',value:'Confirmed by professor',max:500,help:'Finalize '+student.name+' at 0%. This closes their attempt and stops their connection. Their saved answers and original score remain in the private record.',save:'Submit Fail score'},async reason=>updateSession(await api('/sessions/'+session.id+'/finalize-fail','POST',{studentId:student.id,reason})));}
+function renameResults(session){openEntry({title:session.phase==='ended'?'Rename results':'Rename session',value:session.title,help:'This name will be used for this session, its results and Excel filename. The Library test stays unchanged.'},async title=>{updateSession(await api('/sessions/'+session.id,'PATCH',{title}));await refresh();});}
+$('result-rename').onclick=()=>renameResults(historySession);$('session-rename').onclick=()=>renameResults(current);
 function openImport(mode) {
   importMode=mode;$('import-panel').hidden=false;$('ai-options').hidden=mode!=='generate';$('import-heading').textContent=mode==='generate'?'Create with AI':'Upload a test';
   $('import-help').textContent=mode==='generate'?'Create new questions from lecture notes or other source material. Review the generated answers and source excerpts before saving.':'Upload a ready-made test with numbered questions, A. / B. options and Answer: A, marked correct options, or an Answer key: block. For blanks, use Answer: value (alternatives separated by |). Missing answers will be flagged for your review. Text-based PDF and Word DOCX supported; scanned files need OCR first.';

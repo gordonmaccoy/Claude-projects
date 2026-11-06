@@ -4,3 +4,5 @@
 select,textarea{font:inherit;background:#fff;color:#223c31;border:1px solid #c5cfc5;border-radius:8px;padding:11px;max-width:100%}textarea{display:block;width:100%;resize:vertical}select{display:block;margin:6px 0 15px}.folder{grid-column:1/-1;border:1px solid #ccd6cb;border-radius:12px;padding:18px}.folder>summary{font-size:20px;font-weight:600;cursor:pointer}.folder>.cards{margin-top:18px}.drag-handle{cursor:grab;user-select:none;font-weight:700;margin-right:auto}.tb-q-header{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.source-evidence,#draft-review{background:#edf3e6;padding:14px;border-radius:8px}.tb-q-card>input,.tb-q-card>select{width:100%}input[type=checkbox],input[type=radio]{width:auto}#ai-options .actions label{flex:1}#import-panel{margin-bottom:24px}
 
 .folder{max-width:none}.tb-q-card input[type=radio]{display:block}
+
+#entry-dialog{width:min(540px,92vw);border:1px solid #c5cfc5;border-radius:14px;padding:28px;color:#182f2c}#entry-dialog::backdrop{background:#102c2780}#entry-dialog label{display:block}#in-session-section>#dashboard{border:0;padding:0;margin-bottom:0}#active-sessions:empty{display:none}
