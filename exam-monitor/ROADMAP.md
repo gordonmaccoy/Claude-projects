@@ -1,5 +1,5 @@
-# Future AI-assisted test builder
+# Authoring roadmap
 
-Roadmap only — not implemented in V2.
+Implemented in Development: separate existing-test PDF/DOCX import and source-based AI draft generation, both requiring professor review before library save. AI requires Development-only API key/model configuration.
 
-Library → Create new test → Generate with AI: paste source material, select question count and difficulty, then generate multiple-choice questions with answer evidence. Professor review/edit/approval is required before saving to the normal test library. Include duplicate detection and generation cost controls. Generation must not run during exams or affect live monitoring.
+Future enhancements: scanned-document OCR, richer answer-key layouts and partial-credit/manual grading.

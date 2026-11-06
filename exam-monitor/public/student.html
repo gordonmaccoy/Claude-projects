@@ -13,7 +13,7 @@
       <h1>Join OnScreen</h1>
       <p class="session-hint">Session: <strong id="session-code">—</strong></p>
       <form id="join-form" autocomplete="off">
-        <label for="number-input">Student number</label><input id="number-input" name="studentNumber" type="text" maxlength="64" required autocomplete="off"><label for="name-input">Your name</label>
+        <label for="number-input">Student number</label><input id="number-input" inputmode="numeric" pattern="[0-9]{1,64}" title="Use numbers only (0–9)" name="studentNumber" type="text" maxlength="64" required autocomplete="off"><label for="name-input">Your name</label>
         <input id="name-input" name="name" type="text" maxlength="80" required autocomplete="off" autocapitalize="words" />
         <button type="submit" class="join-btn">Join</button>
         <p id="join-error" class="error" hidden></p>
@@ -114,6 +114,7 @@
     </p>
   </section>
 
+  <div id="activity-lock" class="activity-lock" role="alertdialog" aria-modal="true" aria-labelledby="lock-heading" hidden><div><h1 id="lock-heading">Call professor</h1><p>FAILED · This page was hidden for more than 5 seconds.</p><p>Your work is kept. Ask your professor to unlock this activity.</p></div></div>
   <script src="/socket.io/socket.io.js"></script>
   <script src="student.js"></script>
 </body>

@@ -24,8 +24,21 @@ test('HTTP/socket exam flow enforces ownership, recovers after restart, sanitize
   const emit = (s, name, data) => new Promise((resolve, reject) => s.timeout(3000).emit(name, data, (err, res) => err ? reject(err) : resolve(res)));
   try {
     assert.equal((await request('/api/tests', 'GET', undefined, 'invalid')).status, 401);
+    assert.equal((await request('/api/import','POST',{text:'Quiz\n1. Capital?\nAnswer: Seoul'},'invalid')).status,401);
+    const imported=await request('/api/import','POST',{text:'Quiz\n1. Capital?\nAnswer: Seoul'});
+    assert.equal(imported.body.test.questions[0].type,'blank');
+    assert.equal((await request('/api/tests')).body.length,0,'Import must be review-only, never save automatically');
+    assert.equal((await request('/api/generate','POST',{source:'Source material about Seoul',count:1,types:'blank',difficulty:'easy'})).status,503);
+    const large=await request('/api/tests','POST',{title:'Full-length valid draft',questions:Array.from({length:100},(_,i)=>({id:'long'+i,text:'Q'.repeat(1000),options:[{id:'a',text:'A'.repeat(500)},{id:'b',text:'B'.repeat(500)}],correctOptionId:'a'}))});
+    assert.equal(large.status,200,'A valid 100-question draft must fit the API body limit');await request('/api/tests/'+large.body.id,'DELETE');
     const saved = await request('/api/tests', 'POST', { title: 'Quiz', questions: [{ id: 'q', text: '2+2?', options: [{ id: 'a', text: '4' }, { id: 'b', text: '5' }], correctOptionId: 'a' }] });
     assert.equal(saved.status, 200);
+    const folder=await request('/api/folders','POST',{name:'Economics 101'});
+    assert.equal(folder.status,200);
+    assert.equal((await request('/api/folders')).body[0].name,'Economics 101');
+    assert.equal((await request('/api/folders','GET',undefined,'bob')).body.length,0);
+    assert.equal((await request('/api/tests','POST',{...saved.body,folderId:folder.body.id})).body.folderId,folder.body.id);
+    assert.equal((await request('/api/tests','POST',{...saved.body,id:undefined,folderId:folder.body.id},'bob')).status,404);
     const calc = await request('/api/sessions', 'POST', { mode: 'calculator' });
     assert.equal((await request(`/api/sessions/${calc.body.id}/export`)).status, 400);
     await request(`/api/sessions/${calc.body.id}/end`, 'POST', {});
@@ -33,6 +46,7 @@ test('HTTP/socket exam flow enforces ownership, recovers after restart, sanitize
     const launched = await request('/api/sessions', 'POST', { testId: saved.body.id });
     const sid = launched.body.id;
     assert.equal((await request(`/api/sessions/${sid}`, 'DELETE')).status, 409);
+    assert.equal((await request(`/api/sessions/${sid}`,'PATCH',{title:'Too early'})).status,409);
     assert.equal((await request(`/api/sessions/${sid}`, 'GET', undefined, 'bob')).status, 404);
     assert.equal((await request('/api/tests', 'GET', undefined, 'bob')).body.length, 0);
     assert.equal((await request(`/api/tests/${saved.body.id}`, 'DELETE', undefined, 'bob')).status, 404);
@@ -60,7 +74,14 @@ test('HTTP/socket exam flow enforces ownership, recovers after restart, sanitize
     const reconnect = await socket();
     const resume = await emit(reconnect, 'student:join', { sessionId: sid, resumeToken: joined.resumeToken });
     assert.equal(resume.ok, true); assert.equal(resume.view.draft.q, 'a');
-    const responses = await Promise.all([emit(reconnect, 'student:submit', { answers: { q: 'a' } }), emit(reconnect, 'student:submit', { answers: { q: 'a' } })]);
+    // Force the exact boundary between the outer guard and inner submission.
+    // One mutation must use one decision time, rather than rolling back a late FAIL.
+    const exam=require('../exam'),sweep=exam.sweep,submit=exam.submit;let guardTime;
+    exam.sweep=(s,now=Date.now())=>{guardTime=now;s.students.find(st=>st.id===joined.studentId).hiddenSince=now-5000;return sweep(s,now);};
+    exam.submit=(s,id,answers,now)=>submit(s,id,answers,now??guardTime+1);
+    let responses;
+    try {responses=await Promise.all([emit(reconnect,'student:submit',{answers:{q:'a'}}),emit(reconnect,'student:submit',{answers:{q:'a'}})]);}
+    finally {exam.sweep=sweep;exam.submit=submit;}
     assert.equal(responses.filter(r => r.ok).length, 1);
     assert.equal(responses.find(r => r.ok).view.result.percentage, 100);
     const reconnectB = await socket();
@@ -69,11 +90,14 @@ test('HTTP/socket exam flow enforces ownership, recovers after restart, sanitize
     await store.mutate(sid, s => { s.students.find(st => st.id === joinedB.studentId).hiddenSince = Date.now() - 6000; });
     await running.tick();
     const failedResult = await emit(reconnectB, 'student:submit', { answers: { q: 'a' } });
-    assert.equal(failedResult.view.result.score, 0);
-    assert.equal(failedResult.view.result.failed, true);
+    assert.equal(failedResult.ok, false);
+    assert.equal(failedResult.view.failed, true);
+    assert.match(failedResult.error,/Call professor/);
+    assert.equal((await emit(reconnectB,'student:draft',{answers:{q:'a'}})).ok,false);
     const overridden = await request(`/api/sessions/${sid}/override`, 'POST', { studentId: joinedB.studentId, reason: 'Verified OS interruption' });
     const restoredStudent = overridden.body.students.find(st => st.id === joinedB.studentId);
-    assert.equal(restoredStudent.result.originalScore, 1); assert.equal(restoredStudent.score, 1);
+    assert.equal(restoredStudent.failed,false);
+    assert.equal((await emit(reconnectB,'student:submit',{answers:{q:'a'}})).view.result.score,1);
     assert.equal(restoredStudent.events.at(-1).reason, 'Verified OS interruption');
     const failed = await request(`/api/sessions/${sid}/override`, 'POST', { studentId: joined.studentId, reason: 'invalid' }, 'bob');
     assert.equal(failed.status, 404);
@@ -86,6 +110,9 @@ test('HTTP/socket exam flow enforces ownership, recovers after restart, sanitize
     assert.ok(sheet.includes('=Kim &amp; Lee')); assert.equal(sheet.includes('<f>'), false);
     assert.ok(sheet.includes('student number')); assert.ok(sheet.includes('percentage'));
     await request(`/api/sessions/${sid}/end`, 'POST', {});
+    assert.equal((await request(`/api/sessions/${sid}`,'PATCH',{title:'Economics — Section B'})).body.title,'Economics — Section B');
+    assert.equal((await store.getSession(sid)).test.title,'Quiz');
+    assert.equal((await request(`/api/sessions/${sid}`,'PATCH',{title:'Other'},'bob')).status,404);
     assert.equal((await request(`/api/sessions/${sid}`)).body.phase, 'ended');
     assert.equal((await emit(reconnect, 'student:join', { sessionId: sid, resumeToken: joined.resumeToken })).view.result.score, 1);
     assert.equal((await request(`/api/sessions/${sid}`, 'DELETE', undefined, 'bob')).status, 404);

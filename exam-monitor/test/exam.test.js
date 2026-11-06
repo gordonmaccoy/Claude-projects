@@ -18,14 +18,41 @@ test('strict >5 second confirmed hidden rule retains raw score and supports audi
   exam.start(s, 2000); exam.visibility(s, j.studentId, false, 3000);
   exam.sweep(s, 8000); assert.equal(s.students[0].failedAt, null);
   exam.visibility(s, j.studentId, true, 8001);
-  const r = exam.submit(s, j.studentId, { q: 'a' }, 8002);
-  assert.deepEqual({ score: r.score, originalScore: r.originalScore, percentage: r.percentage }, { score: 0, originalScore: 1, percentage: 0 });
-  assert.equal(exam.publicView(s, 8002).students[0].status, 'red');
+  assert.throws(() => exam.submit(s, j.studentId, { q: 'a' }, 8002), /Call professor/);
+  assert.equal(exam.privateView(s).students[0].score, 0);
+  assert.equal(exam.publicView(s, 8002).students[0].status, 'failed');
   exam.override(s, j.studentId, 'p1', 'OS interruption', 9000);
-  assert.equal(exam.studentView(s, s.students[0]).result.score, 1);
   assert.equal(s.students[0].events.at(-1).type, 'override');
   assert.equal(exam.publicView(s, 9000).students[0].status, 'green');
+  assert.equal(exam.submit(s, j.studentId, { q: 'a' }, 9000).score, 1);
   assert.throws(() => exam.submit(s, j.studentId, { q: 'b' }, 9001), /already submitted/);
+});
+test('student numbers accept digits only and preserve leading zeroes', () => {
+  for(const number of ['Kim','123 Kim','1.5','-100','12e3','１２３']) assert.throws(()=>exam.join(fixture(),{name:'Kim',number}),/digits/);
+  const s=fixture();exam.join(s,{name:'Kim',number:'000123'});assert.equal(s.students[0].number,'000123');
+});
+test('calculator locks after >5 seconds hidden and professor can unlock without losing enrollment', () => {
+  const s=exam.newSession('p1',null,1000);const j=exam.join(s,{name:'Kim',number:'001'},1000);
+  exam.visibility(s,j.studentId,false,2000);exam.sweep(s,7000);assert.equal(exam.isFailed(s.students[0]),false);
+  exam.sweep(s,7001);assert.equal(exam.studentView(s,s.students[0]).failed,true);
+  assert.equal(exam.publicView(s,7001).students[0].status,'failed');
+  assert.throws(()=>exam.override(s,j.studentId,'p2','Not owner',8000));
+  exam.override(s,j.studentId,'p1','Phone interruption',8000);assert.equal(exam.isFailed(s.students[0]),false);
+});
+test('submitted state is terminal: no later visibility incidents, disconnections or FAIL', () => {
+  const s=fixture();const j=exam.join(s,{name:'Kim',number:'001'},1000);exam.start(s,2000);exam.submit(s,j.studentId,{q:'a'},3000);
+  const before=s.students[0].events.length;exam.visibility(s,j.studentId,false,4000);exam.sweep(s,15000);
+  assert.equal(s.students[0].events.length,before);assert.equal(exam.publicView(s,20000).students[0].status,'submitted');
+});
+test('mixed blank and multiple-choice questions grade alternatives without exposing answer keys', () => {
+  const raw={title:'Mixed',questions:[{id:'b',type:'blank',text:'The capital is ___.',acceptedAnswers:['Seoul','Seoul City'],caseSensitive:false},
+    {id:'m',text:'2+2?',options:[{id:'a',text:'4'},{id:'b',text:'5'}],correctOptionId:'a'}]};
+  const valid=exam.validateTest(raw);assert.ok(valid);const s=exam.newSession('p1',valid,1000);const j=exam.join(s,{name:'Kim',number:'001'},1000);exam.start(s,2000);
+  const view=exam.studentView(s,s.students[0]);assert.equal(view.test.questions[0].acceptedAnswers,undefined);
+  assert.equal(view.test.questions[0].type,'blank');assert.equal(exam.submit(s,j.studentId,{b:'  SEOUL   city ',m:'a'},3000).score,2);
+  assert.equal(exam.scoreAnswers({questions:[{id:'b',type:'blank',acceptedAnswers:['NaCl'],caseSensitive:true}]},{b:'nacl'}),0);
+  assert.equal(exam.scoreAnswers({questions:[{id:'b',type:'blank',acceptedAnswers:['NaCl'],caseSensitive:true}]},{b:' NaCl '}),1);
+  assert.equal(exam.validateTest({title:'Bad',questions:[{id:'q',type:'blank',text:'Blank',acceptedAnswers:[]}]}),null);
 });
 test('network silence alone never fails; returning before threshold clears hidden interval; submitted students stop accruing failures', () => {
   const s = fixture(); const j = exam.join(s, { name: 'Kim', number: '001' }, 1000);

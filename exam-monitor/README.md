@@ -22,13 +22,13 @@ Professor: `http://localhost:3100/professor.html`. Build output is committed so 
 
 ## Workflow
 
-1. Sign in, open Library and create a multiple-choice test. Select the correct choice for each question and save.
+1. Sign in, open Library and create a multiple-choice / fill-in-the-blank test. Set correct choices or accepted answers, reorder questions and save in a class folder.
 2. Launch a saved test, or use Open classroom display in the Classroom calculator card. The classroom popup opens separately; move it to the projector. Use Open classroom display if popups are blocked. Click its QR to expand/minimize.
 3. Students enter their student number and name. Test questions remain hidden in the waiting room until Start test.
 4. The private dashboard shows monitoring events, live grades, raw grades and FAIL overrides with reasons. Students see their own effective score and percentage immediately after submission.
 5. Results stores prior tests and exports `.xlsx` files sorted naturally by student number, with text identifiers and exactly four columns: student number, student name, absolute score, percentage (0–100).
 
-A confirmed continuous hidden interval **strictly longer than five seconds** after test start produces a durable FAIL and effective score zero. Network loss alone turns the roster red without failing the student. Returning after FAIL does not restore the grade; a professor override does. Submitted students do not accrue new failures. The raw grade and incident history remain available privately.
+A confirmed continuous hidden interval **strictly longer than five seconds** during a running calculator or test produces a durable FAIL and locks the activity with “Call professor”. Network loss alone turns the roster red without failing the student. Returning after FAIL keeps the lock; a professor unlock with a reason permits continuation and preserves work. Submitted students do not accrue new failures. The raw grade and incident history remain available privately.
 
 Sessions survive professor disconnection and server restart. Student enrollment and drafts resume using a private capability stored before joining. Keep the same browser; do not clear its storage. If storage is blocked, reconnection works while the page remains open, but recovery after closing/reloading cannot be guaranteed.
 
@@ -46,4 +46,4 @@ Legacy `onscreen_*` tables are retained untouched. V2 uses account-owned `onscre
 
 ## Roadmap — not implemented
 
-AI-assisted multiple-choice creation from pasted source text: choose question count/difficulty, generate source-grounded questions, review/edit answers, then save to Library. Mandatory professor approval and source evidence are planned. No AI generation code, API, key or charge is part of V2.
+Library has separate “Upload a test” (text-based PDF/DOCX with supplied answer key) and “Create with AI” (source material) flows. Both produce editable drafts for professor review before saving. AI requires server-only OPENAI_API_KEY and OPENAI_MODEL on Railway Development; live generation remains unverified until configured. See V2_SETUP.md for format and limits.

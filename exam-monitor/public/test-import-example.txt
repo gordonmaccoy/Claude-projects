@@ -1,0 +1,11 @@
+Sample Test
+
+1. What is 2 + 2?
+A. 4
+B. 5
+
+2. The capital of France is _____.
+
+Answer key:
+1. A
+2. Paris | City of Paris

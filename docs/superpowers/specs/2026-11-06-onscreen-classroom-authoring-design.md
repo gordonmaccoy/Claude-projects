@@ -1,6 +1,6 @@
 # OnScreen: classroom locks and test authoring
 
-Status: design for review, not yet implemented. Continues the working Development app on `onscreen/test-mode-hardening` (PR #6).
+Status: user clarified both import options; implementation authorized by the continuation on 2026-11-06. Continues the working Development app on `onscreen/test-mode-hardening` (PR #6).
 
 ## Purpose and constraints
 
@@ -10,7 +10,7 @@ Improve student identification, make a five-second failure enforceable in both a
 
 Extend the existing app incrementally. A rewrite would unnecessarily risk the working QR, authentication and Excel flows. Deliver independently verified stages: monitoring/lock behavior; mixed question authoring and ordering; folders and result labels; document import. Existing tests without an explicit question type continue to be multiple choice.
 
-The import mode is the one user decision still outstanding: importing questions already present in a document versus AI-generating questions from source material. The two modes are described below; only the selected mode is included in the final approved design. No AI provider, billing commitment or external document upload is assumed.
+The user selected two separate Library options: Upload a test, and Create with AI. Both flows require review before saving. The implementation will use configurable OpenAI API credentials for generation; no live AI requests or paid credentials are provisioned without configuration/authorization.
 
 ## Student identification
 
@@ -59,7 +59,7 @@ The import mode is the one user decision still outstanding: importing questions 
 - Retain date, original test association, grading/audit history and the existing Delete results action.
 - No calculator results are introduced. The Excel sheet layout stays unchanged.
 
-## Document import: selectable scope
+## Document import: two separate options
 
 ### A. Import existing questions and answers (recommended when uploading a ready-made test)
 
@@ -72,7 +72,7 @@ The import mode is the one user decision still outstanding: importing questions 
 
 - Extract text from PDF/Word and generate new questions grounded in that source, with selectable number/types/difficulty and evidence for proposed answers.
 - Require professor review before saving or launching. Keep generation separate from live exam monitoring and grading.
-- This replaces the earlier roadmap-only status only if explicitly selected. It requires an agreed AI provider and configured credentials before live use; document transmission destination and any nonzero costs must be confirmed before generation.
+- This replaces the earlier roadmap-only status, explicitly selected by the user. It requires an agreed AI provider and configured credentials before live use; document transmission destination and any nonzero costs must be confirmed before generation.
 - Unsupported scans need a separate OCR decision; no OCR service or data transfer is assumed.
 
 ## Verification

@@ -34,6 +34,7 @@ Official references: [Supabase server-side identity verification](https://supaba
 The lockfile now includes `pg` and the complete dependency graph, fixing the original clean-install mismatch. `store.js` replaces the old write-only persistence path. Session state is read from PostgreSQL on every operation, so startup has no volatile session cache to rebuild. `SELECT ... FOR UPDATE` serializes writes; acknowledgements follow COMMIT. Test launches contain immutable copies of library questions. Library edits/deletes do not change launched sessions.
 
 V2 tables are additive:
+- `onscreen_v2_folders`: account-owned class folders.
 - `onscreen_v2_tests`: owner ID and editable test document.
 - `onscreen_v2_sessions`: owner ID and session document containing snapshot, enrollment capability hashes, drafts, submissions, hidden intervals and override audit history.
 
@@ -52,7 +53,7 @@ After configuration, manual Development-only acceptance:
 - Register/confirm email, sign in/out, reset password, and sign in with Google.
 - Run two professor accounts; verify isolated tests/results and no retained details after account switching.
 - Join real student phones; check projector shows names only and the private dashboard has numbers/results.
-- Hide for exactly/less than 5 seconds (no FAIL), then >5 seconds (FAIL). Return, submit, verify effective zero and raw score. Override with a reason; verify restored score and export.
+- Hide for exactly/less than 5 seconds (no FAIL), then >5 seconds (FAIL). Return and verify “Call professor” lock and public FAIL. Unlock with a reason, continue and submit; verify preserved work and export. Repeat with calculator. After submission verify public “Test Submitted” and no further monitoring.
 - Disconnect Wi-Fi without hiding; verify red but no automatic FAIL.
 - Restart app and Development database; resume professor session/student draft and final submission; verify historical results remain.
 - Open exported workbook in Excel and verify leading-zero identifiers, natural student-number order and effective grades.
@@ -62,3 +63,15 @@ Live Google sign-in has been verified through the professor workspace. Real emai
 ## Calculator and Results cleanup
 
 Calculator controls show names/numbers/visibility privately, with no grades, submission statistics or export. Ended calculator sessions are excluded from history; only tests appear in Results. Completed test results have Delete results controls with confirmation. The server verifies ownership and ended/test state, then marks the result deleted, hiding it from all normal reads, exports and resume capabilities. Library tests remain unchanged. Deletion is recoverable administratively from the retained record; this is not a permanent purge.
+
+## Classroom and authoring update
+
+Student numbers contain ASCII digits only; leading zeroes are retained. A confirmed hidden interval strictly greater than five seconds locks both calculators and tests, preserving local work and saved test drafts. The professor can unlock with an audited reason. Network loss alone does not cause failure. Submitted tests show light green “Test Submitted” and stop visibility monitoring.
+
+Library supports drag/up/down ordering, multiple choice and fill-in-the-blank questions, and account-owned class folders. Blank answers use accepted alternatives with whitespace/Unicode normalization and optional case sensitivity. Launch groups are expandable. Completed test results can be renamed without modifying library tests or launched question snapshots. Excel retains its existing four-column format.
+
+Two separate review-first import options:
+- **Upload a test:** local extraction of text-based PDF or Word DOCX, up to 5 MB / 100 PDF pages / 60,000 characters. Use numbered questions, lettered options, inline Answer: A or a separate Answer key: block. Blank alternatives use Answer: value | alternative. Missing keys are flagged, never guessed. Scanned documents require OCR first; legacy .doc must be saved as .docx. Review parsing and answer keys before saving.
+- **Create with AI:** paste source or upload PDF/DOCX, select 1–30 questions, types and difficulty, consent to sending source to OpenAI, then review questions, answer keys and source excerpts. Does not save automatically. Server requires OPENAI_API_KEY and OPENAI_MODEL in the **Railway Development app environment only**. Set these directly in Railway; never paste a secret into chat or browser code. Choose a model supporting Responses structured outputs. The AI service is limited per professor to five requests/hour per running app instance. Existing-test extraction is limited to 20/minute.
+
+AI is implemented but live generation is unverified until Development credentials/model are configured; automated provider-boundary tests use simulated responses and the browser uses a test-only generator. Uploads are processed in memory and are not stored by OnScreen. The AI request sets store:false; provider retention is governed by the API account's applicable policy.

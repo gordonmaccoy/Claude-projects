@@ -14,6 +14,16 @@ function createStore(pool) {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`);
       await pool.query(`CREATE INDEX IF NOT EXISTS onscreen_v2_sessions_owner ON onscreen_v2_sessions(owner_id)`);
+      await pool.query(`CREATE TABLE IF NOT EXISTS onscreen_v2_folders (
+        id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, name TEXT NOT NULL,
+        UNIQUE(owner_id,name)
+      )`);
+    },
+    async listFolders(ownerId) { return (await pool.query('SELECT id,name FROM onscreen_v2_folders WHERE owner_id=$1 ORDER BY name',[ownerId])).rows; },
+    async getFolder(ownerId,id) { return (await pool.query('SELECT id,name FROM onscreen_v2_folders WHERE id=$1 AND owner_id=$2',[id,ownerId])).rows[0] || null; },
+    async createFolder(ownerId,name) {
+      const id=require('node:crypto').randomUUID();
+      return (await pool.query('INSERT INTO onscreen_v2_folders(id,owner_id,name) VALUES($1,$2,$3) RETURNING id,name',[id,ownerId,name])).rows[0];
     },
     async saveTest(ownerId, test) {
       const r = await pool.query(`INSERT INTO onscreen_v2_tests(id,owner_id,data) VALUES($1,$2,$3)

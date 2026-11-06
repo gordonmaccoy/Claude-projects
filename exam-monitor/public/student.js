@@ -12,7 +12,7 @@ function applyTheme(value) { const theme=value==='light'?'light':'dark'; documen
 try { applyTheme(localStorage.getItem('exam-monitor-theme')); } catch { applyTheme('dark'); }
 for(const el of [els.themeToggle,els.testThemeToggle]) el.onclick=()=>applyTheme(document.documentElement.dataset.theme==='light'?'dark':'light');
 els.sessionCode.textContent=sessionId || 'missing';
-const resumeKey=`onscreen-resume-${sessionId}`, draftKey=`onscreen-draft-${sessionId}`;
+const resumeKey=`onscreen-resume-${sessionId}`, draftKey=`onscreen-draft-${sessionId}`, calculatorKey=`onscreen-calculator-${sessionId}`;
 const socket=io(); let joined=false, currentView=null, renderedTest=false, testAnswers={}, submitting=false, draftTimer, updateVersion=0, memoryToken=null;
 const message=text=>$('student-notice').textContent=text || '';
 const emit=(event,data)=>new Promise(resolve=>socket.timeout(10000).emit(event,data,(err,res)=>resolve(err?{ok:false,error:'Connection interrupted. Please retry.'}:res)));
@@ -40,20 +40,24 @@ function setConnected(ok) { for (const el of [els.connDot,els.testConnDot]) { el
 els.form.onsubmit=async e=> { e.preventDefault(); const b=els.form.querySelector('button'); b.disabled=true; try { await join({name:els.nameInput.value.trim(),number:$('number-input').value.trim()}); } finally { b.disabled=false; } };
 function showView(view) {
   currentView=view;
+  const locked=Boolean(view.failed && !view.result && view.phase==='running');
+  $('activity-lock').hidden=!locked;
+  els.calcSection.inert=locked; els.testSection.inert=locked;
+  if(!locked && $('student-notice').textContent.startsWith('FAIL')) message('');
   els.joinSection.hidden=true; els.calcSection.hidden=true; els.testSection.hidden=true; $('waiting-section').hidden=true;
   if(view.result) {
     els.testSection.hidden=false; els.testDone.hidden=false; els.testActions.hidden=true; els.testQuestions.replaceChildren();
     els.testTitle.textContent='Test submitted'; els.doneScore.textContent=`Your score: ${view.result.score} / ${view.result.total} · ${view.result.percentage}%${view.result.failed?' · FAIL':''}`;
     try{localStorage.removeItem(draftKey);}catch{} return;
   }
-  if(view.phase==='ended') { message('Your professor ended the session.'); els.joinSection.hidden=false; els.form.querySelector('button').disabled=true; return; }
+  if(view.phase==='ended') { try{localStorage.removeItem(calculatorKey);}catch{} message('Your professor ended the session.'); els.joinSection.hidden=false; els.form.querySelector('button').disabled=true; return; }
   if(view.mode==='calculator') { els.calcSection.hidden=false; return; }
   if(view.phase==='waiting') { $('waiting-section').hidden=false; return; }
   els.testSection.hidden=false; els.testTitle.textContent=view.test?.title || 'Test'; els.testActions.hidden=false; els.testDone.hidden=true;
-  if(view.failed) message('FAIL: this test page was hidden for more than 5 seconds. You can still submit; your professor can review the incident.');
+
   if(view.test && !renderedTest) {
     renderedTest=true; testAnswers={...view.draft};
-    try { const local=JSON.parse(localStorage.getItem(draftKey)||'{}'); for(const q of view.test.questions) if(q.options.some(o=>o.id===local[q.id])) testAnswers[q.id]=local[q.id]; } catch {}
+    try { const local=JSON.parse(localStorage.getItem(draftKey)||'{}'); for(const q of view.test.questions) if(q.type==='blank' ? typeof local[q.id]==='string' && local[q.id].length<=300 : q.options.some(o=>o.id===local[q.id])) testAnswers[q.id]=local[q.id]; } catch {}
     renderTestQuestions(view.test.questions);
   }
 }
@@ -63,7 +67,11 @@ function renderTestQuestions(questions) {
   questions.forEach((q,i)=> {
     const card=document.createElement('div');card.className='tq-card';const p=document.createElement('p');p.className='tq-text';p.textContent=`${i+1}. ${q.text}`;card.append(p);
     const options=document.createElement('div'); options.className='tq-options';
-    q.options.forEach((o,j)=> {
+    if(q.type==='blank') {
+      const input=document.createElement('input');input.type='text';input.className='blank-answer';input.maxLength=300;input.setAttribute('aria-label',`Answer to question ${i+1}`);input.autocomplete='off';input.value=testAnswers[q.id]||'';
+      input.oninput=()=> { testAnswers[q.id]=input.value;updateVersion++;saveDraft();clearTimeout(draftTimer);draftTimer=setTimeout(uploadDraft,400); };options.append(input);
+    }
+    (q.options||[]).forEach((o,j)=> {
       const label=document.createElement('label');label.className='tq-option';const radio=document.createElement('input');radio.type='radio';radio.name=q.id;radio.value=o.id;radio.checked=testAnswers[q.id]===o.id;
       radio.onchange=()=> { testAnswers[q.id]=o.id; updateVersion++;saveDraft();clearTimeout(draftTimer);draftTimer=setTimeout(uploadDraft,400); };
       const letter=document.createElement('span');letter.className='tq-opt-letter';letter.textContent=String.fromCharCode(65+j);
@@ -72,23 +80,23 @@ function renderTestQuestions(questions) {
   });
 }
 async function uploadDraft() {
-  if(!joined || currentView?.result || currentView?.phase!=='running' || currentView?.mode!=='test') return;
+  if(!joined || currentView?.failed || currentView?.result || currentView?.phase!=='running' || currentView?.mode!=='test') return;
   const version=updateVersion;const res=await emit('student:draft',{answers:testAnswers});
   if(!res.ok) message('Answers saved on this device. Reconnecting to save them to the server…');
   else if(version===updateVersion && !currentView?.failed) message('Answers saved.');
 }
 els.testSubmitBtn.onclick=async()=> {
-  if(submitting || currentView?.result) return;
-  if(!currentView?.test?.questions.every(q=>testAnswers[q.id])) return message('Please answer every question before submitting.');
+  if(submitting || currentView?.failed || currentView?.result) return;
+  if(!currentView?.test?.questions.every(q=>testAnswers[q.id]?.trim())) return message('Please answer every question before submitting.');
   if(!confirm('Submit your answers? You cannot change them after submission.')) return;
   submitting=true;els.testSubmitBtn.disabled=true;clearTimeout(draftTimer);
   const res=await emit('student:submit',{answers:testAnswers});
   submitting=false;els.testSubmitBtn.disabled=false;
   if(res.ok) { message('');showView(res.view); } else message(res.error);
 };
-async function visibility() { if(!joined || !socket.connected) return; const res=await emit('student:visibility',{visible:!document.hidden}); if(!res.ok) message(res.error); }
+async function visibility() { if(!joined || currentView?.result || currentView?.phase==='ended' || !socket.connected) return; const res=await emit('student:visibility',{visible:!document.hidden}); if(!res.ok) message(res.error); }
 document.addEventListener('visibilitychange',visibility);
-window.addEventListener('pagehide',()=> { if(joined) socket.emit('student:visibility',{visible:false},()=>{}); });
+window.addEventListener('pagehide',()=> { if(joined && !currentView?.result && currentView?.phase!=='ended') socket.emit('student:visibility',{visible:false},()=>{}); });
 setInterval(()=> { if(joined) { visibility(); if(currentView?.mode==='test' && !currentView?.result) uploadDraft(); } },3000);
 if(!sessionId) { showJoinError('Scan your professor’s QR code to join.');els.form.querySelector('button').disabled=true; }
 // --- Calculator ---
@@ -104,7 +112,15 @@ let justEvaluated = false;
 const OP_DISPLAY = { '+': '+', '-': '\u2212', '*': '\u00d7', '/': '\u00f7' };
 const SAFE_RE = /^[\d+\-*/.()\s]+$/;
 
+// Keep calculator work on this device through a locked-page reload.
+try {
+  const saved=JSON.parse(localStorage.getItem(calculatorKey)||'null');
+  if(saved && typeof saved.expression==='string' && saved.expression.length<=10000 && (!saved.expression || SAFE_RE.test(saved.expression))) {
+    expression=saved.expression;lastResult=typeof saved.lastResult==='string' && saved.lastResult.length<=300?saved.lastResult:null;justEvaluated=saved.justEvaluated===true;
+  }
+} catch {}
 function render() {
+  try{localStorage.setItem(calculatorKey,JSON.stringify({expression,lastResult,justEvaluated}));}catch{}
   const raw = expression || '0';
   // Pretty-print operators for the top display without changing the eval string.
   let shown = raw.replace(/[+\-*/]/g, (c) => OP_DISPLAY[c] || c);
@@ -221,7 +237,7 @@ function evaluate() {
 
 els.keys.addEventListener('click', (e) => {
   const btn = e.target.closest('button.key');
-  if (!btn) return;
+  if (!btn || currentView?.failed || currentView?.phase!=='running') return;
   const action = btn.dataset.action;
   switch (action) {
     case 'num':         appendNum(btn.dataset.value); break;
@@ -237,7 +253,7 @@ els.keys.addEventListener('click', (e) => {
 
 // Basic keyboard support for desktop testing.
 document.addEventListener('keydown', (e) => {
-  if (els.calcSection.hidden) return;
+  if (els.calcSection.hidden || currentView?.failed || currentView?.phase!=='running') return;
   const k = e.key;
   if (/^[0-9]$/.test(k))         { appendNum(k); e.preventDefault(); return; }
   if (k === '.')                 { appendDot(); e.preventDefault(); return; }

@@ -8,8 +8,11 @@ const { createStore } = require('./store');
 const { authConfig, createVerifier } = require('./auth');
 const exam = require('./exam');
 const { workbook } = require('./export');
+const multer=require('multer');
+const {extractDocument,parseTest,MAX_BYTES}=require('./documents');
+const {createGenerator}=require('./generation');
 
-function createApp({ store, verifyUser, config = {}, sweepInterval = 1000 }) {
+function createApp({ store, verifyUser, config = {}, sweepInterval = 1000, generate=createGenerator(), aiConfigured=Boolean(process.env.OPENAI_API_KEY && process.env.OPENAI_MODEL) }) {
   const app = express();
   const server = http.createServer(app);
   const io = new Server(server, { maxHttpBufferSize: 128 * 1024, cors: { origin: config.origin || false } });
@@ -20,10 +23,10 @@ function createApp({ store, verifyUser, config = {}, sweepInterval = 1000 }) {
     res.set('Cache-Control', 'no-store');
     next();
   });
-  app.use(express.json({ limit: '128kb' }));
+  app.use(express.json({ limit: '1mb' }));
   const wrap = fn => (req, res, next) => Promise.resolve(fn(req, res)).catch(next);
   app.get('/health', wrap(async (req, res) => { await store.activeSessions(); res.json({ ok: true }); }));
-  app.get('/api/config', (req, res) => res.json({ supabaseUrl: config.url || '', supabaseKey: config.key || '' }));
+  app.get('/api/config', (req, res) => res.json({ supabaseUrl: config.url || '', supabaseKey: config.key || '',aiConfigured }));
   app.use('/api', (req, res, next) => Promise.resolve().then(async () => {
     const token = /^Bearer (.+)$/.exec(req.headers.authorization || '')?.[1];
     req.user = await verifyUser(token);
@@ -57,6 +60,28 @@ function createApp({ store, verifyUser, config = {}, sweepInterval = 1000 }) {
     for (const st of s.students) changed(`student:${s.id}:${st.id}`, 'student:update', exam.studentView(s, st));
   }
   api.get('/me', (req, res) => res.json(req.user));
+  const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:MAX_BYTES,files:1,fields:8,fieldSize:70000}}).single('file');
+  const work=new Map();
+  for(const mode of ['import','generate']) api.post(`/${mode}`,upload,wrap(async(req,res)=>{
+    if(mode==='generate' && !aiConfigured)return res.status(503).json({error:'AI generation needs Development OPENAI_API_KEY and OPENAI_MODEL configuration.'});
+    const key=`${req.user.id}:${mode}`,now=Date.now(),previous=work.get(key);
+    const interval=mode==='generate'?3600000:60000,limit=mode==='generate'?5:20;
+    const state=previous && now-previous.start<interval?previous:{start:now,count:0,busy:false};
+    if(state.busy || state.count>=limit)return res.status(429).json({error:'Please wait before processing another document or generation request.'});
+    state.busy=true;state.count++;work.set(key,state);
+    try {
+      const source=req.file?await extractDocument(req.file):(req.body.source || req.body.text);
+      const result=mode==='import'?parseTest(source,req.file?.originalname):await generate({source,count:req.body.count,types:req.body.types,difficulty:req.body.difficulty});
+      res.json(result);
+    } catch(error) {res.status(400).json({error:error.message || 'Unable to process this material.'});}
+    finally {state.busy=false;if(req.file)req.file.buffer.fill(0);}
+  }));
+  api.get('/folders',wrap(async(req,res)=>res.json(await store.listFolders(req.user.id))));
+  api.post('/folders',wrap(async(req,res)=>{
+    const name=typeof req.body.name === 'string' ? req.body.name.trim() : '';
+    if(!name || name.length>80) return res.status(400).json({error:'Folder name must be 1–80 characters.'});
+    res.json(await store.createFolder(req.user.id,name));
+  }));
   api.get('/tests', wrap(async (req, res) => res.json(await store.listTests(req.user.id))));
   api.post('/tests', wrap(async (req, res) => {
     const test = exam.validateTest(req.body);
@@ -64,7 +89,9 @@ function createApp({ store, verifyUser, config = {}, sweepInterval = 1000 }) {
     let id = req.body.id;
     if (id && !await store.getTest(req.user.id, id)) return res.status(404).json({ error: 'Test not found' });
     if (!id) id = require('node:crypto').randomUUID();
-    res.json(await store.saveTest(req.user.id, { ...test, id }));
+    const folderId=req.body.folderId || null;
+    if(folderId && !await store.getFolder(req.user.id,folderId)) return res.status(404).json({error:'Class folder not found'});
+    res.json(await store.saveTest(req.user.id, { ...test, id, folderId }));
   }));
   api.delete('/tests/:id', wrap(async (req, res) => {
     if (!await store.getTest(req.user.id, req.params.id)) return res.status(404).json({ error: 'Test not found' });
@@ -79,6 +106,17 @@ function createApp({ store, verifyUser, config = {}, sweepInterval = 1000 }) {
     await store.createSession(s); res.json(await decorate(s, req));
   }));
   api.get('/sessions/:id', wrap(async (req, res) => res.json(await decorate(await owned(req.params.id, req.user), req))));
+  api.patch('/sessions/:id',wrap(async(req,res)=>{
+    await owned(req.params.id,req.user);
+    const title=typeof req.body.title === 'string' ? req.body.title.trim() : '';
+    if(!title || title.length>120 || /[\x00-\x1f]/.test(title)) return res.status(400).json({error:'Result name must be 1–120 characters.'});
+    const {session}=await store.mutate(req.params.id,s=>{
+      if(s.ownerId!==req.user.id) throw new Error('Session not found');
+      if(s.mode!=='test' || s.phase!=='ended') {const e=new Error('Only completed test results can be renamed');e.status=409;throw e;}
+      s.resultTitle=title;
+    });
+    await broadcast(session);res.json(await decorate(session,req));
+  }));
   api.delete('/sessions/:id', wrap(async (req, res) => {
     await owned(req.params.id, req.user);
     await store.mutate(req.params.id, s => {
@@ -112,6 +150,7 @@ function createApp({ store, verifyUser, config = {}, sweepInterval = 1000 }) {
   app.get('/', (req, res) => res.redirect('/professor.html'));
   app.use((error, req, res, next) => {
     if (res.headersSent) return next(error);
+    if(error instanceof multer.MulterError)return res.status(413).json({error:'Upload one PDF or DOCX file up to 5 MB.'});
     console.error('Request failed:', error.message);
     res.status(error.status || 400).json({ error: error.status === 404 ? 'Session not found' : 'Unable to complete request. Check connection and retry.' });
   });
@@ -157,24 +196,28 @@ function createApp({ store, verifyUser, config = {}, sweepInterval = 1000 }) {
       await broadcast(session);
       return { ...result, view: exam.studentView(session, exam.student(session, result.studentId)) };
     });
-    async function studentMutation(fn) {
+    async function studentMutation(fn, allowLocked=false) {
       const identity = socket.data.student;
       if (!identity) throw new Error('Invalid student session');
-      const { session } = await store.mutate(identity.sessionId, s => {
+      const { session, result } = await store.mutate(identity.sessionId, s => {
         if (exam.student(s, identity.studentId).connectionId !== socket.id) throw new Error('Invalid student connection; resume this page');
-        return fn(s, identity.studentId);
+        // One row-locked operation has one decision time, including nested rules.
+        const now=Date.now();
+        exam.sweep(s,now);
+        if(!allowLocked && exam.isFailed(exam.student(s,identity.studentId))) return {blocked:true};
+        return fn(s, identity.studentId,now);
       });
       await broadcast(session);
-      return { view: exam.studentView(session, exam.student(session, identity.studentId)) };
+      return { ...(result?.blocked ? {ok:false,error:'Call professor: activity is locked'} : {}), view: exam.studentView(session, exam.student(session, identity.studentId)) };
     }
-    on('student:visibility', ({ visible }) => studentMutation((s, id) => exam.visibility(s, id, visible)));
+    on('student:visibility', ({ visible }) => studentMutation((s, id, now) => exam.visibility(s, id, visible,now),true));
     on('student:draft', ({ answers }) => studentMutation((s, id) => {
       if (s.phase !== 'running') throw new Error('Test is not running');
       const st = exam.student(s, id);
       if (st.submission) throw new Error('Student already submitted');
       st.draft = exam.validateAnswers(s, answers);
     }));
-    on('student:submit', ({ answers }) => studentMutation((s, id) => exam.submit(s, id, answers)));
+    on('student:submit', ({ answers }) => studentMutation((s, id, now) => exam.submit(s, id, answers,now)));
     // Disconnection never ends an exam or constitutes confirmed hidden time.
     // Last heartbeat expires to red. Resume tokens reconnect the original enrollment.
     socket.on('disconnect', async () => {
@@ -183,7 +226,7 @@ function createApp({ store, verifyUser, config = {}, sweepInterval = 1000 }) {
       try {
         const { session } = await store.mutate(identity.sessionId, s => {
           const st = exam.student(s, identity.studentId);
-          if (st.connectionId === socket.id) st.lastSeen = 0;
+          if (!st.submission && st.connectionId === socket.id) st.lastSeen = 0;
         });
         await broadcast(session);
       } catch (error) { console.error('Unable to record disconnection:', error.message); }

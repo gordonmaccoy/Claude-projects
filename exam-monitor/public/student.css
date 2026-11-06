@@ -453,3 +453,5 @@ body {
   color: var(--muted);
   line-height: 1.5;
 }
+
+.activity-lock{position:fixed;inset:0;z-index:1000;background:#120808ed;display:grid;place-items:center;padding:24px;text-align:center;color:#ffd8d4}.activity-lock>div{max-width:500px;border:2px solid #b85650;border-radius:18px;padding:36px;background:#381e20}.blank-answer{width:100%;padding:14px;font:inherit;border:1px solid #718877;border-radius:8px}

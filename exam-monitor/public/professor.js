@@ -1,12 +1,12 @@
 const $ = id => document.getElementById(id);
 const els = { tbTitle: $('tb-title'), tbQuestions: $('tb-questions'), tbError: $('tb-error') };
 const socket = io();
-let auth, account, current, historySession, library = [], sessionList = [], editingId = null, tbQuestions = [], popup, recoveringPassword = false;
+let auth, account, current, historySession, library = [], folders = [], aiConfigured=false, importMode="import", sessionList = [], editingId = null, tbQuestions = [], popup, recoveringPassword = false;
 let accountGeneration = 0;
 let popupSessionId = null, openingDisplay = false, launching = false;
 function clearPrivateWorkspace() {
   accountGeneration++;
-  current=null; historySession=null; library=[]; sessionList=[]; editingId=null; tbQuestions=[];
+  current=null; historySession=null; library=[]; folders=[]; sessionList=[]; $('import-source').value='';$('import-file').value='';$('import-panel').hidden=true;$('draft-review').textContent=''; editingId=null; tbQuestions=[];
   for(const id of ['launch-tests','library-tests','active-sessions','result-sessions','live-students','result-students','tb-questions']) $(id).replaceChildren();
   for(const id of ['dashboard','result-detail','test-builder']) $(id).hidden=true;
   $('calculator-card').hidden=false;
@@ -33,26 +33,35 @@ document.querySelectorAll('[data-tab]').forEach(el => el.onclick = () => { tab(e
 function button(text, fn, className = '') { const b = document.createElement('button'); b.textContent = text; b.className = className; b.onclick = action(fn); return b; }
 function card(title, subtitle) { const c = document.createElement('article'); c.className = 'card'; const h = document.createElement('h3'); h.textContent = title; const p = document.createElement('p'); p.textContent = subtitle; c.append(h,p); return c; }
 async function refresh() {
-  [library, sessionList] = await Promise.all([api('/tests'), api('/sessions')]);
+  [library, sessionList, folders] = await Promise.all([api('/tests'), api('/sessions'),api('/folders')]);
+  renderFolderOptions();
   for (const id of ['launch-tests', 'library-tests', 'active-sessions', 'result-sessions']) $(id).replaceChildren();
   if (!library.length) {
     $('launch-tests').append(card('A fresh start', 'Create your first test in Library, or launch the calculator.'));
     $('library-tests').append(card('Your library starts here', 'Save a test and use it again with any class.'));
   }
+  const groups={};
+  for(const root of ['launch-tests','library-tests']) for(const folder of [...folders,{id:'',name:'Unfiled'}]) {
+    const count=library.filter(t=>(t.folderId||'')===folder.id).length;
+    if(!count && !folders.some(f=>f.id===folder.id))continue;
+    const detail=document.createElement('details');detail.className='folder';detail.open=true;
+    const summary=document.createElement('summary');summary.textContent=`${folder.name} (${count})`;detail.append(summary);
+    const list=document.createElement('div');list.className='cards';detail.append(list);$(root).append(detail);groups[root+folder.id]=list;
+  }
   for (const test of library) {
     const launch = card(test.title, `${test.questions.length} questions · Saved test`);
-    launch.append(button('Launch test ↗', () => launchSession({ testId: test.id }), 'primary')); $('launch-tests').append(launch);
+    launch.append(button('Launch test ↗', () => launchSession({ testId: test.id }), 'primary')); (groups['launch-tests'+(test.folderId||'')]||$('launch-tests')).append(launch);
     const saved = card(test.title, `${test.questions.length} questions`); const actions = document.createElement('div'); actions.className = 'actions';
     actions.append(button('Edit', () => openBuilder(test)), button('Delete', async () => {
       if (!confirm(`Delete “${test.title}” from your library? Existing sessions keep their copy.`)) return;
       await api(`/tests/${test.id}`, 'DELETE'); await refresh();
-    })); saved.append(actions); $('library-tests').append(saved);
+    })); saved.append(actions); (groups['library-tests'+(test.folderId||'')]||$('library-tests')).append(saved);
   }
   for (const s of sessionList) {
     if (s.mode === 'test') {
       const c = card(s.title, `${new Date(s.createdAt).toLocaleString()} · ${s.phase} · ${s.students.length} joined`);
       c.append(button('View results', async () => { historySession = await api(`/sessions/${s.id}`); renderResults(); }));
-      if(s.phase === 'ended') c.append(button('Delete results', () => deleteResults(s), 'danger'));
+      if(s.phase === 'ended') c.append(button('Rename results',()=>renameResults(s)),button('Delete results', () => deleteResults(s), 'danger'));
       $('result-sessions').append(c);
     }
     if (s.phase !== 'ended') $('active-sessions').append(button(`${s.title} · ${s.phase}`, () => openSession(s.id)));
@@ -62,8 +71,8 @@ async function refresh() {
 }
 function openBuilder(test) {
   tab('library'); editingId = test?.id || null;
-  $('test-builder').hidden = false; $('builder-heading').textContent = test ? 'Edit test' : 'Create a test';
-  els.tbTitle.value = test?.title || ''; tbQuestions = structuredClone(test?.questions || []); hideTbError();
+  $('test-builder').hidden = false; $('builder-heading').textContent = test?.id ? 'Edit test' : 'Create a test';
+  els.tbTitle.value = test?.title || ''; renderFolderOptions(test?.folderId||''); $('draft-review').textContent=''; tbQuestions = structuredClone(test?.questions || []); hideTbError();
   if (!tbQuestions.length) addQuestion(); else renderTestBuilder();
   $('test-builder').scrollIntoView({ behavior: 'smooth' });
 }
@@ -158,12 +167,12 @@ function renderDashboard() {
 function renderTable(container, session) {
   const table = document.createElement('table');
   if(session.mode === 'calculator') {
-    table.innerHTML='<thead><tr><th>Student number</th><th>Name</th><th>Status</th></tr></thead>';
+    table.innerHTML='<thead><tr><th>Student number</th><th>Name</th><th>Status</th><th>Review</th></tr></thead>';
     const body=document.createElement('tbody');
     for(const s of session.students) {
       const row=document.createElement('tr');
-      for(const value of [s.number,s.name,s.status === 'green' ? 'Active' : 'Inactive']) { const cell=document.createElement('td'); cell.textContent=value; row.append(cell); }
-      body.append(row);
+      for(const value of [s.number,s.name,s.failed ? 'FAILED' : s.status === 'green' ? 'Active' : 'Inactive']) { const cell=document.createElement('td'); cell.textContent=value; row.append(cell); }
+      const review=document.createElement('td');if(s.failed)review.append(button('Unlock & continue',()=>unlockStudent(session,s)));row.append(review);body.append(row);
     }
     table.append(body); container.replaceChildren(table); return;
   }
@@ -172,21 +181,16 @@ function renderTable(container, session) {
   for (const s of [...session.students].sort((a,b) => a.number.localeCompare(b.number, undefined, { numeric:true }))) {
     const tr = document.createElement('tr');
     for (const text of [s.number,s.name]) { const td=document.createElement('td'); td.textContent=text; tr.append(td); }
-    const state=document.createElement('td'); const pill=document.createElement('span'); pill.className=`pill ${s.status === 'red' ? 'red' : ''}`; pill.textContent=s.failed ? 'FAIL' : s.status === 'green' ? 'Active' : 'Inactive'; state.append(pill); tr.append(state);
+    const state=document.createElement('td'); const pill=document.createElement('span'); pill.className=`pill ${s.status === 'red' ? 'red' : ''}`; pill.textContent=s.failed ? 'FAILED' : s.result ? 'Test Submitted' : s.status === 'green' ? 'Active' : 'Inactive'; state.append(pill); tr.append(state);
     for (const text of [s.score === null ? 'Pending' : `${s.score} / ${s.total}${s.result ? ` · ${s.result.percentage}%` : ''}`, s.result ? `${s.result.originalScore} / ${s.total}` : '—']) { const td=document.createElement('td'); td.textContent=text; tr.append(td); }
     const review=document.createElement('td');
-    if (s.failed) review.append(button('Override FAIL', async () => {
-      const reason = prompt(`Reason for overriding ${s.name}’s FAIL:`); if (!reason?.trim()) return;
-      const updated=await api(`/sessions/${session.id}/override`, 'POST', { studentId:s.id, reason });
-      if (current?.id === updated.id) { current=updated; renderDashboard(); }
-      if (historySession?.id === updated.id) { historySession=updated; renderResults(); }
-    }));
+    if(s.failed) review.append(button(s.result?'Override FAIL':'Unlock & continue',()=>unlockStudent(session,s)));
     const details=document.createElement('details'); const summary=document.createElement('summary'); summary.textContent=`${s.events.length} monitoring events`; details.append(summary);
     const list=document.createElement('ul'); for (const e of s.events) { const li=document.createElement('li'); li.textContent=`${new Date(e.at).toLocaleTimeString()} · ${e.type}${e.reason ? ` · ${e.reason}` : ''}`; list.append(li); } details.append(list); review.append(details); tr.append(review); tbody.append(tr);
   }
   table.append(tbody); container.replaceChildren(table);
 }
-function renderResults() { $('result-detail').hidden=false; $('result-title').textContent=historySession.title; $('result-delete').hidden=historySession.phase !== 'ended'; renderTable($('result-students'),historySession); }
+function renderResults() { $('result-detail').hidden=false; $('result-title').textContent=historySession.title; $('result-delete').hidden=historySession.phase !== 'ended'; $('result-rename').hidden=historySession.phase !== 'ended'; renderTable($('result-students'),historySession); }
 async function deleteResults(session) {
   if(!confirm(`Delete saved results for “${session.title}”? The library test will be kept.`)) return;
   await api(`/sessions/${session.id}`, 'DELETE');
@@ -212,6 +216,7 @@ async function signedIn() {
 async function initAuth() {
   const config=await (await fetch('/api/config')).json();
   if (!config.supabaseUrl || !config.supabaseKey) { $('auth-message').textContent='Professor sign-in needs Development authentication configuration. See V2_SETUP.md.'; $('login').querySelectorAll('input,button').forEach(el=>el.disabled=true); return; }
+  aiConfigured=Boolean(config.aiConfigured);
   auth=window.createOnScreenAuth(config.supabaseUrl, config.supabaseKey, {auth:{flowType:'pkce',detectSessionInUrl:true}});
   auth.auth.onAuthStateChange((event) => {
     if (event==='PASSWORD_RECOVERY') { recoveringPassword=true; $('login').hidden=false; $('workspace').hidden=true; $('login-form').hidden=true; $('google').hidden=true; $('new-password-form').hidden=false; }
@@ -227,146 +232,74 @@ async function initAuth() {
   if ((await auth.auth.getSession()).data.session) await signedIn();
 }
 initAuth().catch(e=>$('auth-message').textContent=e.message);
+
+function renderFolderOptions(selected=$('tb-folder').value) {
+  $('tb-folder').replaceChildren(...[{id:'',name:'Unfiled'},...folders].map(f=>{const o=document.createElement('option');o.value=f.id;o.textContent=f.name;return o;}));$('tb-folder').value=selected;
+}
+$('new-folder').onclick=action(async()=> { const name=prompt('Class folder name:');if(!name?.trim())return;await api('/folders','POST',{name:name.trim()});await refresh(); });
+async function unlockStudent(session,student) {
+  const reason=prompt(`Reason for unlocking or overriding ${student.name}’s FAIL:`);if(!reason?.trim())return;
+  const updated=await api(`/sessions/${session.id}/override`,'POST',{studentId:student.id,reason});
+  if(current?.id===updated.id){current=updated;renderDashboard();}if(historySession?.id===updated.id){historySession=updated;renderResults();}
+}
+async function renameResults(session) {
+  const title=prompt('Name these results (for example, class and section):',session.title);if(!title?.trim())return;
+  const updated=await api(`/sessions/${session.id}`,'PATCH',{title:title.trim()});
+  if(current?.id===updated.id){current=updated;renderDashboard();}if(historySession?.id===updated.id){historySession=updated;renderResults();}await refresh();
+}
+$('result-rename').onclick=action(()=>renameResults(historySession));
+function openImport(mode) {
+  importMode=mode;$('import-panel').hidden=false;$('ai-options').hidden=mode!=='generate';$('import-heading').textContent=mode==='generate'?'Create with AI':'Upload a test';
+  $('import-help').textContent=mode==='generate'?'Create new questions from lecture notes or other source material. Review the generated answers and source excerpts before saving.':'Upload a ready-made test with numbered questions, A. / B. options and Answer: A, marked correct options, or an Answer key: block. For blanks, use Answer: value (alternatives separated by |). Missing answers will be flagged for your review. Text-based PDF and Word DOCX supported; scanned files need OCR first.';
+  $('ai-config-note').textContent=aiConfigured?'':'AI setup is required in Development before generation is available.';$('import-status').textContent='';$('import-submit').disabled=mode==='generate'&&!aiConfigured;$('import-panel').scrollIntoView({behavior:'smooth'});
+}
+$('upload-test').onclick=()=>openImport('import');$('create-ai').onclick=()=>openImport('generate');$('import-cancel').onclick=()=> $('import-panel').hidden=true;
+$('import-form').onsubmit=action(async e=> {
+  e.preventDefault();if(importMode==='generate'&&!$('ai-consent').checked) {$('import-status').textContent='Confirm that this source may be sent to OpenAI.';return;}
+  const data=new FormData(),file=$('import-file').files[0];if(file)data.append('file',file);else data.append('source',$('import-source').value);
+  if(importMode==='generate')for(const key of ['count','types','difficulty'])data.append(key,$('ai-'+key).value);
+  const generation=accountGeneration;$('import-submit').disabled=true;$('import-status').textContent=importMode==='generate'?'Creating a draft…':'Reading your test…';
+  try {
+    const response=await fetch('/api/'+importMode,{method:'POST',headers:{Authorization:'Bearer '+await token()},body:data});const result=await response.json();
+    if(generation!==accountGeneration)return;if(!response.ok)throw new Error(result.error||'Could not prepare draft.');
+    openBuilder(result.test);editingId=null;$('draft-review').textContent=['Review every question and answer before saving.',...(result.warnings||[])].join(' ');$('import-panel').hidden=true;$('import-source').value='';$('import-file').value='';
+  } catch(e) {if(generation===accountGeneration)$('import-status').textContent=e.message;}
+  finally {if(generation===accountGeneration)$('import-submit').disabled=importMode==='generate'&&!aiConfigured;}
+});
 function addQuestion() {
-  const qId = 'q' + Date.now() + Math.random().toString(36).slice(2, 5);
-  tbQuestions.push({
-    id: qId,
-    text: '',
-    options: [
-      { id: qId + '_a', text: '' },
-      { id: qId + '_b', text: '' },
-    ],
-    correctOptionId: '',
-  });
-  renderTestBuilder();
-  // Focus the new question's text input.
-  const cards = els.tbQuestions.querySelectorAll('.tb-q-card');
-  const lastCard = cards[cards.length - 1];
-  if (lastCard) lastCard.querySelector('.tb-q-text')?.focus();
+ const id='q_'+crypto.randomUUID();tbQuestions.push({id,type:'mc',text:'',options:[{id:id+'_a',text:''},{id:id+'_b',text:''}],correctOptionId:''});renderTestBuilder();els.tbQuestions.lastElementChild?.querySelector('.tb-q-text').focus();
 }
-
-function removeQuestion(qIdx) {
-  if (tbQuestions.length <= 1) return; // Must have at least one question.
-  tbQuestions.splice(qIdx, 1);
-  renderTestBuilder();
-}
-
-function addOption(qIdx) {
-  const q = tbQuestions[qIdx];
-  if (q.options.length >= 5) return;
-  q.options.push({ id: q.id + '_' + Date.now(), text: '' });
-  renderTestBuilder();
-}
-
-function removeOption(qIdx, oIdx) {
-  const q = tbQuestions[qIdx];
-  if (q.options.length <= 2) return;
-  const removed = q.options.splice(oIdx, 1)[0];
-  if (q.correctOptionId === removed.id) q.correctOptionId = '';
-  renderTestBuilder();
-}
-
+function moveQuestion(from,to) {if(to<0||to>=tbQuestions.length||from===to)return;tbQuestions.splice(to,0,tbQuestions.splice(from,1)[0]);renderTestBuilder();}
+let draggingQuestion=null;
 function renderTestBuilder() {
-  els.tbQuestions.innerHTML = '';
-  tbQuestions.forEach((q, qIdx) => {
-    const card = document.createElement('div');
-    card.className = 'tb-q-card';
-    card.innerHTML = `
-      <div class="tb-q-header">
-        <span class="tb-q-num">Q${qIdx + 1}</span>
-        ${tbQuestions.length > 1
-          ? `<button class="tb-remove-q btn-icon" data-qidx="${qIdx}" title="Remove question">✕</button>`
-          : ''}
-      </div>
-      <input class="tb-q-text" type="text" placeholder="Question text…" maxlength="300"
-        value="${escHtml(q.text)}" data-qidx="${qIdx}" autocomplete="off" />
-      <div class="tb-options">
-        ${q.options.map((o, oIdx) => `
-          <div class="tb-option-row">
-            <input type="radio" name="${escHtml(q.id)}" value="${escHtml(o.id)}" id="${escHtml(o.id)}_radio"
-              ${q.correctOptionId === o.id ? 'checked' : ''}
-              data-qidx="${qIdx}" data-oidx="${oIdx}" />
-            <label for="${escHtml(o.id)}_radio" class="tb-correct-label" title="Mark as correct"></label>
-            <input class="tb-opt-text" type="text" placeholder="Option ${String.fromCharCode(65 + oIdx)}…"
-              maxlength="200" value="${escHtml(o.text)}"
-              data-qidx="${qIdx}" data-oidx="${oIdx}" autocomplete="off" />
-            ${q.options.length > 2
-              ? `<button class="btn-icon tb-remove-opt" data-qidx="${qIdx}" data-oidx="${oIdx}" title="Remove option">✕</button>`
-              : ''}
-          </div>
-        `).join('')}
-      </div>
-      ${q.options.length < 5
-        ? `<button class="tb-add-opt-btn btn-ghost btn-sm" data-qidx="${qIdx}">+ Add Option</button>`
-        : ''}
-    `;
-    els.tbQuestions.appendChild(card);
-  });
-
-  // Wire events (delegated on the container would be cleaner but explicit is fine for MVP).
-  els.tbQuestions.querySelectorAll('.tb-q-text').forEach(input => {
-    input.addEventListener('input', e => {
-      tbQuestions[+e.target.dataset.qidx].text = e.target.value;
-    });
-  });
-  els.tbQuestions.querySelectorAll('.tb-opt-text').forEach(input => {
-    input.addEventListener('input', e => {
-      tbQuestions[+e.target.dataset.qidx].options[+e.target.dataset.oidx].text = e.target.value;
-    });
-  });
-  els.tbQuestions.querySelectorAll('input[type=radio]').forEach(radio => {
-    radio.addEventListener('change', e => {
-      tbQuestions[+e.target.dataset.qidx].correctOptionId = e.target.value;
-    });
-  });
-  els.tbQuestions.querySelectorAll('.tb-remove-q').forEach(btn => {
-    btn.addEventListener('click', e => removeQuestion(+e.currentTarget.dataset.qidx));
-  });
-  els.tbQuestions.querySelectorAll('.tb-remove-opt').forEach(btn => {
-    btn.addEventListener('click', e =>
-      removeOption(+e.currentTarget.dataset.qidx, +e.currentTarget.dataset.oidx));
-  });
-  els.tbQuestions.querySelectorAll('.tb-add-opt-btn').forEach(btn => {
-    btn.addEventListener('click', e => addOption(+e.currentTarget.dataset.qidx));
-  });
-}
-
-function escHtml(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
-
-function collectTest() {
-  const title = els.tbTitle.value.trim();
-  if (!title) return { error: 'Please enter a test title.' };
-
-  // Read current values from DOM to catch any unsaved edits.
-  els.tbQuestions.querySelectorAll('.tb-q-text').forEach(inp => {
-    tbQuestions[+inp.dataset.qidx].text = inp.value.trim();
-  });
-  els.tbQuestions.querySelectorAll('.tb-opt-text').forEach(inp => {
-    tbQuestions[+inp.dataset.qidx].options[+inp.dataset.oidx].text = inp.value.trim();
-  });
-
-  for (let i = 0; i < tbQuestions.length; i++) {
-    const q = tbQuestions[i];
-    if (!q.text) return { error: `Q${i + 1}: Question text is required.` };
-    for (let j = 0; j < q.options.length; j++) {
-      if (!q.options[j].text) return { error: `Q${i + 1}: Option ${String.fromCharCode(65 + j)} text is required.` };
-    }
-    if (!q.correctOptionId) return { error: `Q${i + 1}: Please mark the correct answer.` };
+ els.tbQuestions.replaceChildren();
+ tbQuestions.forEach((q,i)=> {
+  const card=document.createElement('div');card.className='tb-q-card';card.dataset.index=i;
+  const header=document.createElement('div');header.className='tb-q-header';const handle=document.createElement('span');handle.textContent='⠿ Q'+(i+1);handle.draggable=true;handle.className='drag-handle';handle.title='Drag to reorder';handle.ondragstart=e=>{draggingQuestion=i;e.dataTransfer.setData('text/plain',String(i));e.dataTransfer.effectAllowed='move';};handle.ondragend=()=>draggingQuestion=null;
+  card.ondragover=e=> {if(draggingQuestion!==null)e.preventDefault();};card.ondrop=e=> {e.preventDefault();if(draggingQuestion!==null)moveQuestion(draggingQuestion,i);draggingQuestion=null;};header.append(handle);
+  const up=button('↑',()=>moveQuestion(i,i-1));up.disabled=i===0;up.setAttribute('aria-label','Move question '+(i+1)+' up');const down=button('↓',()=>moveQuestion(i,i+1));down.disabled=i===tbQuestions.length-1;down.setAttribute('aria-label','Move question '+(i+1)+' down');header.append(up,down);
+  if(tbQuestions.length>1)header.append(button('Remove question',()=>{tbQuestions.splice(i,1);renderTestBuilder();}));card.append(header);
+  const type=document.createElement('select');type.className='tb-q-type';type.setAttribute('aria-label','Question '+(i+1)+' type');for(const [value,label] of [['mc','Multiple choice'],['blank','Fill in the blank']]){const o=document.createElement('option');o.value=value;o.textContent=label;type.append(o);}type.value=q.type||'mc';type.onchange=()=>{q.type=type.value;if(q.type==='blank'){q.acceptedAnswers=q.acceptedAnswers||[];q.caseSensitive=q.caseSensitive||false;}else if(!q.options){q.options=[{id:q.id+'_a',text:''},{id:q.id+'_b',text:''}];q.correctOptionId='';}renderTestBuilder();};card.append(type);
+  const text=document.createElement('input');text.className='tb-q-text';text.placeholder='Question text…';text.setAttribute('aria-label','Question '+(i+1)+' text');text.maxLength=1000;text.value=q.text;text.oninput=()=>q.text=text.value;card.append(text);
+  if(q.type==='blank') {
+   const label=document.createElement('label');label.textContent='Accepted answers (one per line)';const answers=document.createElement('textarea');answers.className='tb-accepted';answers.rows=3;answers.value=(q.acceptedAnswers||[]).join('\n');answers.oninput=()=>q.acceptedAnswers=answers.value.split('\n').map(s=>s.trim()).filter(Boolean);label.append(answers);card.append(label);
+   const sensitive=document.createElement('label');const check=document.createElement('input');check.type='checkbox';check.checked=q.caseSensitive;check.onchange=()=>q.caseSensitive=check.checked;sensitive.append(check,' Case sensitive');card.append(sensitive);
+  } else {
+   (q.options||[]).forEach((o,j)=>{const row=document.createElement('div');row.className='tb-option-row';const radio=document.createElement('input');radio.type='radio';radio.name=q.id;radio.checked=q.correctOptionId===o.id;radio.setAttribute('aria-label','Correct answer '+String.fromCharCode(65+j));radio.onchange=()=>q.correctOptionId=o.id;const input=document.createElement('input');input.className='tb-opt-text';input.maxLength=500;input.placeholder='Option '+String.fromCharCode(65+j);input.value=o.text;input.oninput=()=>o.text=input.value;row.append(radio,input);if(q.options.length>2)row.append(button('Remove option',()=>{q.options.splice(j,1);if(q.correctOptionId===o.id)q.correctOptionId='';renderTestBuilder();}));card.append(row);});
+   if(q.options.length<5)card.append(button('+ Add Option',()=>{q.options.push({id:q.id+'_'+crypto.randomUUID(),text:''});renderTestBuilder();}));
   }
-
-  return { test: { title, questions: tbQuestions } };
+  if(q.evidence){const evidence=document.createElement('p');evidence.className='source-evidence';evidence.textContent='Source excerpt: '+q.evidence;card.append(evidence);}els.tbQuestions.append(card);
+ });
 }
-
-function showTbError(msg) {
-  els.tbError.textContent = msg;
-  els.tbError.hidden = false;
+function collectTest() {
+ const title=els.tbTitle.value.trim();if(!title)return {error:'Please enter a test title.'};
+ for(const [i,q] of tbQuestions.entries()) {
+  if(!q.text.trim())return {error:'Q'+(i+1)+': Question text is required.'};
+  if(q.type==='blank'){if(!q.acceptedAnswers?.length||q.acceptedAnswers.length>20||q.acceptedAnswers.some(a=>a.length>300))return {error:'Q'+(i+1)+': Enter 1–20 accepted answers, each up to 300 characters.'};}
+  else {if(q.options.some(o=>!o.text.trim()))return {error:'Q'+(i+1)+': Each option needs text.'};if(!q.correctOptionId)return {error:'Q'+(i+1)+': Please mark the correct answer.'};}
+ }
+ const questions=tbQuestions.map(q=>q.type==='blank'?{id:q.id,type:'blank',text:q.text,acceptedAnswers:q.acceptedAnswers,caseSensitive:q.caseSensitive,...(q.evidence?{evidence:q.evidence}:{})}:{id:q.id,type:'mc',text:q.text,options:q.options,correctOptionId:q.correctOptionId,...(q.evidence?{evidence:q.evidence}:{})});
+ return {test:{title,folderId:$('tb-folder').value||null,questions}};
 }
-function hideTbError() {
-  els.tbError.hidden = true;
-}
+function showTbError(msg){els.tbError.textContent=msg;els.tbError.hidden=false;}
+function hideTbError(){els.tbError.hidden=true;}
