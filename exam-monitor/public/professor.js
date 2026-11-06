@@ -71,7 +71,7 @@ $('tb-start-btn').onclick = action(async () => {
 });
 async function launchSession(payload) {
   // Reserve a window synchronously in the user's click, before the network call.
-  popup = window.open('/classroom.html', '_blank', 'popup,width=1100,height=780');
+  popup = window.open('/classroom.html', 'onscreen-classroom-display', 'popup,width=1100,height=780');
   try {
     current = await api('/sessions', 'POST', payload);
     if (popup) popup.location.replace(current.displayUrl);
@@ -88,7 +88,12 @@ async function watch() {
   if (!res.ok) throw new Error(res.error);
 };
 $('calculator-launch').onclick = action(() => launchSession({ mode: 'calculator' }));
-$('display-open').onclick = () => { if (current) window.open(current.displayUrl, '_blank', 'popup,width=1100,height=780'); };
+$('display-open').onclick = () => {
+  if (!current) return;
+  popup = window.open(current.displayUrl, 'onscreen-classroom-display', 'popup,width=1100,height=780');
+  if (popup) popup.focus();
+  else notice('Your browser blocked the classroom window. Allow popups for OnScreen and try again.');
+};
 $('test-start').onclick = action(async () => { if (!confirm('Start this test now? Hidden pages for more than 5 seconds will receive FAIL.')) return; current = await api(`/sessions/${current.id}/start`, 'POST', {}); renderDashboard(); });
 $('session-end').onclick = action(async () => { if (!confirm('End this session? Students will no longer be able to submit.')) return; current = await api(`/sessions/${current.id}/end`, 'POST', {}); renderDashboard(); await refresh(); });
 function renderDashboard() {

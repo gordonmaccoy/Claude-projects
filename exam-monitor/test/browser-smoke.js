@@ -34,6 +34,11 @@ async function main() {
     await page.getByRole('button',{name:'Launch',exact:true}).click();
     const popupPromise=context.waitForEvent('page');await page.getByRole('button',{name:'Launch test ↗'}).click();const display=await popupPromise;
     await display.locator('#qr-toggle').waitFor({state:'visible'});
+    await page.getByRole('button',{name:'Open classroom display ↗',exact:true}).click();
+    assert.equal(context.pages().length,2,'Open classroom display must reuse the window created by Launch');
+    await page.getByRole('button',{name:'Open classroom display ↗',exact:true}).click();
+    assert.equal(context.pages().length,2,'Repeated display requests must not create extra windows');
+    await display.locator('#qr-toggle').waitFor({state:'visible'});
     await display.locator('#qr-toggle').click();assert.equal(await display.locator('#qr-toggle').getAttribute('aria-expanded'),'true');await display.locator('#qr-toggle').click();
     const session=(await store.listSessions('alice'))[0];
     const studentContext=await browser.newContext({viewport:{width:390,height:844}});const student=await studentContext.newPage();student.on('pageerror',e=>errors.push(e.message));student.on('dialog',d=>d.accept());

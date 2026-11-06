@@ -6,9 +6,19 @@ Repository: `gordonmaccoy/Claude-projects`, root `/exam-monitor`, branch `onscre
 
 Only Railway **Development** is authorized. Startup refuses a Railway environment whose name is not `Development` (case-insensitive). Never merge PR #6 or change production source/settings as part of this work.
 
-Inspected 2026-11-06 (Asia/Seoul): project `carefree-cat`, app service `Claude-projects`, environment `Development`, branch `onscreen/test-mode-hardening`, PostgreSQL `Postgres-KnuT`, one replica. Only `DATABASE_URL` was configured. Public networking had no domain; the existing custom build command was `npm install`. No production settings were changed.
+Initial inspection on 2026-11-06 (Asia/Seoul): project `carefree-cat`, app service `Claude-projects`, environment `Development`, branch `onscreen/test-mode-hardening`, PostgreSQL `Postgres-KnuT`, one replica. Only `DATABASE_URL` was configured. Public networking had no domain; the existing custom build command was `npm install`. No production settings were changed.
 
-## Required configuration
+## Current Development configuration (2026-11-06)
+
+- App: https://claude-projects-development.up.railway.app/professor.html
+- Railway Development has APP_ORIGIN, SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY configured; DATABASE_URL remains the separate Railway Development database.
+- Supabase Auth: onscreen-development, project manrnfqgtarscisbkyna, Seoul region.
+- Site URL and exact professor.html redirect are configured. Email with confirmation and Google are enabled.
+- Google Cloud project: onscreen-development; web OAuth client: OnScreen Development Web. Google remains in Testing mode; gordon.maccoy@gmail.com is an approved test user. The client secret is stored only in Supabase provider configuration, never in source.
+- Live Google callback verified: the Development professor workspace displayed the signed-in account.
+- Classroom launch and reopen use the same named window; reopening focuses/reuses it instead of creating another display.
+
+## Configuration reference
 
 1. Keep `DATABASE_URL` referencing the **Development** PostgreSQL instance. Do not paste it into browser code or source control. Startup initializes additive V2 tables and refuses to run without storage.
 2. Generate/use a public HTTPS domain for the **Development app service** so student QR joins are reachable. Set `APP_ORIGIN=https://<development-domain>` with no trailing slash. If omitted, the app uses Railway's automatic `RAILWAY_PUBLIC_DOMAIN`. A service without a public domain can start, but phones cannot reach its QR links.
@@ -47,4 +57,4 @@ After configuration, manual Development-only acceptance:
 - Restart app and Development database; resume professor session/student draft and final submission; verify historical results remain.
 - Open exported workbook in Excel and verify leading-zero identifiers, natural student-number order and effective grades.
 
-Live OAuth/email and Railway database-restart acceptance remain pending until configuration is supplied. Automated checks alone do not certify real-phone visibility behavior.
+Live Google sign-in has been verified through the professor workspace. Real email confirmation/password-reset delivery, Railway database-restart acceptance and real-phone visibility checks remain pending. Automated checks alone do not certify real-phone visibility behavior.
