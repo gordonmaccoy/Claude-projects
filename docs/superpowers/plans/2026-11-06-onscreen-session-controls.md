@@ -21,3 +21,5 @@ User requirements are concrete; extend existing Development implementation. Root
 - Import-process check was intermittent under concurrent local runs, without a useful native error; unchanged import module passed five isolated runs and subsequent full suite. No speculative implementation change made.
 
 - Verification: build and syntax checks pass; all18 automated tests pass. Expanded browser flow passed with prompt() throwing; confirms in-app folder/rename/unlock forms, terminal zero/reload, viewed/focused progress, Unicode-name export, cross-tab close, empty active section and existing privacy/popup regressions.
+
+- Visual verification caught submitted students counted as active. Added browser assertion:0 active after both normal/fail submission; observed failure before filtering completed results from active count.

@@ -159,7 +159,7 @@ function renderDashboard() {
   $('test-start').hidden = current.phase !== 'waiting'; $('session-end').hidden = current.phase === 'ended';
   $('live-export').hidden = current.mode !== 'test';$('session-rename').hidden=current.mode!=='test';
   const scores = current.students.filter(s => s.result).map(s => s.result.percentage);
-  $('live-summary').textContent = `${current.students.length} joined · ${current.students.filter(s => s.status === 'green').length} active` +
+  $('live-summary').textContent = `${current.students.length} joined · ${current.students.filter(s => s.status === 'green' && !s.result).length} active` +
     (current.mode === 'test' ? ` · ${scores.length} submitted · ${current.students.filter(s => s.failed).length} FAIL${scores.length ? ` · Average ${Math.round(scores.reduce((a,b) => a+b,0)/scores.length)}%` : ''}` : '');
   renderTable($('live-students'), current);
 }
