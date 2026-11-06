@@ -3,11 +3,13 @@ const els = { tbTitle: $('tb-title'), tbQuestions: $('tb-questions'), tbError: $
 const socket = io();
 let auth, account, current, historySession, library = [], sessionList = [], editingId = null, tbQuestions = [], popup, recoveringPassword = false;
 let accountGeneration = 0;
+let popupSessionId = null, openingDisplay = false, launching = false;
 function clearPrivateWorkspace() {
   accountGeneration++;
   current=null; historySession=null; library=[]; sessionList=[]; editingId=null; tbQuestions=[];
   for(const id of ['launch-tests','library-tests','active-sessions','result-sessions','live-students','result-students','tb-questions']) $(id).replaceChildren();
   for(const id of ['dashboard','result-detail','test-builder']) $(id).hidden=true;
+  $('calculator-card').hidden=false;
   for(const id of ['session-title','session-phase','live-summary','result-title','account-name','notice','tb-error']) $(id).textContent='';
   $('tb-title').value=''; $('password').value='';
   socket.disconnect();
@@ -47,11 +49,15 @@ async function refresh() {
     })); saved.append(actions); $('library-tests').append(saved);
   }
   for (const s of sessionList) {
-    const c = card(s.title, `${new Date(s.createdAt).toLocaleString()} · ${s.phase} · ${s.students.length} joined`);
-    c.append(button('View results', async () => { historySession = await api(`/sessions/${s.id}`); renderResults(); })); $('result-sessions').append(c);
+    if (s.mode === 'test') {
+      const c = card(s.title, `${new Date(s.createdAt).toLocaleString()} · ${s.phase} · ${s.students.length} joined`);
+      c.append(button('View results', async () => { historySession = await api(`/sessions/${s.id}`); renderResults(); }));
+      if(s.phase === 'ended') c.append(button('Delete results', () => deleteResults(s), 'danger'));
+      $('result-sessions').append(c);
+    }
     if (s.phase !== 'ended') $('active-sessions').append(button(`${s.title} · ${s.phase}`, () => openSession(s.id)));
   }
-  if (!sessionList.length) $('result-sessions').append(card('No sessions yet', 'Your classroom results will be saved here.'));
+  if (!sessionList.some(s => s.mode === 'test')) $('result-sessions').append(card('No test results yet', 'Results from tests will be saved here. Calculator sessions do not create results.'));
   if (!sessionList.some(s => s.phase !== 'ended')) $('active-sessions').textContent = 'No open sessions.';
 }
 function openBuilder(test) {
@@ -70,14 +76,50 @@ $('tb-start-btn').onclick = action(async () => {
   $('test-builder').hidden = true; await refresh(); notice('Test saved.');
 });
 async function launchSession(payload) {
-  // Reserve a window synchronously in the user's click, before the network call.
-  popup = window.open('/classroom.html', 'onscreen-classroom-display', 'popup,width=1100,height=780');
+  if (launching) return;
+  launching = true;
   try {
     current = await api('/sessions', 'POST', payload);
-    if (popup) popup.location.replace(current.displayUrl);
+    await openClassroomDisplay(current);
     await watch(); renderDashboard(); tab('launch'); await refresh();
-    if (!popup) notice('Your browser blocked the classroom window. Use “Open classroom display”.');
-  } catch (e) { if (popup) popup.close(); throw e; }
+  } finally { launching = false; }
+}
+async function openClassroomDisplay(session) {
+  if (openingDisplay) return;
+  openingDisplay = true;
+  $('display-open').disabled = true;
+  $('calculator-launch').disabled = true;
+  try {
+    const groupStorageKey=`onscreen-display-group-${account.id}`;
+    let group=account.id;
+    try { group=localStorage.getItem(groupStorageKey) || crypto.randomUUID(); localStorage.setItem(groupStorageKey,group); } catch {}
+    const displayUrl=`${session.displayUrl}/${group}`;
+    if (popup && !popup.closed) {
+      if(popupSessionId !== session.id) popup.location.replace(displayUrl);
+      popupSessionId=session.id; popup.focus(); return;
+    }
+    // Embedded browsers can ignore window names or discard opener handles. Ask an
+    // existing display directly before opening another, including after reload.
+    const found = await new Promise(resolve => {
+      let channel;
+      try { channel = new BroadcastChannel(`onscreen-display-${group}`); } catch { resolve(false); return; }
+      const requestId = crypto.randomUUID();
+      const timer = setTimeout(() => { channel.close(); resolve(false); }, 400);
+      channel.onmessage = event => {
+        if (event.data?.type === 'display-present' && event.data.requestId === requestId) {
+          clearTimeout(timer); channel.close(); resolve(true);
+        }
+      };
+      channel.postMessage({ type: 'focus-display', requestId, sessionId:session.id, displayUrl });
+    });
+    if (found) return;
+    popup = window.open(displayUrl, 'onscreen-classroom-display', 'popup,width=1100,height=780');
+    popupSessionId = session.id;
+    if (popup) popup.focus();
+    else notice('If the classroom window did not open, allow popups for OnScreen and use “Open classroom display”.');
+  } finally {
+    openingDisplay = false; $('display-open').disabled = false; $('calculator-launch').disabled = false;
+  }
 }
 async function openSession(id) { current = await api(`/sessions/${id}`); await watch(); renderDashboard(); tab('launch'); }
 // Access tokens are refreshed by Supabase; every new watch is verified by the server.
@@ -87,27 +129,44 @@ async function watch() {
   const res = await new Promise(resolve => socket.timeout(10000).emit('professor:watch', { sessionId: current.id, token: accessToken }, (err,r) => resolve(err ? { ok:false,error:'Connection timed out' } : r)));
   if (!res.ok) throw new Error(res.error);
 };
-$('calculator-launch').onclick = action(() => launchSession({ mode: 'calculator' }));
-$('display-open').onclick = () => {
-  if (!current) return;
-  popup = window.open(current.displayUrl, 'onscreen-classroom-display', 'popup,width=1100,height=780');
-  if (popup) popup.focus();
-  else notice('Your browser blocked the classroom window. Allow popups for OnScreen and try again.');
-};
+$('calculator-launch').onclick = action(async () => {
+  const existing = sessionList.find(s => s.mode === 'calculator' && s.phase !== 'ended');
+  if (existing) { await openSession(existing.id); await openClassroomDisplay(current); }
+  else await launchSession({ mode: 'calculator' });
+});
+$('display-open').onclick = action(() => current && openClassroomDisplay(current));
 $('test-start').onclick = action(async () => { if (!confirm('Start this test now? Hidden pages for more than 5 seconds will receive FAIL.')) return; current = await api(`/sessions/${current.id}/start`, 'POST', {}); renderDashboard(); });
-$('session-end').onclick = action(async () => { if (!confirm('End this session? Students will no longer be able to submit.')) return; current = await api(`/sessions/${current.id}/end`, 'POST', {}); renderDashboard(); await refresh(); });
+$('session-end').onclick = action(async () => {
+  if (!confirm('End this session?')) return;
+  current = await api(`/sessions/${current.id}/end`, 'POST', {});
+  if(current.mode === 'calculator') { current=null; $('dashboard').hidden=true; $('calculator-card').hidden=false; }
+  else renderDashboard();
+  await refresh();
+});
 function renderDashboard() {
   if (!current) return;
   $('dashboard').hidden = false; $('session-title').textContent = current.title;
+  $('calculator-card').hidden = current.mode === 'calculator' && current.phase !== 'ended';
   $('session-phase').textContent = current.phase === 'waiting' ? 'Waiting room open · Questions appear when you start the test.' : current.phase === 'running' ? 'Session in progress' : 'Session ended · Results saved';
   $('test-start').hidden = current.phase !== 'waiting'; $('session-end').hidden = current.phase === 'ended';
   $('live-export').hidden = current.mode !== 'test';
   const scores = current.students.filter(s => s.result).map(s => s.result.percentage);
-  $('live-summary').textContent = `${current.students.length} joined · ${current.students.filter(s => s.status === 'green').length} active · ${scores.length} submitted · ${current.students.filter(s => s.failed).length} FAIL${scores.length ? ` · Average ${Math.round(scores.reduce((a,b) => a+b,0)/scores.length)}%` : ''}`;
+  $('live-summary').textContent = `${current.students.length} joined · ${current.students.filter(s => s.status === 'green').length} active` +
+    (current.mode === 'test' ? ` · ${scores.length} submitted · ${current.students.filter(s => s.failed).length} FAIL${scores.length ? ` · Average ${Math.round(scores.reduce((a,b) => a+b,0)/scores.length)}%` : ''}` : '');
   renderTable($('live-students'), current);
 }
 function renderTable(container, session) {
   const table = document.createElement('table');
+  if(session.mode === 'calculator') {
+    table.innerHTML='<thead><tr><th>Student number</th><th>Name</th><th>Status</th></tr></thead>';
+    const body=document.createElement('tbody');
+    for(const s of session.students) {
+      const row=document.createElement('tr');
+      for(const value of [s.number,s.name,s.status === 'green' ? 'Active' : 'Inactive']) { const cell=document.createElement('td'); cell.textContent=value; row.append(cell); }
+      body.append(row);
+    }
+    table.append(body); container.replaceChildren(table); return;
+  }
   table.innerHTML = '<thead><tr><th>Student number</th><th>Name</th><th>Status</th><th>Score</th><th>Original score</th><th>Review</th></tr></thead>';
   const tbody = document.createElement('tbody');
   for (const s of [...session.students].sort((a,b) => a.number.localeCompare(b.number, undefined, { numeric:true }))) {
@@ -127,7 +186,15 @@ function renderTable(container, session) {
   }
   table.append(tbody); container.replaceChildren(table);
 }
-function renderResults() { $('result-detail').hidden=false; $('result-title').textContent=historySession.title; renderTable($('result-students'),historySession); }
+function renderResults() { $('result-detail').hidden=false; $('result-title').textContent=historySession.title; $('result-delete').hidden=historySession.phase !== 'ended'; renderTable($('result-students'),historySession); }
+async function deleteResults(session) {
+  if(!confirm(`Delete saved results for “${session.title}”? The library test will be kept.`)) return;
+  await api(`/sessions/${session.id}`, 'DELETE');
+  if(historySession?.id === session.id) { historySession=null; $('result-detail').hidden=true; $('result-students').replaceChildren(); }
+  if(current?.id === session.id) { current=null; $('dashboard').hidden=true; $('calculator-card').hidden=false; }
+  await refresh(); notice('Results deleted.');
+}
+$('result-delete').onclick=action(()=>deleteResults(historySession));
 async function download(s) {
   const response=await fetch(`/api/sessions/${s.id}/export`,{headers:{Authorization:`Bearer ${await token()}`}});
   if (!response.ok) throw new Error('Could not download results. Please sign in and retry.');

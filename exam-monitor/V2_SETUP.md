@@ -16,7 +16,7 @@ Initial inspection on 2026-11-06 (Asia/Seoul): project `carefree-cat`, app servi
 - Site URL and exact professor.html redirect are configured. Email with confirmation and Google are enabled.
 - Google Cloud project: onscreen-development; web OAuth client: OnScreen Development Web. Google remains in Testing mode; gordon.maccoy@gmail.com is an approved test user. The client secret is stored only in Supabase provider configuration, never in source.
 - Live Google callback verified: the Development professor workspace displayed the signed-in account.
-- Classroom launch and reopen use the same named window; reopening focuses/reuses it instead of creating another display.
+- Classroom launch and reopen reuse a live handle or discover an existing display through a per-professor browser channel. Reuse survives professor reload and browsers ignoring window names. A changed session fragment reloads the display so it reconnects to the new session.
 
 ## Configuration reference
 
@@ -58,3 +58,7 @@ After configuration, manual Development-only acceptance:
 - Open exported workbook in Excel and verify leading-zero identifiers, natural student-number order and effective grades.
 
 Live Google sign-in has been verified through the professor workspace. Real email confirmation/password-reset delivery, Railway database-restart acceptance and real-phone visibility checks remain pending. Automated checks alone do not certify real-phone visibility behavior.
+
+## Calculator and Results cleanup
+
+Calculator controls show names/numbers/visibility privately, with no grades, submission statistics or export. Ended calculator sessions are excluded from history; only tests appear in Results. Completed test results have Delete results controls with confirmation. The server verifies ownership and ended/test state, then marks the result deleted, hiding it from all normal reads, exports and resume capabilities. Library tests remain unchanged. Deletion is recoverable administratively from the retained record; this is not a permanent purge.

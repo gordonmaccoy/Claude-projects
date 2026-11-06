@@ -36,10 +36,10 @@ function createStore(pool) {
       return s;
     },
     async getSession(id) {
-      return (await pool.query('SELECT data FROM onscreen_v2_sessions WHERE id=$1', [id])).rows[0]?.data || null;
+      return (await pool.query("SELECT data FROM onscreen_v2_sessions WHERE id=$1 AND data->>'deletedAt' IS NULL", [id])).rows[0]?.data || null;
     },
     async listSessions(ownerId) {
-      return (await pool.query('SELECT data FROM onscreen_v2_sessions WHERE owner_id=$1 ORDER BY created_at DESC', [ownerId])).rows.map(r => r.data);
+      return (await pool.query("SELECT data FROM onscreen_v2_sessions WHERE owner_id=$1 AND data->>'deletedAt' IS NULL ORDER BY created_at DESC", [ownerId])).rows.map(r => r.data);
     },
     async activeSessions() {
       return (await pool.query("SELECT data FROM onscreen_v2_sessions WHERE data->>'phase' <> 'ended'")).rows.map(r => r.data);
@@ -48,7 +48,7 @@ function createStore(pool) {
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
-        const s = (await client.query('SELECT data FROM onscreen_v2_sessions WHERE id=$1 FOR UPDATE', [id])).rows[0]?.data;
+        const s = (await client.query("SELECT data FROM onscreen_v2_sessions WHERE id=$1 AND data->>'deletedAt' IS NULL FOR UPDATE", [id])).rows[0]?.data;
         if (!s) throw new Error('Session not found');
         const result = await fn(s);
         await client.query('UPDATE onscreen_v2_sessions SET data=$2 WHERE id=$1', [id, JSON.stringify(s)]);

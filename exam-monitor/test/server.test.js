@@ -18,7 +18,7 @@ test('HTTP/socket exam flow enforces ownership, recovers after restart, sanitize
   let base = await boot();
   const request = async (route, method = 'GET', body, who = 'alice') => {
     const r = await fetch(base + route, { method, headers: { Authorization: `Bearer ${who}`, 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
-    return { status: r.status, body: await r.json() };
+    return { status: r.status, body: r.headers.get('content-type')?.includes('json') ? await r.json() : await r.arrayBuffer() };
   };
   async function socket() { const s = io(base, { transports: ['websocket'], forceNew: true }); sockets.push(s); await once(s, 'connect'); return s; }
   const emit = (s, name, data) => new Promise((resolve, reject) => s.timeout(3000).emit(name, data, (err, res) => err ? reject(err) : resolve(res)));
@@ -26,8 +26,13 @@ test('HTTP/socket exam flow enforces ownership, recovers after restart, sanitize
     assert.equal((await request('/api/tests', 'GET', undefined, 'invalid')).status, 401);
     const saved = await request('/api/tests', 'POST', { title: 'Quiz', questions: [{ id: 'q', text: '2+2?', options: [{ id: 'a', text: '4' }, { id: 'b', text: '5' }], correctOptionId: 'a' }] });
     assert.equal(saved.status, 200);
+    const calc = await request('/api/sessions', 'POST', { mode: 'calculator' });
+    assert.equal((await request(`/api/sessions/${calc.body.id}/export`)).status, 400);
+    await request(`/api/sessions/${calc.body.id}/end`, 'POST', {});
+    assert.equal((await request('/api/sessions')).body.some(s => s.id === calc.body.id), false);
     const launched = await request('/api/sessions', 'POST', { testId: saved.body.id });
     const sid = launched.body.id;
+    assert.equal((await request(`/api/sessions/${sid}`, 'DELETE')).status, 409);
     assert.equal((await request(`/api/sessions/${sid}`, 'GET', undefined, 'bob')).status, 404);
     assert.equal((await request('/api/tests', 'GET', undefined, 'bob')).body.length, 0);
     assert.equal((await request(`/api/tests/${saved.body.id}`, 'DELETE', undefined, 'bob')).status, 404);
@@ -83,5 +88,11 @@ test('HTTP/socket exam flow enforces ownership, recovers after restart, sanitize
     await request(`/api/sessions/${sid}/end`, 'POST', {});
     assert.equal((await request(`/api/sessions/${sid}`)).body.phase, 'ended');
     assert.equal((await emit(reconnect, 'student:join', { sessionId: sid, resumeToken: joined.resumeToken })).view.result.score, 1);
+    assert.equal((await request(`/api/sessions/${sid}`, 'DELETE', undefined, 'bob')).status, 404);
+    assert.equal((await request(`/api/sessions/${sid}`, 'DELETE')).status, 200);
+    assert.equal((await request(`/api/sessions/${sid}`)).status, 404);
+    assert.equal((await request(`/api/sessions/${sid}/export`)).status, 404);
+    assert.equal((await request('/api/sessions')).body.some(s => s.id === sid), false);
+    assert.equal((await request('/api/tests')).body.length, 1, 'Deleting results must preserve the library test');
   } finally { sockets.forEach(s => s.disconnect()); await running.close(); await db.close(); }
 });

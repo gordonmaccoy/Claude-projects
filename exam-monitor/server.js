@@ -70,7 +70,8 @@ function createApp({ store, verifyUser, config = {}, sweepInterval = 1000 }) {
     if (!await store.getTest(req.user.id, req.params.id)) return res.status(404).json({ error: 'Test not found' });
     await store.deleteTest(req.user.id, req.params.id); res.json({ ok: true });
   }));
-  api.get('/sessions', wrap(async (req, res) => res.json((await store.listSessions(req.user.id)).map(s => exam.privateView(s)))));
+  api.get('/sessions', wrap(async (req, res) => res.json((await store.listSessions(req.user.id))
+    .filter(s => s.mode === 'test' || s.phase !== 'ended').map(s => exam.privateView(s)))));
   api.post('/sessions', wrap(async (req, res) => {
     const test = req.body.mode === 'calculator' ? null : await store.getTest(req.user.id, req.body.testId);
     if (!test && req.body.mode !== 'calculator') return res.status(404).json({ error: 'Saved test not found' });
@@ -78,6 +79,16 @@ function createApp({ store, verifyUser, config = {}, sweepInterval = 1000 }) {
     await store.createSession(s); res.json(await decorate(s, req));
   }));
   api.get('/sessions/:id', wrap(async (req, res) => res.json(await decorate(await owned(req.params.id, req.user), req))));
+  api.delete('/sessions/:id', wrap(async (req, res) => {
+    await owned(req.params.id, req.user);
+    await store.mutate(req.params.id, s => {
+      if (s.ownerId !== req.user.id) { const e = new Error('Session not found'); e.status = 404; throw e; }
+      if (s.mode !== 'test' || s.phase !== 'ended') { const e = new Error('Only completed test results can be deleted'); e.status = 409; throw e; }
+      // Hide results and invalidate their capabilities without irreversibly erasing grades.
+      s.deletedAt = Date.now();
+    });
+    res.json({ ok: true });
+  }));
   for (const action of ['start', 'end', 'override']) api.post(`/sessions/:id/${action}`, wrap(async (req, res) => {
     await owned(req.params.id, req.user);
     const { session } = await store.mutate(req.params.id, s => {
@@ -89,7 +100,8 @@ function createApp({ store, verifyUser, config = {}, sweepInterval = 1000 }) {
     await broadcast(session); res.json(await decorate(session, req));
   }));
   api.get('/sessions/:id/export', wrap(async (req, res) => {
-    await owned(req.params.id, req.user);
+    const original = await owned(req.params.id, req.user);
+    if (original.mode !== 'test') return res.status(400).json({ error: 'Calculator sessions have no test scores to export.' });
     const { session } = await store.mutate(req.params.id, s => exam.sweep(s));
     res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.set('Content-Disposition', `attachment; filename="onscreen-${session.id}.xlsx"`);

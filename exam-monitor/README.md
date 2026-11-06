@@ -23,14 +23,18 @@ Professor: `http://localhost:3100/professor.html`. Build output is committed so 
 ## Workflow
 
 1. Sign in, open Library and create a multiple-choice test. Select the correct choice for each question and save.
-2. Launch a saved test or calculator. The classroom popup opens separately; move it to the projector. Use Open classroom display if popups are blocked. Click its QR to expand/minimize.
+2. Launch a saved test, or use Open classroom display in the Classroom calculator card. The classroom popup opens separately; move it to the projector. Use Open classroom display if popups are blocked. Click its QR to expand/minimize.
 3. Students enter their student number and name. Test questions remain hidden in the waiting room until Start test.
 4. The private dashboard shows monitoring events, live grades, raw grades and FAIL overrides with reasons. Students see their own effective score and percentage immediately after submission.
-5. Results stores prior sessions and exports `.xlsx` files sorted naturally by student number, with text identifiers and exactly four columns: student number, student name, absolute score, percentage (0–100).
+5. Results stores prior tests and exports `.xlsx` files sorted naturally by student number, with text identifiers and exactly four columns: student number, student name, absolute score, percentage (0–100).
 
 A confirmed continuous hidden interval **strictly longer than five seconds** after test start produces a durable FAIL and effective score zero. Network loss alone turns the roster red without failing the student. Returning after FAIL does not restore the grade; a professor override does. Submitted students do not accrue new failures. The raw grade and incident history remain available privately.
 
 Sessions survive professor disconnection and server restart. Student enrollment and drafts resume using a private capability stored before joining. Keep the same browser; do not clear its storage. If storage is blocked, reconnection works while the page remains open, but recovery after closing/reloading cannot be guaranteed.
+
+Completed test results can be deleted from Results after confirmation; the saved library test is kept. Calculator sessions are visibility-only, have no score/export, and never appear as saved results.
+
+The classroom window is reused on reopen and across sessions, including after a professor-page refresh. If the browser blocks an automatic popup on a slow launch, the Open classroom display control provides a direct retry.
 
 ## Scope and limits
 
