@@ -6,3 +6,5 @@ select,textarea{font:inherit;background:#fff;color:#223c31;border:1px solid #c5c
 .folder{max-width:none}.tb-q-card input[type=radio]{display:block}
 
 #entry-dialog{width:min(540px,92vw);border:1px solid #c5cfc5;border-radius:14px;padding:28px;color:#182f2c}#entry-dialog::backdrop{background:#102c2780}#entry-dialog label{display:block}#in-session-section>#dashboard{border:0;padding:0;margin-bottom:0}#active-sessions:empty{display:none}
+
+#launch-dialog{width:min(540px,92vw);border:1px solid #c5cfc5;border-radius:14px;padding:28px;color:#182f2c}#launch-dialog::backdrop{background:#102c2780}.tb-points{width:90px;margin:4px 0}.folder-edit-row{padding:14px 0;border-bottom:1px solid #ccd6cb}.folder-edit-row strong{margin-right:auto}#folder-menu{max-width:none;margin:20px 0}#folder-menu>summary{cursor:pointer;font-weight:600}

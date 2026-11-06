@@ -39,7 +39,10 @@ socket.on('disconnect',()=> { setConnected(false); if(currentView?.result)return
 function setConnected(ok) { for (const el of [els.connDot,els.testConnDot]) { el.classList.toggle('offline',!ok); el.title=ok?'Connected':'Disconnected'; } }
 els.form.onsubmit=async e=> { e.preventDefault(); const b=els.form.querySelector('button'); b.disabled=true; try { await join({name:els.nameInput.value.trim(),number:$('number-input').value.trim()}); } finally { b.disabled=false; } };
 function showView(view) {
-  currentView=view;
+  const previousExtension=currentView?.extensionVersion;currentView=view;
+  if(previousExtension!==undefined && view.extensionVersion>previousExtension){extensionNoticeUntil=performance.now()+6000;$('time-notice').textContent='Your professor extended the time by '+(view.lastExtension?.minutes||1)+' minute.';}
+  if((view.result||view.failed||view.phase==='ended')&&$('submit-dialog').open)$('submit-dialog').close();
+  timerSnapshot={deadlineAt:view.deadlineAt,serverNow:view.serverNow,receivedAt:performance.now()};
   if(view.terminal){clearTimeout(draftTimer);socket.disconnect();}
   const locked=Boolean(view.failed && !view.result && view.phase==='running');
   $('activity-lock').hidden=!locked;
@@ -48,8 +51,8 @@ function showView(view) {
   els.joinSection.hidden=true; els.calcSection.hidden=true; els.testSection.hidden=true; $('waiting-section').hidden=true;
   if(view.result) {
     els.testSection.hidden=false; els.testDone.hidden=false; els.testActions.hidden=true; els.testQuestions.replaceChildren();
-    els.testTitle.textContent='Test submitted'; els.doneScore.textContent=`Your score: ${view.result.score} / ${view.result.total} · ${view.result.percentage}%${view.result.failed?' · FAIL':''}`;
-    try{localStorage.removeItem(draftKey);}catch{} return;
+    els.testTitle.textContent='Test submitted'; els.doneScore.textContent=view.result.hidden?'Your test was submitted. Your professor will share the results.':`Your score: ${view.result.score} / ${view.result.total} · ${view.result.percentage}%${view.result.failed?' · FAIL':''}`;
+    $('test-timer').hidden=true;$('time-notice').textContent='';try{localStorage.removeItem(draftKey);}catch{} return;
   }
   if(view.phase==='ended') { try{localStorage.removeItem(calculatorKey);}catch{} message('Your professor ended the session.'); els.joinSection.hidden=false; els.form.querySelector('button').disabled=true; return; }
   if(view.mode==='calculator') { els.calcSection.hidden=false; return; }
@@ -67,52 +70,55 @@ socket.on('student:update',view=> { if(joined) showView(view); });
 function renderTestQuestions(questions) {
   els.testQuestions.replaceChildren();
   questions.forEach((q,i)=> {
-    const card=document.createElement('div');card.className='tq-card';const p=document.createElement('p');p.className='tq-text';p.textContent=`${i+1}. ${q.text}`;card.append(p);
-    card.dataset.questionId=q.id;card.addEventListener('focusin',()=>focusQuestion(q.id));card.addEventListener('click',()=>focusQuestion(q.id));
+    const card=document.createElement('div');card.className='tq-card';const p=document.createElement('p');p.className='tq-text';p.textContent=`${i+1}. ${q.text} (${q.points??1} ${(q.points??1)===1?'point':'points'})`;card.append(p);
+    card.dataset.questionId=q.id;
     const options=document.createElement('div'); options.className='tq-options';
     if(q.type==='blank') {
       const input=document.createElement('input');input.type='text';input.className='blank-answer';input.maxLength=300;input.setAttribute('aria-label',`Answer to question ${i+1}`);input.autocomplete='off';input.value=testAnswers[q.id]||'';
-      input.oninput=()=> { testAnswers[q.id]=input.value;updateVersion++;saveDraft();clearTimeout(draftTimer);draftTimer=setTimeout(uploadDraft,400); };options.append(input);
+      input.oninput=()=> { testAnswers[q.id]=input.value;if(input.value.trim())lastAnsweredQuestion=q.id;updateVersion++;saveDraft();clearTimeout(draftTimer);draftTimer=setTimeout(uploadDraft,400); };options.append(input);
     }
     (q.options||[]).forEach((o,j)=> {
       const label=document.createElement('label');label.className='tq-option';const radio=document.createElement('input');radio.type='radio';radio.name=q.id;radio.value=o.id;radio.checked=testAnswers[q.id]===o.id;
-      radio.onchange=()=> { testAnswers[q.id]=o.id; updateVersion++;saveDraft();clearTimeout(draftTimer);draftTimer=setTimeout(uploadDraft,400); };
+      radio.onchange=()=> { testAnswers[q.id]=o.id;lastAnsweredQuestion=q.id; updateVersion++;saveDraft();clearTimeout(draftTimer);draftTimer=setTimeout(uploadDraft,400); };
       const letter=document.createElement('span');letter.className='tq-opt-letter';letter.textContent=String.fromCharCode(65+j);
       const text=document.createElement('span');text.className='tq-opt-text';text.textContent=o.text;label.append(radio,letter,text);options.append(label);
     });card.append(options);els.testQuestions.append(card);
   });
-  requestAnimationFrame(reportVisibleQuestion);
+
 }
-let reportedQuestion=null,progressTimer,focusedQuestion=null;
-function focusQuestion(id){focusedQuestion=id;clearTimeout(progressTimer);reportProgress(id);}
-for(const event of ['wheel','touchmove'])window.addEventListener(event,()=>{focusedQuestion=null;},{passive:true});
-window.addEventListener('pointerdown',e=>{if(!e.target.closest?.('.tq-card'))focusedQuestion=null;});
-window.addEventListener('keydown',e=>{if(['PageDown','PageUp','Home','End','ArrowDown','ArrowUp',' '].includes(e.key)&&!e.target.matches('input,textarea'))focusedQuestion=null;});
-function reportVisibleQuestion(){
- if(els.testSection.hidden)return;
- const cards=[...els.testQuestions.children].map(el=>{const r=el.getBoundingClientRect();return {el,visible:Math.max(0,Math.min(r.bottom,innerHeight)-Math.max(r.top,0))};}).filter(x=>x.visible>=50).sort((a,b)=>b.visible-a.visible);
- const focused=cards.find(x=>x.el.dataset.questionId===focusedQuestion);
- if(focused)reportProgress(focusedQuestion);else if(cards[0]){focusedQuestion=null;reportProgress(cards[0].el.dataset.questionId);}
-}
-window.addEventListener('scroll',()=>{clearTimeout(progressTimer);progressTimer=setTimeout(reportVisibleQuestion,180);},{passive:true});
-window.addEventListener('resize',()=>requestAnimationFrame(reportVisibleQuestion));
-function reportProgress(questionId){if(!joined||currentView?.failed||currentView?.result||currentView?.phase!=='running'||reportedQuestion===questionId)return;reportedQuestion=questionId;emit('student:progress',{questionId}).then(r=>{if(!r.ok)reportedQuestion=null;});}
+let lastAnsweredQuestion=null;
 async function uploadDraft() {
   if(!joined || currentView?.failed || currentView?.result || currentView?.phase!=='running' || currentView?.mode!=='test') return;
-  const version=updateVersion;const res=await emit('student:draft',{answers:testAnswers});
+  const version=updateVersion;const res=await emit('student:draft',{answers:testAnswers,questionId:lastAnsweredQuestion});
   if(!res.ok) message('Answers saved on this device. Reconnecting to save them to the server…');
   else if(version===updateVersion && !currentView?.failed) message('Answers saved.');
 }
-els.testSubmitBtn.onclick=async()=> {
-  if(submitting || currentView?.failed || currentView?.result) return;
-  if(!currentView?.test?.questions.every(q=>testAnswers[q.id]?.trim())) return message('Please answer every question before submitting.');
-  if(!confirm('Submit your answers? You cannot change them after submission.')) return;
-  submitting=true;els.testSubmitBtn.disabled=true;clearTimeout(draftTimer);
-  const res=await emit('student:submit',{answers:testAnswers});
-  submitting=false;els.testSubmitBtn.disabled=false;
-  if(res.ok) { message('');showView(res.view); } else message(res.error);
+els.testSubmitBtn.onclick=()=> {
+ if(submitting||currentView?.failed||currentView?.result||currentView?.phase!=='running')return;
+ const unanswered=currentView.test.questions.map((q,i)=>testAnswers[q.id]?.trim()?null:i+1).filter(n=>n!==null);
+ $('submit-warning').textContent=unanswered.length?`You have ${unanswered.length} unanswered question${unanswered.length===1?'':'s'} (${unanswered.join(', ')}). Unanswered questions receive zero points. Submit anyway?`:'Submit your test? You cannot change your answers afterwards.';
+ $('submit-dialog').showModal();
 };
-async function visibility() { if(!joined || currentView?.result || currentView?.phase==='ended' || !socket.connected) return; const res=await emit('student:visibility',{visible:!document.hidden}); if(!res.ok) message(res.error); }
+$('submit-review').onclick=()=> $('submit-dialog').close();
+$('submit-confirm').onclick=async()=>{
+ if(submitting||currentView?.failed||currentView?.result)return;
+ submitting=true;els.testSubmitBtn.disabled=true;$('submit-confirm').disabled=true;clearTimeout(draftTimer);
+ const res=await emit('student:submit',{answers:testAnswers});
+ submitting=false;els.testSubmitBtn.disabled=false;$('submit-confirm').disabled=false;
+ if(res.ok){$('submit-dialog').close();message('');showView(res.view);}else{if(res.view)showView(res.view);message(res.error);}
+};
+let timerSnapshot=null,extensionNoticeUntil=0,timerSyncing=false;
+function updateTimer(){
+ const running=currentView?.mode==='test'&&currentView?.phase==='running'&&!currentView?.result&&timerSnapshot?.deadlineAt;
+ $('test-timer').hidden=!running;if(!running)return;
+ const remaining=Math.max(0,Math.ceil((timerSnapshot.deadlineAt-(timerSnapshot.serverNow+performance.now()-timerSnapshot.receivedAt))/1000));
+ $('time-left').textContent=remaining<=10?String(remaining):`${Math.floor(remaining/60)}:${String(remaining%60).padStart(2,'0')}`;$('test-timer').classList.toggle('critical',remaining<=10);
+ if(performance.now()>extensionNoticeUntil)$('time-notice').textContent=remaining===0?'Time is up. Submitting your saved answers…':remaining<=10?`Submitting automatically in ${remaining} seconds.`:remaining<=60?'One minute or less remains.':'';
+ if(remaining===0){els.testQuestions.inert=true;els.testSubmitBtn.disabled=true;if(socket.connected&&!timerSyncing){timerSyncing=true;emit('student:sync',{}).then(r=>{timerSyncing=false;if(r.view)showView(r.view);});}}
+ else{els.testQuestions.inert=!!currentView?.failed;els.testSubmitBtn.disabled=submitting;}
+}
+setInterval(updateTimer,250);
+async function visibility() { if(!joined || currentView?.result || currentView?.phase==='ended' || !socket.connected) return; const res=await emit('student:visibility',{visible:!document.hidden}); if(res.view)showView(res.view);if(!res.ok) message(res.error); }
 document.addEventListener('visibilitychange',visibility);
 window.addEventListener('pagehide',()=> { if(joined && !currentView?.result && currentView?.phase!=='ended') socket.emit('student:visibility',{visible:false},()=>{}); });
 setInterval(()=> { if(joined) { visibility(); if(currentView?.mode==='test' && !currentView?.result) uploadDraft(); } },3000);

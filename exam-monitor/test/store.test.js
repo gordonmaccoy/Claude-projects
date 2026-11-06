@@ -22,6 +22,8 @@ test('committed library and live session recover through a new repository; faile
     assert.equal(await restored.getTest('prof-b', 't1'), null);
     assert.equal((await restored.listSessions('prof-a')).length, 1);
     assert.deepEqual(await restored.listSessions('prof-b'), []);
+    assert.equal(await restored.renameFolder('prof-b',folder.id,'Other'),null);assert.equal((await restored.renameFolder('prof-a',folder.id,'Class B')).name,'Class B');
+    await restored.saveTest('prof-a',{id:'filed',title:'Filed',folderId:folder.id,questions:[]});assert.equal(await restored.deleteFolder('prof-b',folder.id),false);assert.equal(await restored.deleteFolder('prof-a',folder.id),true);assert.equal((await restored.getTest('prof-a','filed')).folderId,null);assert.deepEqual(await restored.listFolders('prof-a'),[]);
     await restored.init();
     assert.equal((await restored.getSession('s1')).students.length, 1);
   } finally { await db.close(); }

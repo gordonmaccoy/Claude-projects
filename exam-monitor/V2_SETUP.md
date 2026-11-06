@@ -84,4 +84,20 @@ Rename session labels a launched test independently of the Library title. The la
 
 For a failed, unsubmitted test attempt, Submit Fail score records a terminal 0%, preserves saved answers and their original calculated score privately, records the professor/reason, and disconnects the student. Reloading resumes only the final score. Calculator sessions remain ungraded. Unlock & continue is offered only while continuation is possible in a running session.
 
-Private Student progress shows the current viewed/focused question plus answered/total count. It is based on page interactions and saved answers, not a claim of student understanding. No question progress or answer data is added to the public roster.
+Private Student progress changes only when an answer is selected/entered and saved. It shows the last answered question plus answered/total count; scrolling and focus do not affect it. No question progress or answer data is added to the public roster.
+
+## Timed tests, points and the revised Library
+
+Library has two primary actions, New class folder and Create new test, plus an Edit folders menu. Create new test asks for name/folder, then offers Create manually, Upload a test file (or paste text), and Create with AI. Imports retain the entered name/folder and must produce questions before opening the editor. Invalid input stays in the import form with a clear error.
+
+Existing-test import supports numbered/Question-labelled and letter-choice formats, plus sentence exercises with standalone Question2. markers: instruction, blank-containing sentence, then answer lines. A single answer line becomes an accepted blank answer. Multiple lines become choices; if the source marks no correct choice, the professor must select one before saving. No answer key is invented. The supplied ten-question auxiliary exercise is covered by pasted-text, real PDF and DOCX fixtures.
+
+Folder rename/delete is account-owned. Deleting a folder moves tests to Uncategorized Test; it does not delete tests or session/results snapshots. Create copy makes an independently editable test.
+
+Each question has editable points, default1; positive values up to1000 with at most2 decimal places are supported. Grades and percentages use earned/total points. Existing questions retain their historical one-point default. Excel keeps exactly the same four columns, with absolute score now reflecting weighted points.
+
+Launch options: time limit0–360 minutes (0=no limit), Show final score checked by default, Shuffle answers off by default. Timers start at Start test, when questions open; late joins use the same class deadline. Per-student answer permutations are stored and retain option IDs, grading and resume order.
+
+Timed tests show a server-synchronized countdown, a one-minute warning, and a prominent final10-second countdown. Extend1 minute updates the persistent deadline and notifies students. Expiry auto-submits the latest server-saved draft exactly once and ends the session; any active FAIL remains0 while its original earned points stay private. Late answers or extensions cannot reopen an expired test. A device that loses its network near expiry may have local edits newer than its last acknowledged server draft; only server-saved answers are eligible at the deadline.
+
+Manual submission shows an in-page confirmation listing unanswered questions and permits explicit submission for partial credit. Hidden-score mode returns a submission receipt without grade fields to the student; professor results/Excel retain the scores.

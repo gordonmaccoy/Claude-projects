@@ -39,6 +39,9 @@ test('HTTP/socket exam flow enforces ownership, recovers after restart, sanitize
     assert.equal((await request('/api/folders','GET',undefined,'bob')).body.length,0);
     assert.equal((await request('/api/tests','POST',{...saved.body,folderId:folder.body.id})).body.folderId,folder.body.id);
     assert.equal((await request('/api/tests','POST',{...saved.body,id:undefined,folderId:folder.body.id},'bob')).status,404);
+    const copy=await request('/api/tests/'+saved.body.id+'/copy','POST',{title:'Independent copy'});assert.equal(copy.status,200);assert.notEqual(copy.body.id,saved.body.id);assert.equal((await request('/api/tests/'+saved.body.id+'/copy','POST',{},'bob')).status,404);await request('/api/tests/'+copy.body.id,'DELETE');
+    assert.equal((await request('/api/folders/'+folder.body.id,'PATCH',{name:'Economics sections'})).body.name,'Economics sections');assert.equal((await request('/api/folders/'+folder.body.id,'DELETE',undefined,'bob')).status,404);
+    const timed=await request('/api/sessions','POST',{testId:saved.body.id,durationMinutes:1,showScores:false,shuffleAnswers:true});assert.equal(timed.body.durationMinutes,1);const timedSocket=await socket();const timedJoin=await emit(timedSocket,'student:join',{sessionId:timed.body.id,name:'Timed',number:'123'});await request('/api/sessions/'+timed.body.id+'/start','POST',{});await emit(timedSocket,'student:draft',{answers:{q:'a'},questionId:'q'});const before=(await store.getSession(timed.body.id)).deadlineAt;assert.equal((await request('/api/sessions/'+timed.body.id+'/extend','POST',{})).body.deadlineAt,before+60000);await store.mutate(timed.body.id,s=>s.deadlineAt=Date.now()-1);await running.tick();const timedResume=await emit(timedSocket,'student:join',{sessionId:timed.body.id,resumeToken:timedJoin.resumeToken});assert.equal(timedResume.view.result.hidden,true);assert.equal(timedResume.view.result.score,undefined);assert.equal((await request('/api/sessions/'+timed.body.id)).body.students[0].result.percentage,100);assert.equal((await request('/api/sessions/'+timed.body.id+'/extend','POST',{})).status,409);await request('/api/sessions/'+timed.body.id,'DELETE');
     const calc = await request('/api/sessions', 'POST', { mode: 'calculator' });
     assert.equal((await request(`/api/sessions/${calc.body.id}/export`)).status, 400);
     await request(`/api/sessions/${calc.body.id}/end`, 'POST', {});
@@ -69,6 +72,7 @@ test('HTTP/socket exam flow enforces ownership, recovers after restart, sanitize
     const resumedView = (await emit(a, 'student:join', { sessionId: sid, resumeToken: joined.resumeToken })).view;
     assert.equal(resumedView.test.questions[0].correctOptionId, undefined);
     await emit(a, 'student:draft', { answers: { q: 'a' } });assert.equal((await emit(a,'student:progress',{questionId:'q'})).ok,true);assert.equal((await emit(a,'student:progress',{questionId:'invalid'})).ok,false);assert.equal((await request(`/api/sessions/${sid}`)).body.students.find(st=>st.id===joined.studentId).progress.answered,1);
+    const unrelated=[];const listener=view=>unrelated.push(view);a.on('student:update',listener);await new Promise(r=>setTimeout(r,15));const ownHeartbeat=await emit(b,'student:visibility',{visible:true});assert.equal(Number.isFinite(ownHeartbeat.view.serverNow),true,'Own heartbeat must include a clock sample');a.off('student:update',listener);assert.equal(unrelated.length,0,'Another student heartbeat must not resend this student’s questions just to update the clock');
     sockets.forEach(s => s.disconnect()); await running.close();
     base = await boot();
     const reconnect = await socket();
@@ -126,6 +130,6 @@ test('HTTP/socket exam flow enforces ownership, recovers after restart, sanitize
     assert.equal((await request(`/api/sessions/${sid}`)).status, 404);
     assert.equal((await request(`/api/sessions/${sid}/export`)).status, 404);
     assert.equal((await request('/api/sessions')).body.some(s => s.id === sid), false);
-    assert.equal((await request('/api/tests')).body.length, 1, 'Deleting results must preserve the library test');
+    assert.equal((await request('/api/tests')).body.length, 1, 'Deleting results must preserve the library test');assert.equal((await request('/api/folders/'+folder.body.id,'DELETE')).status,200);assert.equal((await request('/api/tests')).body[0].folderId,null);
   } finally { sockets.forEach(s => s.disconnect()); await running.close(); await db.close(); }
 });

@@ -47,3 +47,5 @@ Legacy `onscreen_*` tables are retained untouched. V2 uses account-owned `onscre
 ## Roadmap — not implemented
 
 Library has separate “Upload a test” (text-based PDF/DOCX with supplied answer key) and “Create with AI” (source material) flows. Both produce editable drafts for professor review before saving. AI requires server-only OPENAI_API_KEY and OPENAI_MODEL on Railway Development; live generation remains unverified until configured. See V2_SETUP.md for format and limits.
+
+Library creation now starts with manual/upload/AI choices, supports folder editing, copying and weighted points. Launch supports optional class deadlines, score visibility and stable answer shuffling. See V2_SETUP.md for limits and timer/draft behavior.

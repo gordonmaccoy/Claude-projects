@@ -25,13 +25,13 @@ function createStore(pool) {
       const id=require('node:crypto').randomUUID();
       return (await pool.query('INSERT INTO onscreen_v2_folders(id,owner_id,name) VALUES($1,$2,$3) RETURNING id,name',[id,ownerId,name])).rows[0];
     },
-    async saveTest(ownerId, test) {
-      const r = await pool.query(`INSERT INTO onscreen_v2_tests(id,owner_id,data) VALUES($1,$2,$3)
-        ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data, updated_at=NOW()
-        WHERE onscreen_v2_tests.owner_id=EXCLUDED.owner_id RETURNING id`, [test.id, ownerId, JSON.stringify(test)]);
-      if (!r.rows.length) throw new Error('Test not found');
-      return test;
-    },
+    async renameFolder(ownerId,id,name){return (await pool.query('UPDATE onscreen_v2_folders SET name=$3 WHERE id=$1 AND owner_id=$2 RETURNING id,name',[id,ownerId,name])).rows[0]||null;},
+    async deleteFolder(ownerId,id){const client=await pool.connect();try{await client.query('BEGIN');const folder=(await client.query('SELECT id FROM onscreen_v2_folders WHERE id=$1 AND owner_id=$2 FOR UPDATE',[id,ownerId])).rows[0];if(!folder){await client.query('COMMIT');return false;}
+      await client.query(`UPDATE onscreen_v2_tests SET data=jsonb_set(data,'{folderId}','null'::jsonb),updated_at=NOW() WHERE owner_id=$1 AND data->>'folderId'=$2`,[ownerId,id]);await client.query('DELETE FROM onscreen_v2_folders WHERE id=$1 AND owner_id=$2',[id,ownerId]);await client.query('COMMIT');return true;
+    }catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}},
+    async saveTest(ownerId,test){const client=await pool.connect();try{await client.query('BEGIN');if(test.folderId && !(await client.query('SELECT id FROM onscreen_v2_folders WHERE id=$1 AND owner_id=$2 FOR KEY SHARE',[test.folderId,ownerId])).rows.length)throw new Error('Class folder not found');
+      const r=await client.query(`INSERT INTO onscreen_v2_tests(id,owner_id,data) VALUES($1,$2,$3) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data,updated_at=NOW() WHERE onscreen_v2_tests.owner_id=EXCLUDED.owner_id RETURNING id`,[test.id,ownerId,JSON.stringify(test)]);if(!r.rows.length)throw new Error('Test not found');await client.query('COMMIT');return test;
+    }catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}},
     async listTests(ownerId) {
       return (await pool.query('SELECT data FROM onscreen_v2_tests WHERE owner_id=$1 ORDER BY updated_at DESC', [ownerId])).rows.map(r => r.data);
     },

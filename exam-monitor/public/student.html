@@ -95,10 +95,10 @@
         </button>
       </header>
 
-      <div id="test-questions" class="test-questions"></div>
+      <aside id="test-timer" class="test-timer" role="timer" hidden><span>Time remaining</span><strong id="time-left"></strong></aside><p id="time-notice" role="status" aria-live="polite"></p><div id="test-questions" class="test-questions"></div>
 
       <div class="test-actions" id="test-actions">
-        <button id="test-submit-btn" class="test-submit-btn">Submit Answers</button>
+        <button id="test-submit-btn" class="test-submit-btn">Submit test</button>
       </div>
 
       <div id="test-done" class="test-done" hidden>
@@ -115,7 +115,7 @@
   </section>
 
   <div id="activity-lock" class="activity-lock" role="alertdialog" aria-modal="true" aria-labelledby="lock-heading" hidden><div><h1 id="lock-heading">Call professor</h1><p>FAILED · This page was hidden for more than 5 seconds.</p><p>Your work is kept. Ask your professor to unlock this activity.</p></div></div>
-  <script src="/socket.io/socket.io.js"></script>
+  <dialog id="submit-dialog" aria-labelledby="submit-heading"><h2 id="submit-heading">Submit test?</h2><p id="submit-warning"></p><div><button id="submit-review" type="button">Review answers</button><button id="submit-confirm" type="button">Submit test</button></div></dialog><script src="/socket.io/socket.io.js"></script>
   <script src="student.js"></script>
 </body>
 </html>

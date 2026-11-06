@@ -5,7 +5,7 @@ let auth, account, current, historySession, library = [], folders = [], aiConfig
 let accountGeneration = 0;
 let popupSessionId = null, openingDisplay = false, launching = false;
 function clearPrivateWorkspace() {
-  accountGeneration++;closeEntry();
+  accountGeneration++;closeEntry();launchTest=null;$('new-title').value='';$('folder-list').replaceChildren();$('folder-menu').open=false;for(const id of ['tb-folder','new-folder-choice'])$(id).replaceChildren();$('launch-test-title').textContent='';if($('launch-dialog').open)$('launch-dialog').close();$('creation-choice').hidden=true;
   current=null; historySession=null; library=[]; folders=[]; sessionList=[]; $('import-source').value='';$('import-file').value='';$('import-panel').hidden=true;$('draft-review').textContent=''; editingId=null; tbQuestions=[];
   for(const id of ['launch-tests','library-tests','active-sessions','result-sessions','live-students','result-students','tb-questions']) $(id).replaceChildren();
   for(const id of ['dashboard','result-detail','test-builder']) $(id).hidden=true;
@@ -34,7 +34,7 @@ function button(text, fn, className = '') { const b = document.createElement('bu
 function card(title, subtitle) { const c = document.createElement('article'); c.className = 'card'; const h = document.createElement('h3'); h.textContent = title; const p = document.createElement('p'); p.textContent = subtitle; c.append(h,p); return c; }
 async function refresh() {
   [library, sessionList, folders] = await Promise.all([api('/tests'), api('/sessions'),api('/folders')]);
-  renderFolderOptions();
+  renderFolderOptions();renderFolderMenu();
   for (const id of ['launch-tests', 'library-tests', 'active-sessions', 'result-sessions']) $(id).replaceChildren();
   if (!library.length) {
     $('launch-tests').append(card('A fresh start', 'Create your first test in Library, or launch the calculator.'));
@@ -50,9 +50,9 @@ async function refresh() {
   }
   for (const test of library) {
     const launch = card(test.title, `${test.questions.length} questions · Saved test`);
-    launch.append(button('Launch test ↗', () => launchSession({ testId: test.id }), 'primary')); (groups['launch-tests'+(test.folderId||'')]||$('launch-tests')).append(launch);
+    launch.append(button('Launch test ↗', () => openLaunch(test), 'primary')); (groups['launch-tests'+(test.folderId||'')]||$('launch-tests')).append(launch);
     const saved = card(test.title, `${test.questions.length} questions`); const actions = document.createElement('div'); actions.className = 'actions';
-    actions.append(button('Edit', () => openBuilder(test)), button('Delete', async () => {
+    actions.append(button('Edit', () => openBuilder(test)),button('Create copy',()=>openEntry({title:'Create copy of a test',value:(test.title.slice(0,73)+' (copy)'),max:80},async title=>{const copy=await api('/tests/'+test.id+'/copy','POST',{title});await refresh();openBuilder(copy);})), button('Delete', async () => {
       if (!confirm(`Delete “${test.title}” from your library? Existing sessions keep their copy.`)) return;
       await api(`/tests/${test.id}`, 'DELETE'); await refresh();
     })); saved.append(actions); (groups['library-tests'+(test.folderId||'')]||$('library-tests')).append(saved);
@@ -70,13 +70,15 @@ async function refresh() {
   if(current && !sessionList.some(s=>s.id===current.id && s.phase!=='ended')){current=null;renderDashboard();}
 }
 function openBuilder(test) {
-  tab('library'); editingId = test?.id || null;
+  tab('library');$('creation-choice').hidden=true;$('import-panel').hidden=true; editingId = test?.id || null;
   $('test-builder').hidden = false; $('builder-heading').textContent = test?.id ? 'Edit test' : 'Create a test';
   els.tbTitle.value = test?.title || ''; renderFolderOptions(test?.folderId||''); $('draft-review').textContent=''; tbQuestions = structuredClone(test?.questions || []); hideTbError();
   if (!tbQuestions.length) addQuestion(); else renderTestBuilder();
   $('test-builder').scrollIntoView({ behavior: 'smooth' });
 }
-$('new-test').onclick = () => openBuilder();
+$('new-test').onclick = () => {tab('library');$('test-builder').hidden=true;$('import-panel').hidden=true;$('creation-choice').hidden=false;$('new-title').value='';$('new-folder-choice').value='';$('import-source').value='';$('import-file').value='';$('ai-consent').checked=false;};
+$('create-manual').onclick=()=>openBuilder({title:$('new-title').value.trim(),folderId:$('new-folder-choice').value});
+$('creation-cancel').onclick=()=> $('creation-choice').hidden=true;
 $('tb-add-q-btn').onclick = () => { if (tbQuestions.length < 100) addQuestion(); };
 $('tb-cancel-btn').onclick = () => $('test-builder').hidden = true;
 $('tb-start-btn').onclick = action(async () => {
@@ -157,6 +159,7 @@ function renderDashboard() {
   $('calculator-card').hidden = current.mode === 'calculator' && current.phase !== 'ended';
   $('session-phase').textContent = current.phase === 'waiting' ? 'Waiting room open · Questions appear when you start the test.' : current.phase === 'running' ? 'Session in progress' : 'Session ended · Results saved';
   $('test-start').hidden = current.phase !== 'waiting'; $('session-end').hidden = current.phase === 'ended';
+  $('extend-time').hidden=current.phase!=='running'||!current.deadlineAt;$('session-timer').textContent=current.deadlineAt&&current.phase==='running'?'Timer ends '+new Date(current.deadlineAt).toLocaleTimeString():'';
   $('live-export').hidden = current.mode !== 'test';$('session-rename').hidden=current.mode!=='test';
   const scores = current.students.filter(s => s.result).map(s => s.result.percentage);
   $('live-summary').textContent = `${current.students.length} joined · ${current.students.filter(s => s.status === 'green' && !s.result).length} active` +
@@ -235,8 +238,17 @@ async function initAuth() {
 initAuth().catch(e=>$('auth-message').textContent=e.message);
 
 function renderFolderOptions(selected=$('tb-folder').value) {
-  $('tb-folder').replaceChildren(...[{id:'',name:'Unfiled'},...folders].map(f=>{const o=document.createElement('option');o.value=f.id;o.textContent=f.name;return o;}));$('tb-folder').value=selected;
+ for(const id of ['tb-folder','new-folder-choice']){const value=id==='tb-folder'?selected:$(id).value;$(id).replaceChildren(...[{id:'',name:'Uncategorized Test'},...folders].map(f=>{const o=document.createElement('option');o.value=f.id;o.textContent=f.name;return o;}));$(id).value=value;}
 }
+function renderFolderMenu(){
+ $('folder-list').replaceChildren();if(!folders.length)$('folder-list').textContent='No class folders yet.';
+ for(const f of folders){const row=document.createElement('div');row.className='actions folder-edit-row';const name=document.createElement('strong');name.textContent=f.name;row.append(name,button('Rename',()=>openEntry({title:'Rename folder',value:f.name,max:80},async name=>{await api('/folders/'+f.id,'PATCH',{name});await refresh();})),button('Delete folder',async()=>{if(!confirm('Delete “'+f.name+'”? Its tests will move to Uncategorized Test.'))return;await api('/folders/'+f.id,'DELETE');await refresh();},'danger'));$('folder-list').append(row);}
+}
+let launchTest=null;
+function openLaunch(test){launchTest=test;$('launch-test-title').textContent=test.title;$('launch-duration').value='0';$('launch-show-scores').checked=true;$('launch-shuffle').checked=false;$('launch-error').textContent='';$('launch-dialog').showModal();}
+$('launch-cancel').onclick=()=> $('launch-dialog').close();
+$('launch-form').onsubmit=async e=>{e.preventDefault();$('launch-confirm').disabled=true;try{await launchSession({testId:launchTest.id,durationMinutes:Number($('launch-duration').value),showScores:$('launch-show-scores').checked,shuffleAnswers:$('launch-shuffle').checked});$('launch-dialog').close();}catch(e){$('launch-error').textContent=e.message;}finally{$('launch-confirm').disabled=false;}};
+$('extend-time').onclick=action(async()=>updateSession(await api('/sessions/'+current.id+'/extend','POST',{})));
 let entryAction=null;
 function closeEntry(){entryAction=null;if($('entry-dialog').open)$('entry-dialog').close();}
 function openEntry({title,label='Name',value='',max=120,help='',save='Save'},fn){
@@ -257,6 +269,7 @@ function openImport(mode) {
   $('import-help').textContent=mode==='generate'?'Create new questions from lecture notes or other source material. Review the generated answers and source excerpts before saving.':'Upload a ready-made test with numbered questions, A. / B. options and Answer: A, marked correct options, or an Answer key: block. For blanks, use Answer: value (alternatives separated by |). Missing answers will be flagged for your review. Text-based PDF and Word DOCX supported; scanned files need OCR first.';
   $('ai-config-note').textContent=aiConfigured?'':'AI setup is required in Development before generation is available.';$('import-status').textContent='';$('import-submit').disabled=mode==='generate'&&!aiConfigured;$('import-panel').scrollIntoView({behavior:'smooth'});
 }
+$('import-source').oninput=()=>{if($('import-source').value.trim())$('import-file').value='';};$('import-file').onchange=()=>{if($('import-file').files.length)$('import-source').value='';};
 $('upload-test').onclick=()=>openImport('import');$('create-ai').onclick=()=>openImport('generate');$('import-cancel').onclick=()=> $('import-panel').hidden=true;
 $('import-form').onsubmit=action(async e=> {
   e.preventDefault();if(importMode==='generate'&&!$('ai-consent').checked) {$('import-status').textContent='Confirm that this source may be sent to OpenAI.';return;}
@@ -266,12 +279,13 @@ $('import-form').onsubmit=action(async e=> {
   try {
     const response=await fetch('/api/'+importMode,{method:'POST',headers:{Authorization:'Bearer '+await token()},body:data});const result=await response.json();
     if(generation!==accountGeneration)return;if(!response.ok)throw new Error(result.error||'Could not prepare draft.');
-    openBuilder(result.test);editingId=null;$('draft-review').textContent=['Review every question and answer before saving.',...(result.warnings||[])].join(' ');$('import-panel').hidden=true;$('import-source').value='';$('import-file').value='';
+    if(!result.test?.questions?.length)throw new Error('No questions were recognized. Check the format and try again.');
+    const title=$('new-title').value.trim(),folderId=$('new-folder-choice').value;openBuilder({...result.test,title:title||result.test.title,folderId});editingId=null;$('draft-review').textContent=['Review every question and answer before saving.',...(result.warnings||[])].join(' ');$('import-panel').hidden=true;$('import-source').value='';$('import-file').value='';
   } catch(e) {if(generation===accountGeneration)$('import-status').textContent=e.message;}
   finally {if(generation===accountGeneration)$('import-submit').disabled=importMode==='generate'&&!aiConfigured;}
 });
 function addQuestion() {
- const id='q_'+crypto.randomUUID();tbQuestions.push({id,type:'mc',text:'',options:[{id:id+'_a',text:''},{id:id+'_b',text:''}],correctOptionId:''});renderTestBuilder();els.tbQuestions.lastElementChild?.querySelector('.tb-q-text').focus();
+ const id='q_'+crypto.randomUUID();tbQuestions.push({id,type:'mc',text:'',options:[{id:id+'_a',text:''},{id:id+'_b',text:''}],correctOptionId:'',points:1});renderTestBuilder();els.tbQuestions.lastElementChild?.querySelector('.tb-q-text').focus();
 }
 function moveQuestion(from,to) {if(to<0||to>=tbQuestions.length||from===to)return;tbQuestions.splice(to,0,tbQuestions.splice(from,1)[0]);renderTestBuilder();}
 let draggingQuestion=null;
@@ -282,6 +296,7 @@ function renderTestBuilder() {
   const header=document.createElement('div');header.className='tb-q-header';const handle=document.createElement('span');handle.textContent='⠿ Q'+(i+1);handle.draggable=true;handle.className='drag-handle';handle.title='Drag to reorder';handle.ondragstart=e=>{draggingQuestion=i;e.dataTransfer.setData('text/plain',String(i));e.dataTransfer.effectAllowed='move';};handle.ondragend=()=>draggingQuestion=null;
   card.ondragover=e=> {if(draggingQuestion!==null)e.preventDefault();};card.ondrop=e=> {e.preventDefault();if(draggingQuestion!==null)moveQuestion(draggingQuestion,i);draggingQuestion=null;};header.append(handle);
   const up=button('↑',()=>moveQuestion(i,i-1));up.disabled=i===0;up.setAttribute('aria-label','Move question '+(i+1)+' up');const down=button('↓',()=>moveQuestion(i,i+1));down.disabled=i===tbQuestions.length-1;down.setAttribute('aria-label','Move question '+(i+1)+' down');header.append(up,down);
+  const pointsLabel=document.createElement('label');pointsLabel.textContent='Points';const points=document.createElement('input');points.type='number';points.className='tb-points';points.min='0.01';points.max='1000';points.step='0.01';points.value=q.points??1;points.setAttribute('aria-label','Question '+(i+1)+' points');points.oninput=()=>q.points=Number(points.value);pointsLabel.append(points);header.append(pointsLabel);
   if(tbQuestions.length>1)header.append(button('Remove question',()=>{tbQuestions.splice(i,1);renderTestBuilder();}));card.append(header);
   const type=document.createElement('select');type.className='tb-q-type';type.setAttribute('aria-label','Question '+(i+1)+' type');for(const [value,label] of [['mc','Multiple choice'],['blank','Fill in the blank']]){const o=document.createElement('option');o.value=value;o.textContent=label;type.append(o);}type.value=q.type||'mc';type.onchange=()=>{q.type=type.value;if(q.type==='blank'){q.acceptedAnswers=q.acceptedAnswers||[];q.caseSensitive=q.caseSensitive||false;}else if(!q.options){q.options=[{id:q.id+'_a',text:''},{id:q.id+'_b',text:''}];q.correctOptionId='';}renderTestBuilder();};card.append(type);
   const text=document.createElement('input');text.className='tb-q-text';text.placeholder='Question text…';text.setAttribute('aria-label','Question '+(i+1)+' text');text.maxLength=1000;text.value=q.text;text.oninput=()=>q.text=text.value;card.append(text);
@@ -298,11 +313,12 @@ function renderTestBuilder() {
 function collectTest() {
  const title=els.tbTitle.value.trim();if(!title)return {error:'Please enter a test title.'};
  for(const [i,q] of tbQuestions.entries()) {
+  if(!Number.isFinite(q.points??1)||(q.points??1)<=0||(q.points??1)>1000||Math.abs((q.points??1)*100-Math.round((q.points??1)*100))>0.000001)return {error:'Q'+(i+1)+': Enter positive points, up to1000, with at most2 decimals.'};
   if(!q.text.trim())return {error:'Q'+(i+1)+': Question text is required.'};
   if(q.type==='blank'){if(!q.acceptedAnswers?.length||q.acceptedAnswers.length>20||q.acceptedAnswers.some(a=>a.length>300))return {error:'Q'+(i+1)+': Enter 1–20 accepted answers, each up to 300 characters.'};}
   else {if(q.options.some(o=>!o.text.trim()))return {error:'Q'+(i+1)+': Each option needs text.'};if(!q.correctOptionId)return {error:'Q'+(i+1)+': Please mark the correct answer.'};}
  }
- const questions=tbQuestions.map(q=>q.type==='blank'?{id:q.id,type:'blank',text:q.text,acceptedAnswers:q.acceptedAnswers,caseSensitive:q.caseSensitive,...(q.evidence?{evidence:q.evidence}:{})}:{id:q.id,type:'mc',text:q.text,options:q.options,correctOptionId:q.correctOptionId,...(q.evidence?{evidence:q.evidence}:{})});
+ const questions=tbQuestions.map(q=>q.type==='blank'?{id:q.id,type:'blank',points:q.points??1,text:q.text,acceptedAnswers:q.acceptedAnswers,caseSensitive:q.caseSensitive,...(q.evidence?{evidence:q.evidence}:{})}:{id:q.id,type:'mc',points:q.points??1,text:q.text,options:q.options,correctOptionId:q.correctOptionId,...(q.evidence?{evidence:q.evidence}:{})});
  return {test:{title,folderId:$('tb-folder').value||null,questions}};
 }
 function showTbError(msg){els.tbError.textContent=msg;els.tbError.hidden=false;}

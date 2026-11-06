@@ -50,14 +50,15 @@ function createApp({ store, verifyUser, config = {}, sweepInterval = 1000, gener
     return view;
   }
   const sent = new Map();
-  function changed(room, event, view) {
+  const studentWireView=(s,st)=>({...exam.studentView(s,st),serverNow:Date.now()});
+  function changed(room, event, view,stampClock=false) {
     const value = JSON.stringify(view);
-    if (sent.get(room) !== value) { sent.set(room, value); io.to(room).emit(event, view); }
+    if (sent.get(room) !== value) { sent.set(room, value); io.to(room).emit(event,stampClock?{...view,serverNow:Date.now()}:view); }
   }
   async function broadcast(s) {
     changed(`professor:${s.id}`, 'professor:update', exam.privateView(s));
     changed(`display:${s.id}`, 'display:update', exam.publicView(s));
-    for (const st of s.students) changed(`student:${s.id}:${st.id}`, 'student:update', exam.studentView(s, st));
+    for (const st of s.students) changed(`student:${s.id}:${st.id}`, 'student:update', exam.studentView(s, st),true);
   }
   api.get('/me', (req, res) => res.json(req.user));
   const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:MAX_BYTES,files:1,fields:8,fieldSize:70000}}).single('file');
@@ -82,6 +83,9 @@ function createApp({ store, verifyUser, config = {}, sweepInterval = 1000, gener
     if(!name || name.length>80) return res.status(400).json({error:'Folder name must be 1–80 characters.'});
     res.json(await store.createFolder(req.user.id,name));
   }));
+  api.patch('/folders/:id',wrap(async(req,res)=>{const name=typeof req.body.name==='string'?req.body.name.trim():'';if(!name||name.length>80||/[\x00-\x1f]/.test(name))return res.status(400).json({error:'Use a folder name of 1–80 characters.'});const folder=await store.renameFolder(req.user.id,req.params.id,name);if(!folder)return res.status(404).json({error:'Folder not found'});res.json(folder);}));
+  api.delete('/folders/:id',wrap(async(req,res)=>{if(!await store.deleteFolder(req.user.id,req.params.id))return res.status(404).json({error:'Folder not found'});res.json({ok:true});}));
+  api.post('/tests/:id/copy',wrap(async(req,res)=>{const test=await store.getTest(req.user.id,req.params.id);if(!test)return res.status(404).json({error:'Test not found'});const title=req.body.title===undefined?(test.title.slice(0,73)+' (copy)'):req.body.title;const copy=exam.validateTest({...test,title});if(!copy)return res.status(400).json({error:'Use a test title of 1–80 characters.'});res.json(await store.saveTest(req.user.id,{...copy,id:require('node:crypto').randomUUID(),folderId:test.folderId||null}));}));
   api.get('/tests', wrap(async (req, res) => res.json(await store.listTests(req.user.id))));
   api.post('/tests', wrap(async (req, res) => {
     const test = exam.validateTest(req.body);
@@ -102,7 +106,7 @@ function createApp({ store, verifyUser, config = {}, sweepInterval = 1000, gener
   api.post('/sessions', wrap(async (req, res) => {
     const test = req.body.mode === 'calculator' ? null : await store.getTest(req.user.id, req.body.testId);
     if (!test && req.body.mode !== 'calculator') return res.status(404).json({ error: 'Saved test not found' });
-    const s = exam.newSession(req.user.id, test);
+    const s = exam.newSession(req.user.id, test,Date.now(),req.body);
     await store.createSession(s); res.json(await decorate(s, req));
   }));
   api.get('/sessions/:id', wrap(async (req, res) => res.json(await decorate(await owned(req.params.id, req.user), req))));
@@ -127,6 +131,7 @@ function createApp({ store, verifyUser, config = {}, sweepInterval = 1000, gener
     });
     res.json({ ok: true });
   }));
+  api.post('/sessions/:id/extend',wrap(async(req,res)=>{await owned(req.params.id,req.user);const {session,result}=await store.mutate(req.params.id,s=>{try{exam.extend(s,req.user.id,1);return null;}catch(e){return {error:e.message};}});await broadcast(session);if(result?.error)return res.status(409).json({error:result.error});res.json(await decorate(session,req));}));
   for (const action of ['start', 'end', 'override','finalize-fail']) api.post(`/sessions/:id/${action}`, wrap(async (req, res) => {
     await owned(req.params.id, req.user);
     const { session } = await store.mutate(req.params.id, s => {
@@ -138,7 +143,7 @@ function createApp({ store, verifyUser, config = {}, sweepInterval = 1000, gener
     });
     await broadcast(session);
     if(action==='finalize-fail') {
-      for(const client of io.sockets.sockets.values())if(client.data.student?.sessionId===session.id && client.data.student.studentId===req.body.studentId){client.emit('student:finished',exam.studentView(session,exam.student(session,req.body.studentId)));client.disconnect(true);}
+      for(const client of io.sockets.sockets.values())if(client.data.student?.sessionId===session.id && client.data.student.studentId===req.body.studentId){client.emit('student:finished',studentWireView(session,exam.student(session,req.body.studentId)));client.disconnect(true);}
     }
     res.json(await decorate(session, req));
   }));
@@ -155,6 +160,7 @@ function createApp({ store, verifyUser, config = {}, sweepInterval = 1000, gener
   app.get('/', (req, res) => res.redirect('/professor.html'));
   app.use((error, req, res, next) => {
     if (res.headersSent) return next(error);
+    if(error.code==='23505')return res.status(409).json({error:'A folder with that name already exists.'});
     if(error instanceof multer.MulterError)return res.status(413).json({error:'Upload one PDF or DOCX file up to 5 MB.'});
     console.error('Request failed:', error.message);
     res.status(error.status || 400).json({ error: error.status === 404 ? 'Session not found' : 'Unable to complete request. Check connection and retry.' });
@@ -190,16 +196,18 @@ function createApp({ store, verifyUser, config = {}, sweepInterval = 1000, gener
     });
     on('student:join', async input => {
       const { session, result } = await store.mutate(input.sessionId, s => {
-        const result = exam.join(s, input);
+        exam.sweep(s);
+        let result;try{result=exam.join(s,input);}catch(e){return {joinError:e.message};}
         exam.student(s, result.studentId).connectionId = socket.id;
         return result;
       });
+      if(result.joinError){await broadcast(session);throw new Error(result.joinError);}
       // A socket can only speak for its most recently authenticated enrollment.
       for (const room of socket.rooms) if (room.startsWith('student:')) socket.leave(room);
       socket.data.student = { sessionId: session.id, studentId: result.studentId };
       socket.join(`student:${session.id}:${result.studentId}`);
       await broadcast(session);
-      return { ...result, view: exam.studentView(session, exam.student(session, result.studentId)) };
+      return { ...result, view: studentWireView(session, exam.student(session, result.studentId)) };
     });
     async function studentMutation(fn, allowLocked=false) {
       const identity = socket.data.student;
@@ -209,20 +217,24 @@ function createApp({ store, verifyUser, config = {}, sweepInterval = 1000, gener
         // One row-locked operation has one decision time, including nested rules.
         const now=Date.now();
         exam.sweep(s,now);
+        if(s.phase==='ended')return {closed:true};
         if(exam.student(s,identity.studentId).submission?.professorFinalized)return {blocked:true};
         if(!allowLocked && exam.isFailed(exam.student(s,identity.studentId))) return {blocked:true};
         return fn(s, identity.studentId,now);
       });
       await broadcast(session);
-      return { ...(result?.blocked ? {ok:false,error:'Call professor: activity is locked'} : {}), view: exam.studentView(session, exam.student(session, identity.studentId)) };
+      return { ...(result?.blocked ? {ok:false,error:'Call professor: activity is locked'} : {}), view: studentWireView(session, exam.student(session, identity.studentId)) };
     }
+    on('student:sync',()=>studentMutation(()=>null,true));
     on('student:visibility', ({ visible }) => studentMutation((s, id, now) => exam.visibility(s, id, visible,now),true));
     on('student:progress',({questionId})=>studentMutation((s,id)=>exam.progress(s,id,questionId)));
-    on('student:draft', ({ answers }) => studentMutation((s, id) => {
+    on('student:draft', ({ answers,questionId }) => studentMutation((s, id) => {
       if (s.phase !== 'running') throw new Error('Test is not running');
       const st = exam.student(s, id);
       if (st.submission) throw new Error('Student already submitted');
       st.draft = exam.validateAnswers(s, answers);
+      if(questionId && st.draft[questionId]?.trim())exam.progress(s,id,questionId);
+      else if(st.progressQuestionId && !st.draft[st.progressQuestionId]?.trim())st.progressQuestionId=null;
     }));
     on('student:submit', ({ answers }) => studentMutation((s, id, now) => exam.submit(s, id, answers,now)));
     // Disconnection never ends an exam or constitutes confirmed hidden time.

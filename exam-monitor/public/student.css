@@ -455,3 +455,7 @@ body {
 }
 
 .activity-lock{position:fixed;inset:0;z-index:1000;background:#120808ed;display:grid;place-items:center;padding:24px;text-align:center;color:#ffd8d4}.activity-lock>div{max-width:500px;border:2px solid #b85650;border-radius:18px;padding:36px;background:#381e20}.blank-answer{width:100%;padding:14px;font:inherit;border:1px solid #718877;border-radius:8px}
+
+.test-timer{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;margin:16px 0;background:#203d30;color:#e8f3dd;border-radius:10px}.test-timer strong{font-size:26px;font-variant-numeric:tabular-nums}.test-timer.critical{background:#702c2c;color:#fff}.test-timer.critical strong{font-size:40px}#time-notice{font-weight:600}#submit-dialog{width:min(500px,90vw);padding:25px;border-radius:14px;border:1px solid #76967c;background:#f4f7ef;color:#183728}#submit-dialog::backdrop{background:#102c27a0}#submit-dialog button{padding:12px;margin:8px;border-radius:8px;font:inherit}
+
+body{flex-direction:column;align-items:stretch}.calculator{width:100%;box-sizing:border-box;margin:0 auto}#student-notice{align-self:center;max-width:600px;margin:12px 16px 0}#student-notice:empty{display:none}
