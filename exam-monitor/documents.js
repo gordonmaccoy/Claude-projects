@@ -47,7 +47,7 @@ function parseTest(text,filename='Uploaded test') {
  const keyAt=lines.findIndex(s=>/^(?:answer\s*key|answers)\s*:?/i.test(s));
  if(keyAt>=0){const keyText=lines.slice(keyAt).join('\n').replace(/^(?:answer\s*key|answers)\s*:?/i,'');for(const m of keyText.matchAll(/(?:^|\n|[,;]\s*)(\d{1,3})\s*[).:\-]\s*([^\n,;]+)/g))keys[m[1]]=m[2].trim();}
  function finish(){if(!current)return;const q=current;const supplied=q.answer||keys[q.number]||'';delete q.answer;delete q.number;
-   if(q.options.length){q.type='mc';const letter=supplied.match(/^\(?([A-E])\)?(?:[).:\s]|$)/i)?.[1]?.toUpperCase();const matched=q.options.find(o=>o.letter===letter)||q.options.find(o=>normalize(o.text)===normalize(supplied));const marks=q.options.filter(o=>o.marked);const conflict=marks.length>1||(marks.length===1&&supplied&&matched?.id!==marks[0].id);q.correctOptionId=conflict?'':marks.length===1?marks[0].id:matched?.id||'';
+   if(q.options.length){q.type='mc';const letter=supplied.match(/^\(?([A-E])\)?(?:[).:\s]|$)/i)?.[1]?.toUpperCase();const matched=q.options.find(o=>o.letter===letter)||q.options.find(o=>normalize(o.text)===normalize(supplied));const marks=q.options.filter(o=>o.marked);const conflict=marks.length>1||(marks.length===1&&supplied&&matched?.id!==marks[0].id);q.correctOptionId=conflict?'':marks.length===1?marks[0].id:matched?.id||'';q.answerKeyConflict=!!conflict;
      for(const o of q.options){delete o.letter;delete o.marked;}if(!q.correctOptionId)warnings.push('Question '+(questions.length+1)+': select the correct answer from the supplied key.');
    }else{q.type='blank';q.acceptedAnswers=supplied.split('|').map(s=>s.trim()).filter(Boolean);q.caseSensitive=false;delete q.options;if(!q.acceptedAnswers.length)warnings.push('Question '+(questions.length+1)+': enter accepted answers.');}
    questions.push(q);current=null;
@@ -91,7 +91,7 @@ function parseSentenceBlocks(text,filename){
   const key=answerLine?.replace(/^(?:answer|correct answer)\s*:\s*/i,'').trim();const marked=options.filter(o=>o.marked);const match=key?options.find(o=>o.text.toLowerCase()===key.toLowerCase())||(/^[A-E][).:]?$/i.test(key)?options[key.toUpperCase().charCodeAt(0)-65]:null):null;
   const conflict=marked.length>1||(marked.length===1&&key&&match?.id!==marked[0].id);const correctOptionId=conflict?'':marked.length===1?marked[0].id:match?.id||'';for(const o of options)delete o.marked;
   if(!correctOptionId)warnings.push('Question '+(questions.length+1)+': choices imported; select the correct answer (none was marked in the source).');
-  questions.push({id,type:'mc',points:1,text,options,correctOptionId});
+  questions.push({id,type:'mc',points:1,text,options,correctOptionId,answerKeyConflict:!!conflict});
  }
  return {test:{title:filename.replace(/\.[^.]+$/,'').slice(0,80)||'Uploaded test',questions},warnings};
 }

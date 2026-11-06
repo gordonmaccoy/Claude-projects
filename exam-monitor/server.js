@@ -11,8 +11,9 @@ const { workbook,exportFilename } = require('./export');
 const multer=require('multer');
 const {extractDocument,parseTest,MAX_BYTES,MAX_TEXT}=require('./documents');
 const {createGenerator}=require('./generation');
+const {createAIImporter,createAnswerCompleter}=require('./answer-key');
 
-function createApp({ store, verifyUser, config = {}, sweepInterval = 1000, generate=createGenerator(), aiConfigured=Boolean(process.env.OPENAI_API_KEY && process.env.OPENAI_MODEL) }) {
+function createApp({ store, verifyUser, config = {}, sweepInterval = 1000, generate=createGenerator(), completeAnswers=createAnswerCompleter(),importWithAI=createAIImporter(), aiConfigured=Boolean(process.env.OPENAI_API_KEY && process.env.OPENAI_MODEL) }) {
   const app = express();
   const server = http.createServer(app);
   const io = new Server(server, { maxHttpBufferSize: 128 * 1024, cors: { origin: config.origin || false } });
@@ -44,7 +45,7 @@ function createApp({ store, verifyUser, config = {}, sweepInterval = 1000, gener
   };
   const origin = req => config.origin || `http://${req.headers.host}`;
   async function decorate(s, req) {
-    const view = exam.privateView(s);
+    const view = {...exam.privateView(s),serverNow:Date.now()};
     view.joinUrl = `${origin(req)}/student.html?session=${s.id}`;
     view.displayUrl = `${origin(req)}/classroom.html#${s.id}/${s.displayToken}`;
     return view;
@@ -56,27 +57,23 @@ function createApp({ store, verifyUser, config = {}, sweepInterval = 1000, gener
     if (sent.get(room) !== value) { sent.set(room, value); io.to(room).emit(event,stampClock?{...view,serverNow:Date.now()}:view); }
   }
   async function broadcast(s) {
-    changed(`professor:${s.id}`, 'professor:update', exam.privateView(s));
+    changed(`professor:${s.id}`, 'professor:update', exam.privateView(s),true);
     changed(`display:${s.id}`, 'display:update', exam.publicView(s));
     for (const st of s.students) changed(`student:${s.id}:${st.id}`, 'student:update', exam.studentView(s, st),true);
   }
   api.get('/me', (req, res) => res.json(req.user));
   const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:MAX_BYTES,files:1,fields:8,fieldSize:MAX_TEXT*4}}).single('file');
   const work=new Map();
-  for(const mode of ['import','generate']) api.post(`/${mode}`,upload,wrap(async(req,res)=>{
-    if(mode==='generate' && !aiConfigured)return res.status(503).json({error:'AI generation needs Development OPENAI_API_KEY and OPENAI_MODEL configuration.'});
-    const key=`${req.user.id}:${mode}`,now=Date.now(),previous=work.get(key);
-    const interval=mode==='generate'?3600000:60000,limit=mode==='generate'?5:20;
-    const state=previous && now-previous.start<interval?previous:{start:now,count:0,busy:false};
-    if(state.busy || state.count>=limit)return res.status(429).json({error:'Please wait before processing another document or generation request.'});
-    state.busy=true;state.count++;work.set(key,state);
-    try {
-      const source=req.file?await extractDocument(req.file):(req.body.source || req.body.text);
-      const result=mode==='import'?parseTest(source,req.file?.originalname):await generate({source,count:req.body.count,types:req.body.types,difficulty:req.body.difficulty});
-      res.json(result);
-    } catch(error) {res.status(400).json({error:error.message || 'Unable to process this material.'});}
-    finally {state.busy=false;if(req.file)req.file.buffer.fill(0);}
+  function beginWork(req,res,isAI){const key=req.user.id+':'+(isAI?'ai':'import'),now=Date.now(),previous=work.get(key),interval=isAI?3600000:60000,limit=isAI?5:20;
+    const state=previous&&now-previous.start<interval?previous:{start:now,count:0,busy:false};if(state.busy||state.count>=limit){res.status(429).json({error:isAI?'OnScreen AI request limit reached (5 per hour). Please wait before retrying.':'Please wait before processing another document.'});return null;}state.busy=true;state.count++;work.set(key,state);return state;
+  }
+  for(const mode of ['import','generate','import-ai'])api.post('/'+mode,upload,wrap(async(req,res)=>{
+    const isAI=mode!=='import';if(isAI&&!aiConfigured){if(req.file)req.file.buffer.fill(0);return res.status(503).json({error:'AI needs Development OPENAI_API_KEY and OPENAI_MODEL configuration.'});}
+    const state=beginWork(req,res,isAI);if(!state){if(req.file)req.file.buffer.fill(0);return;}
+    try{const source=req.file?await extractDocument(req.file):(req.body.source||req.body.text);const result=mode==='import'?parseTest(source,req.file?.originalname):mode==='import-ai'?await importWithAI({source,filename:req.file?.originalname}):await generate({source,count:req.body.count,types:req.body.types,difficulty:req.body.difficulty});res.json(result);}
+    catch(e){res.status(400).json({error:e.message||'Unable to process this material.'});}finally{state.busy=false;if(req.file)req.file.buffer.fill(0);}
   }));
+  api.post('/answer-key',wrap(async(req,res)=>{if(!aiConfigured)return res.status(503).json({error:'AI needs Development OPENAI_API_KEY and OPENAI_MODEL configuration.'});const state=beginWork(req,res,true);if(!state)return;try{res.json(await completeAnswers(req.body.test));}catch(e){res.status(400).json({error:e.message||'Unable to determine answer keys.'});}finally{state.busy=false;}}));
   api.get('/folders',wrap(async(req,res)=>res.json(await store.listFolders(req.user.id))));
   api.post('/folders',wrap(async(req,res)=>{
     const name=typeof req.body.name === 'string' ? req.body.name.trim() : '';
@@ -190,7 +187,7 @@ function createApp({ store, verifyUser, config = {}, sweepInterval = 1000, gener
       for (const room of socket.rooms) if (room.startsWith('professor:')) socket.leave(room);
       socket.data.professor = { token, sessionId, verifiedAt: Date.now() };
       socket.join(`professor:${sessionId}`);
-      return { view: exam.privateView(s) };
+      return { view: {...exam.privateView(s),serverNow:Date.now()} };
     });
     on('display:watch', async ({ sessionId, token }) => {
       const s = await store.getSession(sessionId);

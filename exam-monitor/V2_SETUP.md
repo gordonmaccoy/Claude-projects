@@ -103,3 +103,11 @@ Timed tests show a server-synchronized countdown, a one-minute warning, and a pr
 Manual submission shows an in-page confirmation listing unanswered questions and permits explicit submission for partial credit. Hidden-score mode returns a submission receipt without grade fields to the student; professor results/Excel retain the scores.
 
 Upload validation now reports oversized files by name/size before sending them, and distinguishes file-size, file-count and pasted-text errors on the server. The5MB file limit is unchanged. Multipart source fields allow the UTF-8 byte representation of the documented60,000-character source limit. Focused browser regression: ONSCREEN_UI_UPLOAD_ONLY=1 npm run test:ui.
+
+## Seamless AI-assisted existing-test import
+
+Upload a test now defaults to an AI-assisted preparation flow after explicit source/cost consent. Recognized questions, choices, points and supplied keys are preserved; AI fills missing keys. Unrecognized layouts use structured AI organization constrained to wording/options present in the source. The result is an editable preview, never an automatic Library save or launch. Import without AI remains available.
+
+Existing drafts have Determine answers with AI, with a confirmation explaining the OpenAI transmission and API charge. It fills missing answers without re-uploading or changing current title/folder. Uncertain keys remain unresolved and include a private rationale for professor review. Correct keys and rationales never enter student/public payloads.
+
+Generate-new-questions, AI import and answer-key completion share the5-per-hour professor AI budget. Error messages distinguish exhausted API credits, spend/usage limits, request throttling and model access. API billing still must be active; ChatGPT/Codex chat status does not establish the API account balance.

@@ -14,12 +14,14 @@ function validateTest(input) {
     seenQuestions.add(q.id);
     const points=q.points===undefined?1:q.points;
     if(typeof points!=='number'||!Number.isFinite(points)||points<=0||points>1000||Math.abs(points*100-Math.round(points*100))>0.000001)return null;
+    const answerKeyConflict=q.answerKeyConflict===true;
+    const answerExplanation=typeof q.answerExplanation==='string'?q.answerExplanation.slice(0,1000):'';
     const evidence = typeof q.evidence === 'string' ? q.evidence.slice(0,1000) : '';
     if (q.type === 'blank') {
       if (!Array.isArray(q.acceptedAnswers) || !q.acceptedAnswers.length || q.acceptedAnswers.length > 20 ||
           q.acceptedAnswers.some(a => typeof a !== 'string' || !a.trim() || a.length > 300) ||
           (q.caseSensitive !== undefined && typeof q.caseSensitive !== 'boolean')) return null;
-      questions.push({ id:q.id, type:'blank', points, text:q.text.trim(), acceptedAnswers:[...new Set(q.acceptedAnswers.map(a=>a.trim()))], caseSensitive:q.caseSensitive === true, evidence });
+      questions.push({ id:q.id, type:'blank', points,answerExplanation,answerKeyConflict, text:q.text.trim(), acceptedAnswers:[...new Set(q.acceptedAnswers.map(a=>a.trim()))], caseSensitive:q.caseSensitive === true, evidence });
       continue;
     }
     if ((q.type !== undefined && q.type !== 'mc') || !Array.isArray(q.options) || q.options.length < 2 || q.options.length > 5 || typeof q.correctOptionId !== 'string') return null;
@@ -30,7 +32,7 @@ function validateTest(input) {
       seenOptions.add(o.id); options.push({id:o.id,text:o.text.trim()});
     }
     if (!seenOptions.has(q.correctOptionId)) return null;
-    questions.push({id:q.id,type:'mc',points,text:q.text.trim(),options,correctOptionId:q.correctOptionId,evidence});
+    questions.push({id:q.id,type:'mc',points,answerExplanation,answerKeyConflict,text:q.text.trim(),options,correctOptionId:q.correctOptionId,evidence});
   }
   return { title: input.title.trim(), questions };
 }

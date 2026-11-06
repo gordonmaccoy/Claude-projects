@@ -13,8 +13,9 @@ test('HTTP/socket exam flow enforces ownership, recovers after restart, sanitize
   const pool = { connect: lease, query: async (...a) => { const c = await lease(); try { return await c.query(...a); } finally { c.release(); } } };
   const store = createStore(pool); await store.init();
   const verifyUser = async token => token === 'alice' || token === 'bob' ? { id: token, email: `${token}@example.com` } : null;
-  let running; const sockets = [];
-  async function boot() { running = createApp({ store, verifyUser, sweepInterval: 0 }); running.server.listen(0, '127.0.0.1'); await once(running.server, 'listening'); return `http://127.0.0.1:${running.server.address().port}`; }
+  let running,aiEnabled=false; const sockets = [];
+  const mockComplete=async input=>{const test=require('../answer-key').validateDraft(input);for(const q of test.questions)if(q.type==='blank'&&!q.acceptedAnswers.length)q.acceptedAnswers=['answer'];else if(q.type!=='blank'&&!q.correctOptionId)q.correctOptionId=q.options[0].id;return {test,warnings:['AI draft review']};};
+  async function boot() { running = createApp({ store, verifyUser, sweepInterval: 0,aiConfigured:aiEnabled,completeAnswers:mockComplete,importWithAI:async({source})=>mockComplete(require('../documents').parseTest(source).test) }); running.server.listen(0, '127.0.0.1'); await once(running.server, 'listening'); return `http://127.0.0.1:${running.server.address().port}`; }
   let base = await boot();
   const request = async (route, method = 'GET', body, who = 'alice') => {
     const r = await fetch(base + route, { method, headers: { Authorization: `Bearer ${who}`, 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -27,6 +28,7 @@ test('HTTP/socket exam flow enforces ownership, recovers after restart, sanitize
     assert.equal((await request('/api/import','POST',{text:'Quiz\n1. Capital?\nAnswer: Seoul'},'invalid')).status,401);
     const oversized=new FormData();oversized.append('file',new Blob([Buffer.alloc(5*1024*1024+1)]),'oversized.pdf');const uploadError=await fetch(base+'/api/generate',{method:'POST',headers:{Authorization:'Bearer alice'},body:oversized});assert.equal(uploadError.status,413);assert.match((await uploadError.json()).error,/too large.*5 MB/i);
     const unicodeSource=new FormData();unicodeSource.append('source','가'.repeat(30000));const unicodeReply=await fetch(base+'/api/generate',{method:'POST',headers:{Authorization:'Bearer alice'},body:unicodeSource});assert.equal(unicodeReply.status,503,'A valid source under60,000 characters must pass multipart parsing');await unicodeReply.json();
+    assert.equal((await request('/api/answer-key','POST',{test:{}},'invalid')).status,401);assert.equal((await request('/api/answer-key','POST',{test:{}})).status,503);
     const imported=await request('/api/import','POST',{text:'Quiz\n1. Capital?\nAnswer: Seoul'});
     assert.equal(imported.body.test.questions[0].type,'blank');
     assert.equal((await request('/api/tests')).body.length,0,'Import must be review-only, never save automatically');
@@ -76,7 +78,11 @@ test('HTTP/socket exam flow enforces ownership, recovers after restart, sanitize
     await emit(a, 'student:draft', { answers: { q: 'a' } });assert.equal((await emit(a,'student:progress',{questionId:'q'})).ok,true);assert.equal((await emit(a,'student:progress',{questionId:'invalid'})).ok,false);assert.equal((await request(`/api/sessions/${sid}`)).body.students.find(st=>st.id===joined.studentId).progress.answered,1);
     const unrelated=[];const listener=view=>unrelated.push(view);a.on('student:update',listener);await new Promise(r=>setTimeout(r,15));const ownHeartbeat=await emit(b,'student:visibility',{visible:true});assert.equal(Number.isFinite(ownHeartbeat.view.serverNow),true,'Own heartbeat must include a clock sample');a.off('student:update',listener);assert.equal(unrelated.length,0,'Another student heartbeat must not resend this student’s questions just to update the clock');
     sockets.forEach(s => s.disconnect()); await running.close();
-    base = await boot();
+    aiEnabled=true;base = await boot();
+    const partial={title:'AI key draft',questions:[{...saved.body.questions[0],correctOptionId:''}]};
+    for(let attempt=0;attempt<3;attempt++){const r=await request('/api/answer-key','POST',{test:partial});assert.equal(r.status,200);assert.equal(r.body.test.questions[0].correctOptionId,'a');}
+    for(let attempt=0;attempt<2;attempt++)assert.equal((await request('/api/import-ai','POST',{source:'Quiz\n1. 2+2?\nA.4\nB.5'})).status,200);
+    assert.equal((await request('/api/generate','POST',{source:'Some source material',count:1})).status,429,'All AI routes share a budget');assert.equal((await request('/api/tests')).body.length,1,'AI never saves automatically');
     const reconnect = await socket();
     const resume = await emit(reconnect, 'student:join', { sessionId: sid, resumeToken: joined.resumeToken });
     assert.equal(resume.ok, true); assert.equal(resume.view.draft.q, 'a');
