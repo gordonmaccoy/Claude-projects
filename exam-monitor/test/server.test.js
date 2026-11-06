@@ -25,6 +25,8 @@ test('HTTP/socket exam flow enforces ownership, recovers after restart, sanitize
   try {
     assert.equal((await request('/api/tests', 'GET', undefined, 'invalid')).status, 401);
     assert.equal((await request('/api/import','POST',{text:'Quiz\n1. Capital?\nAnswer: Seoul'},'invalid')).status,401);
+    const oversized=new FormData();oversized.append('file',new Blob([Buffer.alloc(5*1024*1024+1)]),'oversized.pdf');const uploadError=await fetch(base+'/api/generate',{method:'POST',headers:{Authorization:'Bearer alice'},body:oversized});assert.equal(uploadError.status,413);assert.match((await uploadError.json()).error,/too large.*5 MB/i);
+    const unicodeSource=new FormData();unicodeSource.append('source','가'.repeat(30000));const unicodeReply=await fetch(base+'/api/generate',{method:'POST',headers:{Authorization:'Bearer alice'},body:unicodeSource});assert.equal(unicodeReply.status,503,'A valid source under60,000 characters must pass multipart parsing');await unicodeReply.json();
     const imported=await request('/api/import','POST',{text:'Quiz\n1. Capital?\nAnswer: Seoul'});
     assert.equal(imported.body.test.questions[0].type,'blank');
     assert.equal((await request('/api/tests')).body.length,0,'Import must be review-only, never save automatically');

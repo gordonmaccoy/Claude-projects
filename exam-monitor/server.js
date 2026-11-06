@@ -9,7 +9,7 @@ const { authConfig, createVerifier } = require('./auth');
 const exam = require('./exam');
 const { workbook,exportFilename } = require('./export');
 const multer=require('multer');
-const {extractDocument,parseTest,MAX_BYTES}=require('./documents');
+const {extractDocument,parseTest,MAX_BYTES,MAX_TEXT}=require('./documents');
 const {createGenerator}=require('./generation');
 
 function createApp({ store, verifyUser, config = {}, sweepInterval = 1000, generate=createGenerator(), aiConfigured=Boolean(process.env.OPENAI_API_KEY && process.env.OPENAI_MODEL) }) {
@@ -26,7 +26,7 @@ function createApp({ store, verifyUser, config = {}, sweepInterval = 1000, gener
   app.use(express.json({ limit: '1mb' }));
   const wrap = fn => (req, res, next) => Promise.resolve(fn(req, res)).catch(next);
   app.get('/health', wrap(async (req, res) => { await store.activeSessions(); res.json({ ok: true }); }));
-  app.get('/api/config', (req, res) => res.json({ supabaseUrl: config.url || '', supabaseKey: config.key || '',aiConfigured }));
+  app.get('/api/config', (req, res) => res.json({ supabaseUrl: config.url || '', supabaseKey: config.key || '',uploadMaxBytes:MAX_BYTES,aiConfigured }));
   app.use('/api', (req, res, next) => Promise.resolve().then(async () => {
     const token = /^Bearer (.+)$/.exec(req.headers.authorization || '')?.[1];
     req.user = await verifyUser(token);
@@ -61,7 +61,7 @@ function createApp({ store, verifyUser, config = {}, sweepInterval = 1000, gener
     for (const st of s.students) changed(`student:${s.id}:${st.id}`, 'student:update', exam.studentView(s, st),true);
   }
   api.get('/me', (req, res) => res.json(req.user));
-  const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:MAX_BYTES,files:1,fields:8,fieldSize:70000}}).single('file');
+  const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:MAX_BYTES,files:1,fields:8,fieldSize:MAX_TEXT*4}}).single('file');
   const work=new Map();
   for(const mode of ['import','generate']) api.post(`/${mode}`,upload,wrap(async(req,res)=>{
     if(mode==='generate' && !aiConfigured)return res.status(503).json({error:'AI generation needs Development OPENAI_API_KEY and OPENAI_MODEL configuration.'});
@@ -161,7 +161,12 @@ function createApp({ store, verifyUser, config = {}, sweepInterval = 1000, gener
   app.use((error, req, res, next) => {
     if (res.headersSent) return next(error);
     if(error.code==='23505')return res.status(409).json({error:'A folder with that name already exists.'});
-    if(error instanceof multer.MulterError)return res.status(413).json({error:'Upload one PDF or DOCX file up to 5 MB.'});
+    if(error instanceof multer.MulterError){
+      if(error.code==='LIMIT_FILE_SIZE')return res.status(413).json({error:'The selected file is too large. Maximum upload size is '+(MAX_BYTES/1024/1024)+' MB. Choose a smaller file or paste its text.'});
+      if(error.code==='LIMIT_FIELD_VALUE')return res.status(413).json({error:'The pasted source material is too large. Use at most 60,000 characters.'});
+      if(['LIMIT_FILE_COUNT','LIMIT_UNEXPECTED_FILE'].includes(error.code))return res.status(400).json({error:'Choose one PDF or DOCX file using the upload field.'});
+      return res.status(400).json({error:'The upload could not be read. Reselect the PDF or DOCX file and try again.'});
+    }
     console.error('Request failed:', error.message);
     res.status(error.status || 400).json({ error: error.status === 404 ? 'Session not found' : 'Unable to complete request. Check connection and retry.' });
   });

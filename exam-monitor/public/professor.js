@@ -1,7 +1,7 @@
 const $ = id => document.getElementById(id);
 const els = { tbTitle: $('tb-title'), tbQuestions: $('tb-questions'), tbError: $('tb-error') };
 const socket = io();
-let auth, account, current, historySession, library = [], folders = [], aiConfigured=false, importMode="import", sessionList = [], editingId = null, tbQuestions = [], popup, recoveringPassword = false;
+let auth, account, current, historySession, library = [], folders = [], aiConfigured=false, uploadMaxBytes=5*1024*1024, importMode="import", sessionList = [], editingId = null, tbQuestions = [], popup, recoveringPassword = false;
 let accountGeneration = 0;
 let popupSessionId = null, openingDisplay = false, launching = false;
 function clearPrivateWorkspace() {
@@ -220,7 +220,7 @@ async function signedIn() {
 async function initAuth() {
   const config=await (await fetch('/api/config')).json();
   if (!config.supabaseUrl || !config.supabaseKey) { $('auth-message').textContent='Professor sign-in needs Development authentication configuration. See V2_SETUP.md.'; $('login').querySelectorAll('input,button').forEach(el=>el.disabled=true); return; }
-  aiConfigured=Boolean(config.aiConfigured);
+  aiConfigured=Boolean(config.aiConfigured);if(Number.isSafeInteger(config.uploadMaxBytes)&&config.uploadMaxBytes>0)uploadMaxBytes=config.uploadMaxBytes;
   auth=window.createOnScreenAuth(config.supabaseUrl, config.supabaseKey, {auth:{flowType:'pkce',detectSessionInUrl:true}});
   auth.auth.onAuthStateChange((event) => {
     if (event==='PASSWORD_RECOVERY') { recoveringPassword=true; $('login').hidden=false; $('workspace').hidden=true; $('login-form').hidden=true; $('google').hidden=true; $('new-password-form').hidden=false; }
@@ -273,7 +273,10 @@ $('import-source').oninput=()=>{if($('import-source').value.trim())$('import-fil
 $('upload-test').onclick=()=>openImport('import');$('create-ai').onclick=()=>openImport('generate');$('import-cancel').onclick=()=> $('import-panel').hidden=true;
 $('import-form').onsubmit=action(async e=> {
   e.preventDefault();if(importMode==='generate'&&!$('ai-consent').checked) {$('import-status').textContent='Confirm that this source may be sent to OpenAI.';return;}
-  const data=new FormData(),file=$('import-file').files[0];if(file)data.append('file',file);else data.append('source',$('import-source').value);
+  const data=new FormData(),file=$('import-file').files[0],source=$('import-source').value;
+  if(file && file.size>uploadMaxBytes){const mb=Math.ceil(file.size/1024/1024*100)/100;$('import-status').textContent='File “'+file.name+'” is too large for the '+(uploadMaxBytes/1024/1024)+' MB limit ('+mb+' MB). Choose a smaller file or paste its text.';return;}
+  if(!file && !source.trim()){$('import-status').textContent='Choose a PDF or DOCX file, or paste source text.';return;}
+  if(file)data.append('file',file);else data.append('source',source);
   if(importMode==='generate')for(const key of ['count','types','difficulty'])data.append(key,$('ai-'+key).value);
   const generation=accountGeneration;$('import-submit').disabled=true;$('import-status').textContent=importMode==='generate'?'Creating a draft…':'Reading your test…';
   try {
