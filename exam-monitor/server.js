@@ -13,7 +13,8 @@ const {extractDocument,parseTest,MAX_BYTES,MAX_TEXT}=require('./documents');
 const {createGenerator}=require('./generation');
 const {createAIImporter,createAnswerCompleter}=require('./answer-key');
 
-function createApp({ store, verifyUser, config = {}, sweepInterval = 1000, generate=createGenerator(), completeAnswers=createAnswerCompleter(),importWithAI=createAIImporter(), aiConfigured=Boolean(process.env.OPENAI_API_KEY && process.env.OPENAI_MODEL) }) {
+function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweepInterval = 1000, generate=createGenerator(), completeAnswers=createAnswerCompleter(),importWithAI=createAIImporter(), aiConfigured=Boolean(process.env.OPENAI_API_KEY && process.env.OPENAI_MODEL) }) {
+  const settingsController=require('./settings-routes').createSettingsController({store,config,...settingsOptions});
   const app = express();
   const server = http.createServer(app);
   const io = new Server(server, { maxHttpBufferSize: 128 * 1024, cors: { origin: config.origin || false } });
@@ -32,6 +33,8 @@ function createApp({ store, verifyUser, config = {}, sweepInterval = 1000, gener
     const token = /^Bearer (.+)$/.exec(req.headers.authorization || '')?.[1];
     req.user = await verifyUser(token);
     if (!req.user) return res.status(401).json({ error: 'Please sign in with a verified professor account.' });
+    const state=await store.accountState(req.user.id);
+    if(state!=='active'&&!((req.method==='GET'&&req.path==='/settings')||(req.method==='DELETE'&&req.path==='/account')))return res.status(423).json({error:'Account deletion is in progress or complete.'});
     // Continue only after remote identity validation, never from client claims.
     req.authenticated = true;
     next();
@@ -61,6 +64,7 @@ function createApp({ store, verifyUser, config = {}, sweepInterval = 1000, gener
     changed(`display:${s.id}`, 'display:update', exam.publicView(s));
     for (const st of s.students) changed(`student:${s.id}:${st.id}`, 'student:update', exam.studentView(s, st),true);
   }
+  api.use(settingsController.router);
   api.get('/me', (req, res) => res.json(req.user));
   api.post('/onboarding',wrap(async(req,res)=>res.json(await store.initializeOnboarding(req.user.id,require('./onboarding').createStarterTest()))));
   api.post('/onboarding/dismiss',wrap(async(req,res)=>{
@@ -280,7 +284,8 @@ function createApp({ store, verifyUser, config = {}, sweepInterval = 1000, gener
     finally { sweeping = false; }
   }
   const timer = sweepInterval ? setInterval(tick, sweepInterval) : null;
-  return { app, server, io, tick, close: async () => { if (timer) clearInterval(timer); await new Promise(resolve => io.close(resolve)); } };
+  const settingsTimer = sweepInterval ? setInterval(()=>settingsController.runJobs().catch(()=>console.error('Support background retry failed')),60000) : null;
+  return { app, server, io, tick, runSettingsJobs:()=>settingsController.runJobs(), close: async () => { if (timer) clearInterval(timer);if(settingsTimer)clearInterval(settingsTimer); await new Promise(resolve => io.close(resolve)); } };
 }
 async function main() {
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required. Configure Railway Development PostgreSQL.');

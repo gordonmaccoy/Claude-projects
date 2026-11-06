@@ -3,9 +3,10 @@ const els = { tbTitle: $('tb-title'), tbQuestions: $('tb-questions'), tbError: $
 const socket = io();
 let auth, account, current, historySession, library = [], folders = [], aiConfigured=false, uploadMaxBytes=5*1024*1024, importMode="import", sessionList = [], editingId = null, tbQuestions = [], popup, recoveringPassword = false;
 let accountGeneration = 0,creationVersion=0,professorTimerSnapshot=null;
+let lastWorkspaceTab = 'launch';
 let popupSessionId = null, openingDisplay = false, launching = false;
 function clearPrivateWorkspace() {
-  tour.reset();accountGeneration++;creationVersion++;professorTimerSnapshot=null;if($('answer-ai-dialog').open)$('answer-ai-dialog').close();$('answer-ai-status').textContent='';closeEntry();launchTest=null;$('new-title').value='';$('folder-list').replaceChildren();$('folder-menu').open=false;for(const id of ['tb-folder','new-folder-choice'])$(id).replaceChildren();$('launch-test-title').textContent='';if($('launch-dialog').open)$('launch-dialog').close();$('creation-choice').hidden=true;
+  settings.reset();tour.reset();lastWorkspaceTab='launch';accountGeneration++;creationVersion++;professorTimerSnapshot=null;if($('answer-ai-dialog').open)$('answer-ai-dialog').close();$('answer-ai-status').textContent='';closeEntry();launchTest=null;$('new-title').value='';$('folder-list').replaceChildren();$('folder-menu').open=false;for(const id of ['tb-folder','new-folder-choice'])$(id).replaceChildren();$('launch-test-title').textContent='';if($('launch-dialog').open)$('launch-dialog').close();$('creation-choice').hidden=true;
   current=null; historySession=null; library=[]; folders=[]; sessionList=[]; $('import-source').value='';$('import-file').value='';$('import-panel').hidden=true;$('draft-review').textContent=''; editingId=null; tbQuestions=[];
   for(const id of ['launch-tests','library-tests','active-sessions','result-sessions','live-students','result-students','tb-questions']) $(id).replaceChildren();
   for(const id of ['dashboard','result-detail','test-builder']) $(id).hidden=true;
@@ -25,8 +26,13 @@ async function api(route, method = 'GET', body) {
   return data;
 }
 const tour=window.createOnScreenTour(api);
+const settings=window.createOnScreenSettings({api,notify:notice,onClose:()=>tab(lastWorkspaceTab),onTakeTour:()=>$('take-tour').click(),onDeleted:async result=>{
+  await auth.auth.signOut({scope:'local'});clearPrivateWorkspace();account=null;$('workspace').hidden=true;$('login').hidden=false;$('signout').hidden=true;
+  $('auth-message').textContent=result.state==='deleted'?'Your account and OnScreen data have been deleted.':'Account deletion has started. You are signed out while it completes.';
+}});
 function action(fn) { return async event => { try { notice(''); await fn(event); } catch (e) { notice(e.message); } }; }
 function tab(name) {
+  if(name!=='settings')lastWorkspaceTab=name;
   document.querySelectorAll('.tab').forEach(el => el.hidden = el.id !== name);
   document.querySelectorAll('[data-tab]').forEach(el => el.classList.toggle('selected', el.dataset.tab === name));
 }
@@ -231,10 +237,10 @@ async function signedIn() {
     if(recoveringPassword)return;
     const onboarding=await api('/onboarding','POST',{});
     if(generation!==accountGeneration)return;
-    socket.connect();$('account-name').textContent=account.email;$('login').hidden=true;$('workspace').hidden=false;$('signout').hidden=false;
-    await refresh();await watch();
+    socket.connect();await refresh();await watch();
+    if(generation!==accountGeneration)return;settings.setAccount(verified);$('account-name').textContent=account.email;$('login').hidden=true;$('workspace').hidden=false;$('signout').hidden=false;
     if(generation===accountGeneration)tour.offer(onboarding);
-  }catch(e){if(generation!==accountGeneration)return;account=null;$('login').hidden=false;$('workspace').hidden=true;$('signout').hidden=true;$('auth-message').textContent=e.message;}
+  }catch(e){if(generation!==accountGeneration)return;settings.reset();account=null;$('login').hidden=false;$('workspace').hidden=true;$('signout').hidden=true;$('auth-message').textContent=e.message;}
 }
 async function initAuth() {
   const config=await (await fetch('/api/config')).json();

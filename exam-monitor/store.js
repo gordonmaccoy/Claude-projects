@@ -2,8 +2,10 @@
 // V2 tables are additive. Legacy onscreen_* records are preserved for explicit migration.
 function createStore(pool) {
   if (!pool) throw new Error('DATABASE_URL is required');
-  return {
+  const accounts=require('./account-store').createAccountStore(pool);pool=accounts.pool;
+  const store={
     async init() {
+      await accounts.init();
       await pool.query(`CREATE TABLE IF NOT EXISTS onscreen_v2_onboarding (
         owner_id TEXT PRIMARY KEY, data JSONB NOT NULL
       )`);
@@ -68,13 +70,13 @@ function createStore(pool) {
       return s;
     },
     async getSession(id) {
-      return (await pool.query("SELECT data FROM onscreen_v2_sessions WHERE id=$1 AND data->>'deletedAt' IS NULL", [id])).rows[0]?.data || null;
+      return (await pool.query("SELECT data FROM onscreen_v2_sessions WHERE id=$1 AND data->>'deletedAt' IS NULL AND NOT EXISTS(SELECT 1 FROM onscreen_v2_accounts a WHERE a.owner_id=onscreen_v2_sessions.owner_id AND a.state<>'active')", [id])).rows[0]?.data || null;
     },
     async listSessions(ownerId) {
       return (await pool.query("SELECT data FROM onscreen_v2_sessions WHERE owner_id=$1 AND data->>'deletedAt' IS NULL ORDER BY created_at DESC", [ownerId])).rows.map(r => r.data);
     },
     async activeSessions() {
-      return (await pool.query("SELECT data FROM onscreen_v2_sessions WHERE data->>'phase' <> 'ended'")).rows.map(r => r.data);
+      return (await pool.query("SELECT data FROM onscreen_v2_sessions WHERE data->>'phase' <> 'ended' AND NOT EXISTS(SELECT 1 FROM onscreen_v2_accounts a WHERE a.owner_id=onscreen_v2_sessions.owner_id AND a.state<>'active')")).rows.map(r => r.data);
     },
     async mutate(id, fn) {
       const client = await pool.connect();
@@ -92,5 +94,11 @@ function createStore(pool) {
       } finally { client.release(); }
     },
   };
+  for(const name of ['initializeOnboarding','dismissOnboarding','createFolder','renameFolder','deleteFolder','saveTest','deleteTest']){
+    const operation=store[name];store[name]=(...args)=>accounts.withOwner(args[0],()=>operation(...args));
+  }
+  const createSession=store.createSession;store.createSession=s=>accounts.withOwner(s.ownerId,()=>createSession(s));
+  const mutate=store.mutate;store.mutate=async(id,fn)=>{const owner=(await pool.query('SELECT owner_id FROM onscreen_v2_sessions WHERE id=$1',[id])).rows[0]?.owner_id;if(!owner)throw new Error('Session not found');return accounts.withOwner(owner,()=>mutate(id,fn));};
+  return Object.assign(store,accounts.methods);
 }
 module.exports = { createStore };

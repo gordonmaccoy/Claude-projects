@@ -118,3 +118,21 @@ New professors with no prior tests or sessions receive their own editable two-qu
 No new configuration is required. Startup creates the additive `onscreen_v2_onboarding` table using the existing Development database. Initialization and starter creation commit together under a unique owner key.
 
 Tour screenshot assets live in public/tour and use only fictional local-fixture data. Regenerate them with `node test/capture-tour.js` using a local browser; this script never connects to Development or Production. The generated frames.js stores screenshot-relative click bounds. Tour actions advance examples only; no real exam, popup, download or AI request is made.
+# Professor Settings, Contact and Help
+
+Settings in the signed-in header opens Profile, Account, Help and Contact us; Sign out is in that menu. Opening Settings preserves unsaved test drafts. Profiles contain first/last name and optional institution; the verified sign-in email is read-only. Help includes the interactive tour, common topics, and an AI chatbot grounded in a curated server guide. Only the typed conversation and guide go to OpenAI (`store:false`); the bot has no record lookup or mutation tools. Conversation state clears on sign-out/account switch. Help has a separate per-professor 20/hour request budget; test-authoring quotas are unchanged.
+
+Contact requests are saved before email delivery, with a durable reference and idempotent submission key. Pending notifications remain queued when email is unavailable. The verified owner has a private Support inbox in Settings. Recipient and inbox administrator are independent:
+
+- `CONTACT_TO`: recipient, default `gordon.maccoy@gmail.com`.
+- `SUPPORT_ADMIN_EMAIL`: verified account allowed to read the Support inbox, default `gordon.maccoy@gmail.com`. Changing CONTACT_TO does not grant inbox access.
+- `RESEND_API_KEY`: server-only Resend sending key.
+- `CONTACT_FROM`: sender approved by your Resend account (for example, `OnScreen <support@your-verified-domain>`). Configure a valid approved sender before enabling notifications. Never put the sending key in browser code or chat.
+
+Without RESEND_API_KEY and CONTACT_FROM, Contact us still saves requests and the owner can read them in Support inbox; email notifications stay queued. With configured transport, a separate background worker retries queued notifications, independently of live exam monitoring. Resend idempotency keys reduce duplicate delivery after retries; external email delivery is not an atomic part of the application database commit. No real test email was sent during implementation.
+
+Account deletion additionally needs `SUPABASE_ADMIN_KEY` on the Railway **Development application service only**. Use a dedicated Supabase secret/server key or legacy service_role key for the same Development Auth project. Keep SUPABASE_PUBLISHABLE_KEY unchanged; the administrative key is never included in public config. No administrative key is needed for normal profiles, sign-in, Help or contact storage. When missing, Delete account is disabled and explains that support is needed.
+
+Deletion requires the signed-in email and DELETE confirmation, and all calculator/test sessions must be ended. A durable owner marker freezes writes and resume access before identity deletion. Owner-row database locks serialize all app writes against deletion, including simultaneous launches. Provider failures remain pending for background retry; restart recovery completes deletion and purges owned V2 profile, folders, tests, sessions/results, contact messages and onboarding data. A minimal owner-ID tombstone prevents stale requests from recreating deleted data. Legacy unmapped records are not attributed to an account or modified. Verification uses disposable local identities and mocked transport, never the real owner's deletion.
+
+New tables (`onscreen_v2_accounts`, `onscreen_v2_contacts`) are additive in the existing Railway PostgreSQL database; no exam data is moved to Supabase. All configuration above belongs only to Development. Subscription/payment functionality is roadmap-only.
