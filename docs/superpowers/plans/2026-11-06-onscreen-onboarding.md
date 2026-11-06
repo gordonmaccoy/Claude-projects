@@ -35,7 +35,7 @@ Files: public/professor.html, professor.js, professor.css; test/browser-smoke.js
 ### Task 3: Finish
 - [x] Independent whole-change review, one fix pass for material findings.
 - [x] Run build, check, unit/API and browser tests; document configuration (none).
-- [ ] Commit/push existing Development branch, verify Railway Development health and served assets; live replay verification without creating any real session.
+- [x] Commit/push existing Development branch, verify Railway Development health and served assets; live replay verification without creating any real session.
 
 ## Ledger
 - Ruling: continue inline on the explicitly requested development branch, following the established session workflow; user approved implementation, so no extra execution-method/worktree approval.
@@ -44,3 +44,5 @@ Files: public/professor.html, professor.js, professor.css; test/browser-smoke.js
 - Browser RED: missing tour dialog; GREEN: first login, independent starter, failed persistence retry/Escape, dismissal after reload, five steps/Back/replay, mobile width, focus restoration, draft preservation, account switch, and existing folder deletion retaining tests. Bob fixture now dismisses its own first-login tour before prior privacy assertions.
 - User added folder-delete menu request: renamed the existing Edit folders disclosure to Manage folders and explained that tests are retained in Uncategorized Test. Existing deletion regression covers this.
 - Verification: build/check and all 34 unit/API tests passed; full browser smoke passed. One earlier full run hit the pre-existing intermittent Windows PDF-worker process failure; isolated PDF checks and the final full suite passed without PDF code changes.
+
+- Deployed dfd4c1e to Railway Development (success). Live health 200 and professor.html/professor.js/tour.js match committed content. Live Google sign-in, existing-account library preservation, replay/dismiss with focus restored, and Manage folders Rename/Delete controls verified without launching exams or deleting user data. Screenshot evidence saved in ignored .tmp/onscreen-v2/live-onboarding.png and live-manage-folders.png. No configuration required; production untouched.
