@@ -22,7 +22,7 @@ if(!isMainThread) (async()=>{
   const buffer=Buffer.from(workerData.buffer);let text;
   if(workerData.ext==='pdf') {
     const {PDFParse}=require('pdf-parse');const parser=new PDFParse({data:buffer});
-    try { const result=await parser.getText(); if(result.total>100)throw new Error('Use a document of at most 100 pages.');text=result.text; } finally { await parser.destroy(); }
+    try { const result=await parser.getText(); if(result.total>100)throw new Error('Use a document of at most 100 pages.');text=result.text; if (/^Answer Key\b/.test(text.trim())) text=await require('./socrative-key').readSocrativeKey(await parser.load()) || text; } finally { await parser.destroy(); }
   } else {
     const {unzipSync}=require('fflate');let total=0,found=false;
     unzipSync(buffer,{filter:f=>{total+=f.originalSize;if(total>20*1024*1024)throw new Error('The expanded document is too large.');if(f.name==='word/document.xml')found=true;return false;}});
