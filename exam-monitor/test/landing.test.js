@@ -12,7 +12,9 @@ test('public root entrypoint brands Examio and preserves professor workspace rou
 
   assert.match(home, /<title>Examio/);
   assert.match(home, /href=["']\/professor\.html["']/);
-  assert.match(professor, /<title>OnScreen.*Professor workspace/);
+  assert.match(home, /href="#how-it-works">See how it works/);
+  assert.match(home, /<section class="section-wrap walkthrough" id="how-it-works"/);
+  assert.match(professor, /<title>Examio.*Professor workspace/);
 });
 
 test('carousel rotates counter-clockwise every three seconds and pauses accessibly', () => {

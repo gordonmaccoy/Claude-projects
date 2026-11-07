@@ -181,3 +181,8 @@ button { font: inherit; }
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+.walkthrough { scroll-margin-top: 24px; padding-bottom: 40px; }
+.walkthrough-steps { margin: 0; padding: 0; list-style-position: inside; }
+.walkthrough-steps li::marker { color: var(--blue); font-weight: 800; }
+.walkthrough-steps .feature-card { min-height: 0; }

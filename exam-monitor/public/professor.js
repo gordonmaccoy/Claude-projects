@@ -28,7 +28,7 @@ async function api(route, method = 'GET', body) {
 const tour=window.createOnScreenTour(api);
 const settings=window.createOnScreenSettings({api,notify:notice,onClose:()=>tab(lastWorkspaceTab),onTakeTour:()=>$('take-tour').click(),onDeleted:async result=>{
   await auth.auth.signOut({scope:'local'});clearPrivateWorkspace();account=null;$('workspace').hidden=true;$('login').hidden=false;$('signout').hidden=true;
-  $('auth-message').textContent=result.state==='deleted'?'Your account and OnScreen data have been deleted.':'Account deletion has started. You are signed out while it completes.';
+  $('auth-message').textContent=result.state==='deleted'?'Your account and Examio data have been deleted.':'Account deletion has started. You are signed out while it completes.';
 }});
 function action(fn) { return async event => { try { notice(''); await fn(event); } catch (e) { notice(e.message); } }; }
 function tab(name) {
@@ -134,7 +134,7 @@ async function openClassroomDisplay(session) {
     popup = window.open(displayUrl, 'onscreen-classroom-display', 'popup,width=1100,height=780');
     popupSessionId = session.id;
     if (popup) popup.focus();
-    else notice('If the classroom window did not open, allow popups for OnScreen and use “Open classroom display”.');
+    else notice('If the classroom window did not open, allow popups for Examio and use “Open classroom display”.');
   } finally {
     openingDisplay = false; $('display-open').disabled = false; $('calculator-launch').disabled = false;
   }
@@ -221,7 +221,7 @@ $('result-delete').onclick=action(()=>deleteResults(historySession));
 async function download(s) {
   const response=await fetch(`/api/sessions/${s.id}/export`,{headers:{Authorization:`Bearer ${await token()}`}});
   if (!response.ok) throw new Error('Could not download results. Please sign in and retry.');
-  const url=URL.createObjectURL(await response.blob()); const a=document.createElement('a'); a.href=url; a.download=decodeURIComponent(response.headers.get('content-disposition')?.split("filename*=UTF-8''")[1]||'OnScreen results.xlsx'); a.click(); setTimeout(()=>URL.revokeObjectURL(url),10000);
+  const url=URL.createObjectURL(await response.blob()); const a=document.createElement('a'); a.href=url; a.download=decodeURIComponent(response.headers.get('content-disposition')?.split("filename*=UTF-8''")[1]||'Examio results.xlsx'); a.click(); setTimeout(()=>URL.revokeObjectURL(url),10000);
 }
 $('live-export').onclick=action(()=>download(current)); $('result-export').onclick=action(()=>download(historySession)); $('results-refresh').onclick=action(refresh);
 socket.on('connect',()=> { if (account) watch().catch(e=>notice(e.message)); });
