@@ -1,0 +1,138 @@
+# OnScreen V2 configuration and verification
+
+## Deployment boundary
+
+Repository: `gordonmaccoy/Claude-projects`, root `/exam-monitor`, branch `onscreen/test-mode-hardening`, PR #6.
+
+Only Railway **Development** is authorized. Startup refuses a Railway environment whose name is not `Development` (case-insensitive). Never merge PR #6 or change production source/settings as part of this work.
+
+Initial inspection on 2026-11-06 (Asia/Seoul): project `carefree-cat`, app service `Claude-projects`, environment `Development`, branch `onscreen/test-mode-hardening`, PostgreSQL `Postgres-KnuT`, one replica. Only `DATABASE_URL` was configured. Public networking had no domain; the existing custom build command was `npm install`. No production settings were changed.
+
+## Current Development configuration (2026-11-06)
+
+- App: https://claude-projects-development.up.railway.app/professor.html
+- Railway Development has APP_ORIGIN, SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY configured; DATABASE_URL remains the separate Railway Development database.
+- Supabase Auth: onscreen-development, project manrnfqgtarscisbkyna, Seoul region.
+- Site URL and exact professor.html redirect are configured. Email with confirmation and Google are enabled.
+- Google Cloud project: onscreen-development; web OAuth client: OnScreen Development Web. Google remains in Testing mode; gordon.maccoy@gmail.com is an approved test user. The client secret is stored only in Supabase provider configuration, never in source.
+- Live Google callback verified: the Development professor workspace displayed the signed-in account.
+- Classroom launch and reopen reuse a live handle or discover an existing display through a per-professor browser channel. Reuse survives professor reload and browsers ignoring window names. A changed session fragment reloads the display so it reconnects to the new session.
+
+## Configuration reference
+
+1. Keep `DATABASE_URL` referencing the **Development** PostgreSQL instance. Do not paste it into browser code or source control. Startup initializes additive V2 tables and refuses to run without storage.
+2. Generate/use a public HTTPS domain for the **Development app service** so student QR joins are reachable. Set `APP_ORIGIN=https://<development-domain>` with no trailing slash. If omitted, the app uses Railway's automatic `RAILWAY_PUBLIC_DOMAIN`. A service without a public domain can start, but phones cannot reach its QR links.
+3. Use a dedicated Development Supabase Auth project. Set `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` on the Development app. The publishable key is intentionally public; never use a secret or service-role key. No Supabase database is used for exams. Missing auth configuration disables sign-in and all professor APIs reject access.
+4. In Supabase Auth, enable email/password with email confirmation. Set Site URL to the Development app and allow `https://<development-domain>/professor.html` as a redirect. Configure SMTP for reliable confirmation/password-reset delivery.
+5. Enable Google in Supabase Auth. Create/select a Google OAuth web client, configure the Supabase callback URI shown in that provider's settings, and enter its client ID/secret in Supabase. Keep the secret there, not in OnScreen browser code.
+6. Use Node **22+**. Recommended Railway build: `npm ci && npm run build`; start: `npm start`; healthcheck: `/health`. The committed browser bundle also supports a production-dependencies-only install when a build is not run. Do not add a production environment deployment.
+
+Official references: [Supabase server-side identity verification](https://supabase.com/docs/reference/javascript/auth-getuser), [Google sign-in setup](https://supabase.com/docs/guides/auth/social-sign-in/auth-google).
+
+## Persistence and migration
+
+The lockfile now includes `pg` and the complete dependency graph, fixing the original clean-install mismatch. `store.js` replaces the old write-only persistence path. Session state is read from PostgreSQL on every operation, so startup has no volatile session cache to rebuild. `SELECT ... FOR UPDATE` serializes writes; acknowledgements follow COMMIT. Test launches contain immutable copies of library questions. Library edits/deletes do not change launched sessions.
+
+V2 tables are additive:
+- `onscreen_v2_folders`: account-owned class folders.
+- `onscreen_v2_tests`: owner ID and editable test document.
+- `onscreen_v2_sessions`: owner ID and session document containing snapshot, enrollment capability hashes, drafts, submissions, hidden intervals and override audit history.
+
+Legacy `onscreen_tests`, `onscreen_sessions`, `onscreen_students`, `onscreen_submissions` are not deleted or modified. They lack authenticated ownership and resume capabilities. An administrator must identify the intended professor and explicitly map/import legacy records before they can appear in an account's V2 history. Do not claim ownership by first sign-in. Historical migrations are not automatically performed by this release.
+
+The old `persistence.js` module is retained solely as a reference to the legacy schema; the V2 server does not import it.
+
+## Acceptance checks
+
+Automated:
+- `npm ci` (clean install), `npm run build`, `npm run check`, `npm test`.
+- `npm run test:ui`: desktop professor, mobile-sized student, separate popup, QR expansion, Library save, waiting/start, submission, reload, live grades, Results download and account-switch privacy.
+- Repository/integration tests use actual PostgreSQL SQL execution through PGlite. They cover rollback, fresh repository recovery, restarted HTTP/socket server, drafts, ownership, privacy, concurrent submission, durable FAIL/override and Excel text safety. External auth responses are simulated in browser testing; real Google/email services are not verified by those tests.
+
+After configuration, manual Development-only acceptance:
+- Register/confirm email, sign in/out, reset password, and sign in with Google.
+- Run two professor accounts; verify isolated tests/results and no retained details after account switching.
+- Join real student phones; check projector shows names only and the private dashboard has numbers/results.
+- Hide for exactly/less than 5 seconds (no FAIL), then >5 seconds (FAIL). Return and verify “Call professor” lock and public FAIL. Unlock with a reason, continue and submit; verify preserved work and export. Repeat with calculator. After submission verify public “Test Submitted” and no further monitoring.
+- Disconnect Wi-Fi without hiding; verify red but no automatic FAIL.
+- Restart app and Development database; resume professor session/student draft and final submission; verify historical results remain.
+- Open exported workbook in Excel and verify leading-zero identifiers, natural student-number order and effective grades.
+
+Live Google sign-in has been verified through the professor workspace. Real email confirmation/password-reset delivery, Railway database-restart acceptance and real-phone visibility checks remain pending. Automated checks alone do not certify real-phone visibility behavior.
+
+## Calculator and Results cleanup
+
+Calculator controls show names/numbers/visibility privately, with no grades, submission statistics or export. Ended calculator sessions are excluded from history; only tests appear in Results. Completed test results have Delete results controls with confirmation. The server verifies ownership and ended/test state, then marks the result deleted, hiding it from all normal reads, exports and resume capabilities. Library tests remain unchanged. Deletion is recoverable administratively from the retained record; this is not a permanent purge.
+
+## Classroom and authoring update
+
+Student numbers contain ASCII digits only; leading zeroes are retained. A confirmed hidden interval strictly greater than five seconds locks both calculators and tests, preserving local work and saved test drafts. The professor can unlock with an audited reason. Network loss alone does not cause failure. Submitted tests show light green “Test Submitted” and stop visibility monitoring.
+
+Library supports drag/up/down ordering, multiple choice and fill-in-the-blank questions, and account-owned class folders. Blank answers use accepted alternatives with whitespace/Unicode normalization and optional case sensitivity. Launch groups are expandable. Completed test results can be renamed without modifying library tests or launched question snapshots. Excel retains its existing four-column format.
+
+Two separate review-first import options:
+- **Upload a test:** local extraction of text-based PDF or Word DOCX, up to 5 MB / 100 PDF pages / 60,000 characters. Use numbered questions, lettered options, inline Answer: A or a separate Answer key: block. Blank alternatives use Answer: value | alternative. Missing keys are flagged, never guessed. Scanned documents require OCR first; legacy .doc must be saved as .docx. Review parsing and answer keys before saving.
+- **Create with AI:** paste source or upload PDF/DOCX, select 1–30 questions, types and difficulty, consent to sending source to OpenAI, then review questions, answer keys and source excerpts. Does not save automatically. Server requires OPENAI_API_KEY and OPENAI_MODEL in the **Railway Development app environment only**. Set these directly in Railway; never paste a secret into chat or browser code. Choose a model supporting Responses structured outputs. The AI service is limited per professor to five requests/hour per running app instance. Existing-test extraction is limited to 20/minute.
+
+AI is implemented but live generation is unverified until Development credentials/model are configured; automated provider-boundary tests use simulated responses and the browser uses a test-only generator. Uploads are processed in memory and are not stored by OnScreen. The AI request sets store:false; provider retention is governed by the API account's applicable policy.
+
+## Session controls and embedded browser compatibility
+
+Folder creation, session/result renaming and override reasons use an accessible in-page form; native prompt() is not required. Launch shows Choose a test to launch, Uncategorized Test, and Tests In Session. Ended dashboards are cleared from Launch and remain available in Results.
+
+Rename session labels a launched test independently of the Library title. The label carries through the public/student/private views, Results and sanitized Unicode Excel filenames. Completed results can still be renamed.
+
+For a failed, unsubmitted test attempt, Submit Fail score records a terminal 0%, preserves saved answers and their original calculated score privately, records the professor/reason, and disconnects the student. Reloading resumes only the final score. Calculator sessions remain ungraded. Unlock & continue is offered only while continuation is possible in a running session.
+
+Private Student progress changes only when an answer is selected/entered and saved. It shows the last answered question plus answered/total count; scrolling and focus do not affect it. No question progress or answer data is added to the public roster.
+
+## Timed tests, points and the revised Library
+
+Library has two primary actions, New class folder and Create new test, plus an Edit folders menu. Create new test asks for name/folder, then offers Create manually, Upload a test file (or paste text), and Create with AI. Imports retain the entered name/folder and must produce questions before opening the editor. Invalid input stays in the import form with a clear error.
+
+Existing-test import supports numbered/Question-labelled and letter-choice formats, plus sentence exercises with standalone Question2. markers: instruction, blank-containing sentence, then answer lines. A single answer line becomes an accepted blank answer. Multiple lines become choices; if the source marks no correct choice, the professor must select one before saving. No answer key is invented. The supplied ten-question auxiliary exercise is covered by pasted-text, real PDF and DOCX fixtures.
+
+Folder rename/delete is account-owned. Deleting a folder moves tests to Uncategorized Test; it does not delete tests or session/results snapshots. Create copy makes an independently editable test.
+
+Each question has editable points, default1; positive values up to1000 with at most2 decimal places are supported. Grades and percentages use earned/total points. Existing questions retain their historical one-point default. Excel keeps exactly the same four columns, with absolute score now reflecting weighted points.
+
+Launch options: time limit0–360 minutes (0=no limit), Show final score checked by default, Shuffle answers off by default. Timers start at Start test, when questions open; late joins use the same class deadline. Per-student answer permutations are stored and retain option IDs, grading and resume order.
+
+Timed tests show a server-synchronized countdown, a one-minute warning, and a prominent final10-second countdown. Extend1 minute updates the persistent deadline and notifies students. Expiry auto-submits the latest server-saved draft exactly once and ends the session; any active FAIL remains0 while its original earned points stay private. Late answers or extensions cannot reopen an expired test. A device that loses its network near expiry may have local edits newer than its last acknowledged server draft; only server-saved answers are eligible at the deadline.
+
+Manual submission shows an in-page confirmation listing unanswered questions and permits explicit submission for partial credit. Hidden-score mode returns a submission receipt without grade fields to the student; professor results/Excel retain the scores.
+
+Upload validation now reports oversized files by name/size before sending them, and distinguishes file-size, file-count and pasted-text errors on the server. The5MB file limit is unchanged. Multipart source fields allow the UTF-8 byte representation of the documented60,000-character source limit. Focused browser regression: ONSCREEN_UI_UPLOAD_ONLY=1 npm run test:ui.
+
+## Seamless AI-assisted existing-test import
+
+Upload a test now defaults to an AI-assisted preparation flow after explicit source/cost consent. Recognized questions, choices, points and supplied keys are preserved; AI fills missing keys. Unrecognized layouts use structured AI organization constrained to wording/options present in the source. The result is an editable preview, never an automatic Library save or launch. Import without AI remains available.
+
+Existing drafts have Determine answers with AI, with a confirmation explaining the OpenAI transmission and API charge. It fills missing answers without re-uploading or changing current title/folder. Uncertain keys remain unresolved and include a private rationale for professor review. Correct keys and rationales never enter student/public payloads.
+
+Generate-new-questions, AI import and answer-key completion share the5-per-hour professor AI budget. Error messages distinguish exhausted API credits, spend/usage limits, request throttling and model access. API billing still must be active; ChatGPT/Codex chat status does not establish the API account balance.
+# First-login orientation
+
+New professors with no prior tests or sessions receive their own editable two-question Practice Test (South Korea's capital and 2 + 2) and a visual, skippable click-through tour. Skip/finish is saved per account in PostgreSQL. Existing professors keep their library and can use **Take tour** to replay the guide. Deleting a starter test never recreates it. Library **Manage folders** provides Rename and Delete folder; deleting a folder keeps its tests in Uncategorized Test.
+
+No new configuration is required. Startup creates the additive `onscreen_v2_onboarding` table using the existing Development database. Initialization and starter creation commit together under a unique owner key.
+
+Tour screenshot assets live in public/tour and use only fictional local-fixture data. Regenerate them with `node test/capture-tour.js` using a local browser; this script never connects to Development or Production. The generated frames.js stores screenshot-relative click bounds. Tour actions advance examples only; no real exam, popup, download or AI request is made.
+# Professor Settings, Contact and Help
+
+Settings in the signed-in header opens Profile, Account, Help and Contact us; Sign out is in that menu. Opening Settings preserves unsaved test drafts. Profiles contain first/last name and optional institution; the verified sign-in email is read-only. Help includes the interactive tour, common topics, and an AI chatbot grounded in a curated server guide. Only the typed conversation and guide go to OpenAI (`store:false`); the bot has no record lookup or mutation tools. Conversation state clears on sign-out/account switch. Help has a separate per-professor 20/hour request budget; test-authoring quotas are unchanged.
+
+Contact requests are saved before email delivery, with a durable reference and idempotent submission key. Pending notifications remain queued when email is unavailable. The verified owner has a private Support inbox in Settings. Recipient and inbox administrator are independent:
+
+- `CONTACT_TO`: recipient, default `gordon.maccoy@gmail.com`.
+- `SUPPORT_ADMIN_EMAIL`: verified account allowed to read the Support inbox, default `gordon.maccoy@gmail.com`. Changing CONTACT_TO does not grant inbox access.
+- `RESEND_API_KEY`: server-only Resend sending key.
+- `CONTACT_FROM`: sender approved by your Resend account (for example, `OnScreen <support@your-verified-domain>`). Configure a valid approved sender before enabling notifications. Never put the sending key in browser code or chat.
+
+Without RESEND_API_KEY and CONTACT_FROM, Contact us still saves requests and the owner can read them in Support inbox; email notifications stay queued. With configured transport, a separate background worker retries queued notifications, independently of live exam monitoring. Resend idempotency keys reduce duplicate delivery after retries; external email delivery is not an atomic part of the application database commit. No real test email was sent during implementation.
+
+Account deletion additionally needs `SUPABASE_ADMIN_KEY` on the Railway **Development application service only**. Use a dedicated Supabase secret/server key or legacy service_role key for the same Development Auth project. Keep SUPABASE_PUBLISHABLE_KEY unchanged; the administrative key is never included in public config. No administrative key is needed for normal profiles, sign-in, Help or contact storage. When missing, Delete account is disabled and explains that support is needed.
+
+Deletion requires the signed-in email and DELETE confirmation, and all calculator/test sessions must be ended. A durable owner marker freezes writes and resume access before identity deletion. Owner-row database locks serialize all app writes against deletion, including simultaneous launches. Provider failures remain pending for background retry; restart recovery completes deletion and purges owned V2 profile, folders, tests, sessions/results, contact messages and onboarding data. A minimal owner-ID tombstone prevents stale requests from recreating deleted data. Legacy unmapped records are not attributed to an account or modified. Verification uses disposable local identities and mocked transport, never the real owner's deletion.
+
+New tables (`onscreen_v2_accounts`, `onscreen_v2_contacts`) are additive in the existing Railway PostgreSQL database; no exam data is moved to Supabase. All configuration above belongs only to Development. Subscription/payment functionality is roadmap-only.

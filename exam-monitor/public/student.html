@@ -1,28 +1,31 @@
 <!doctype html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#0b0d12" id="theme-color" />
-  <title>Exam Calculator</title>
+  <meta name="theme-color" content="#f4f7f2" id="theme-color" />
+  <title>Examio · Student</title>
   <link rel="stylesheet" href="student.css" />
+<link rel="stylesheet" href="/examio.css">
 </head>
 <body>
+  <header class="student-brandbar"><div class="brand examio-brand"><img class="brand-mark" src="/landing/examio-mark.svg" alt="" width="48" height="48"><span class="brand-type"><strong>Examio</strong><small>TEST <i>•</i> MONITOR <i>•</i> GRADE</small></span></div></header>
   <section id="join-section" class="join">
     <div class="join-card">
-      <h1>Exam Calculator</h1>
+      <h1>Join Examio</h1>
       <p class="session-hint">Session: <strong id="session-code">—</strong></p>
       <form id="join-form" autocomplete="off">
-        <label for="name-input">Your name</label>
-        <input id="name-input" name="name" type="text" maxlength="40" required autocomplete="off" autocapitalize="words" />
+        <label for="number-input">Student number</label><input id="number-input" inputmode="numeric" pattern="[0-9]{1,64}" title="Use numbers only (0–9)" name="studentNumber" type="text" maxlength="64" required autocomplete="off"><label for="name-input">Your name</label>
+        <input id="name-input" name="name" type="text" maxlength="80" required autocomplete="off" autocapitalize="words" />
         <button type="submit" class="join-btn">Join</button>
         <p id="join-error" class="error" hidden></p>
       </form>
     </div>
   </section>
 
-  <section id="calculator-section" class="calculator" hidden>
+  <section id="waiting-section" class="join" hidden><div class="join-card"><h1>You’re in.</h1><p>Wait for your professor to start the test.</p><p>Once it starts, leaving this page hidden for more than 5 seconds results in FAIL and a score of zero. Tell your professor about interruptions.</p></div></section><p id="student-notice" class="error" role="status" aria-live="polite"></p><section id="calculator-section" class="calculator" hidden>
     <div class="calc-frame">
+      <div class="calc-brandbar"><div class="brand examio-brand"><img class="brand-mark" src="/landing/examio-mark.svg" alt="" width="48" height="48"><span class="brand-type"><strong>Examio</strong><small>TEST <i>•</i> MONITOR <i>•</i> GRADE</small></span></div></div>
       <header class="calc-header">
         <div class="header-left">
           <span class="conn-dot" id="conn-dot" title="Connection"></span>
@@ -95,17 +98,17 @@
         </button>
       </header>
 
-      <div id="test-questions" class="test-questions"></div>
+      <aside id="test-timer" class="test-timer" role="timer" hidden><span>Time remaining</span><strong id="time-left"></strong></aside><p id="time-notice" role="status" aria-live="polite"></p><div id="test-questions" class="test-questions"></div>
 
       <div class="test-actions" id="test-actions">
-        <button id="test-submit-btn" class="test-submit-btn">Submit Answers</button>
+        <button id="test-submit-btn" class="test-submit-btn">Submit test</button>
       </div>
 
       <div id="test-done" class="test-done" hidden>
         <div class="done-icon">✓</div>
         <p class="done-msg">Answers submitted!</p>
         <p class="done-score" id="done-score"></p>
-        <p class="done-hint">Stay on this page until your professor ends the session.</p>
+        <p class="done-hint">Your answers are saved and locked.</p>
       </div>
     </div>
 
@@ -114,7 +117,8 @@
     </p>
   </section>
 
-  <script src="/socket.io/socket.io.js"></script>
+  <div id="activity-lock" class="activity-lock" role="alertdialog" aria-modal="true" aria-labelledby="lock-heading" hidden><div><h1 id="lock-heading">Call professor</h1><p>FAILED · This page was hidden for more than 5 seconds.</p><p>Your work is kept. Ask your professor to unlock this activity.</p></div></div>
+  <dialog id="submit-dialog" aria-labelledby="submit-heading"><h2 id="submit-heading">Submit test?</h2><p id="submit-warning"></p><div><button id="submit-review" type="button">Review answers</button><button id="submit-confirm" type="button">Submit test</button></div></dialog><script src="/socket.io/socket.io.js"></script>
   <script src="student.js"></script>
 </body>
 </html>

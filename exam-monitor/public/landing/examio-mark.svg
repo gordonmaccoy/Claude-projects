@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+        <defs><linearGradient id="examio-blue" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#10bde9"/><stop offset="1" stop-color="#0758e8"/></linearGradient></defs>
+        <path d="M49 11H23c-7 0-12 5-12 12v25c0 6 5 11 11 11h25c7 0 12-5 12-12V32" fill="none" stroke="url(#examio-blue)" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="m22 33 10 10 23-25" fill="none" stroke="#2bc64c" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
