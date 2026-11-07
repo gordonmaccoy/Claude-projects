@@ -47,7 +47,7 @@ button { font: inherit; }
 .hero-copy { position: relative; z-index: 2; max-width: 610px; padding-bottom: 12px; }
 .eyebrow { margin: 0; color: #186d64; font-size: .75rem; font-weight: 850; letter-spacing: .18em; text-transform: uppercase; }
 .eyebrow-dot { display: inline-block; width: 9px; height: 9px; margin-right: 8px; border-radius: 99px; background: var(--green); box-shadow: 0 0 0 4px rgba(39,191,76,.14); vertical-align: 1px; }
-.hero h1 { margin: 20px 0 18px; color: var(--navy); font-size: clamp(3rem, 5vw, 5.15rem); line-height: .99; letter-spacing: -.075em; font-weight: 850; }
+.hero h1 { margin: 20px 0 18px; color: var(--navy); font-size: clamp(3rem, 5vw, 4.4rem); line-height: .99; letter-spacing: -.075em; font-weight: 850; }
 .hero h1 span { color: var(--blue); }
 .hero-description { max-width: 510px; margin: 0; color: #4d6274; font-size: clamp(1rem, 1.3vw, 1.15rem); line-height: 1.7; }
 .hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 28px; }
