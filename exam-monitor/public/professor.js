@@ -2,12 +2,14 @@ const $ = id => document.getElementById(id);
 const els = { tbTitle: $('tb-title'), tbQuestions: $('tb-questions'), tbError: $('tb-error') };
 const socket = io();
 let resultViewVersion=0;
+let trashVersion=0, pendingTrashDelete=null;
 let auth, account, current, historySession, library = [], folders = [], aiConfigured=false, uploadMaxBytes=5*1024*1024, importMode="import", sessionList = [], editingId = null, tbQuestions = [], popup, recoveringPassword = false;
 let accountGeneration = 0,creationVersion=0,professorTimerSnapshot=null;
 let lastWorkspaceTab = 'launch';
 let popupSessionId = null, openingDisplay = false, launching = false;
 function clearPrivateWorkspace() {
   settings.reset();tour.reset();lastWorkspaceTab='launch';accountGeneration++;creationVersion++;professorTimerSnapshot=null;if($('answer-ai-dialog').open)$('answer-ai-dialog').close();$('answer-ai-status').textContent='';closeEntry();launchTest=null;$('new-title').value='';$('folder-list').replaceChildren();$('folder-menu').open=false;for(const id of ['tb-folder','new-folder-choice'])$(id).replaceChildren();$('launch-test-title').textContent='';if($('launch-dialog').open)$('launch-dialog').close();$('creation-choice').hidden=true;
+  trashVersion++;pendingTrashDelete=null;if($('trash-confirm').open)$('trash-confirm').close();$('trash-confirm-message').textContent='';$('trash-items').replaceChildren();
   current=null; historySession=null; library=[]; folders=[]; sessionList=[]; $('import-source').value='';$('import-file').value='';$('import-panel').hidden=true;$('draft-review').textContent=''; editingId=null; tbQuestions=[];
   for(const id of ['launch-tests','library-tests','active-sessions','result-sessions','live-students','result-students','tb-questions']) $(id).replaceChildren();
   for(const id of ['dashboard','result-detail','test-builder']) $(id).hidden=true;
@@ -37,9 +39,47 @@ function tab(name) {
   document.querySelectorAll('.tab').forEach(el => el.hidden = el.id !== name);
   document.querySelectorAll('[data-tab]').forEach(el => el.classList.toggle('selected', el.dataset.tab === name));
 }
-document.querySelectorAll('[data-tab]').forEach(el => el.onclick = () => { tab(el.dataset.tab); if (el.dataset.tab === 'results') refresh().catch(e => notice(e.message)); });
+document.querySelectorAll('[data-tab]').forEach(el => el.onclick = () => { tab(el.dataset.tab); if (el.dataset.tab === 'results') refresh().catch(e => notice(e.message)); if(el.dataset.tab==='trash') refreshTrash().catch(e=>notice(e.message)); });
 function button(text, fn, className = '') { const b = document.createElement('button'); b.textContent = text; b.className = className; b.onclick = action(fn); return b; }
 function card(title, subtitle) { const c = document.createElement('article'); c.className = 'card'; const h = document.createElement('h3'); h.textContent = title; const p = document.createElement('p'); p.textContent = subtitle; c.append(h,p); return c; }
+async function refreshTrash() {
+  const version=++trashVersion;
+  const items=await api('/trash');
+  if(version!==trashVersion)return;
+  const container=$('trash-items');
+  container.replaceChildren();
+  if(!items.length) container.append(card('Trash is empty','Deleted quizzes and results will appear here.'));
+  for(const item of items) {
+    const route='/trash/'+item.kind+'/'+encodeURIComponent(item.id);
+    const kind=item.kind==='quizzes'?'Quiz':'Results';
+    const entry=card(item.title||kind,kind+' · Expires '+new Date(item.expiresAt).toLocaleString());
+    const actions=document.createElement('div');
+    actions.className='actions';
+    actions.append(button('Restore',async()=>{
+      await api(route+'/restore','POST');
+      await refreshTrash();
+      await refresh();
+      notice('Restored.');
+    }),button('Delete permanently',()=>{
+      pendingTrashDelete=route;
+      const dialog=$('trash-confirm');
+      dialog.returnValue='';
+      $('trash-confirm-message').textContent='“'+(item.title||kind)+'” cannot be recovered after this.';
+      dialog.showModal();
+    },'danger'));
+    entry.append(actions);
+    container.append(entry);
+  }
+}
+$('trash-refresh').onclick=action(refreshTrash);
+$('trash-confirm').onclose=action(async()=>{
+  const route=pendingTrashDelete;
+  pendingTrashDelete=null;
+  if(!route||$('trash-confirm').returnValue!=='delete')return;
+  await api(route,'DELETE');
+  await refreshTrash();
+  notice('Permanently deleted.');
+});
 async function refresh() {
   [library, sessionList, folders] = await Promise.all([api('/tests'), api('/sessions'),api('/folders')]);
   renderFolderOptions();renderFolderMenu();
@@ -61,7 +101,7 @@ async function refresh() {
     launch.append(button('Launch test ↗', () => openLaunch(test), 'primary')); (groups['launch-tests'+(test.folderId||'')]||$('launch-tests')).append(launch);
     const saved = card(test.title, `${test.questions.length} questions`); const actions = document.createElement('div'); actions.className = 'actions';
     actions.append(button('Edit', () => openBuilder(test)),button('Create copy',()=>openEntry({title:'Create copy of a test',value:(test.title.slice(0,73)+' (copy)'),max:80},async title=>{const copy=await api('/tests/'+test.id+'/copy','POST',{title});await refresh();openBuilder(copy);})), button('Delete', async () => {
-      if (!confirm(`Delete “${test.title}” from your library? Existing sessions keep their copy.`)) return;
+      if (!confirm(`Move “${test.title}” to Trash for 30 days? Existing sessions keep their copy.`)) return;
       await api(`/tests/${test.id}`, 'DELETE'); await refresh();
     })); saved.append(actions); (groups['library-tests'+(test.folderId||'')]||$('library-tests')).append(saved);
   }
@@ -219,11 +259,11 @@ function closeResults() {
 $('result-close').onclick=()=>{closeResults();$('results-refresh').focus();};
 function renderResults() { $('result-detail').hidden=false; $('result-title').textContent=historySession.title; $('result-delete').hidden=historySession.phase !== 'ended'; $('result-rename').hidden=historySession.phase !== 'ended'; renderTable($('result-students'),historySession); }
 async function deleteResults(session) {
-  if(!confirm(`Delete saved results for “${session.title}”? The library test will be kept.`)) return;
+  if(!confirm(`Move the saved results for “${session.title}” to Trash for 30 days?`)) return;
   await api(`/sessions/${session.id}`, 'DELETE');
   if(historySession?.id === session.id) closeResults();
   if(current?.id === session.id) { current=null; $('dashboard').hidden=true; $('calculator-card').hidden=false; }
-  await refresh(); notice('Results deleted.');
+  await refresh(); notice('Results moved to Trash.');
 }
 $('result-delete').onclick=action(()=>deleteResults(historySession));
 async function download(s) {

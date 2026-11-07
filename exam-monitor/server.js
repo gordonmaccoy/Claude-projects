@@ -102,12 +102,20 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
     if (!id) id = require('node:crypto').randomUUID();
     const folderId=req.body.folderId || null;
     if(folderId && !await store.getFolder(req.user.id,folderId)) return res.status(404).json({error:'Class folder not found'});
-    res.json(await store.saveTest(req.user.id, { ...test, id, folderId }));
+    res.json(await store.saveTest(req.user.id, { ...test, id, folderId }, Boolean(req.body.id)));
   }));
   api.delete('/tests/:id', wrap(async (req, res) => {
-    if (!await store.getTest(req.user.id, req.params.id)) return res.status(404).json({ error: 'Test not found' });
-    await store.deleteTest(req.user.id, req.params.id); res.json({ ok: true });
+    if (!await store.deleteTest(req.user.id, req.params.id)) return res.status(404).json({ error: 'Test not found' });
+    res.json({ ok: true });
   }));
+  api.get('/trash',wrap(async(req,res)=>res.json(await store.listTrash(req.user.id))));
+  const updateTrash=restore=>wrap(async(req,res)=>{
+    const {kind,id}=req.params;
+    if(!await store.changeTrash(req.user.id,kind,id,restore))return res.status(404).json({error:'Trash item not found or expired.'});
+    res.json({ok:true});
+  });
+  api.post('/trash/:kind/:id/restore',updateTrash(true));
+  api.delete('/trash/:kind/:id',updateTrash(false));
   api.get('/sessions', wrap(async (req, res) => res.json((await store.listSessions(req.user.id))
     .filter(s => s.mode === 'test' || s.phase !== 'ended').map(s => exam.privateView(s)))));
   api.post('/sessions', wrap(async (req, res) => {
@@ -284,8 +292,11 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
     finally { sweeping = false; }
   }
   const timer = sweepInterval ? setInterval(tick, sweepInterval) : null;
+  const purgeTrash=()=>store.purgeExpiredTrash().catch(()=>console.error('Trash cleanup failed'));
+  const trashTimer=sweepInterval?setInterval(purgeTrash,60*60*1000):null;
+  if(trashTimer) void purgeTrash();
   const settingsTimer = sweepInterval ? setInterval(()=>settingsController.runJobs().catch(()=>console.error('Support background retry failed')),60000) : null;
-  return { app, server, io, tick, runSettingsJobs:()=>settingsController.runJobs(), close: async () => { if (timer) clearInterval(timer);if(settingsTimer)clearInterval(settingsTimer); await new Promise(resolve => io.close(resolve)); } };
+  return { app, server, io, tick, runSettingsJobs:()=>settingsController.runJobs(), close: async () => { if (timer) clearInterval(timer);if(settingsTimer)clearInterval(settingsTimer);if(trashTimer)clearInterval(trashTimer); await new Promise(resolve => io.close(resolve)); } };
 }
 async function main() {
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required. Configure Railway Development PostgreSQL.');

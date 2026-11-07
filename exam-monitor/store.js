@@ -1,5 +1,8 @@
 // PostgreSQL is the authority: no successful write is acknowledged before COMMIT.
 // V2 tables are additive. Legacy onscreen_* records are preserved for explicit migration.
+const TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+const trashTables = { quizzes: 'onscreen_v2_tests', results: 'onscreen_v2_sessions' };
+
 function createStore(pool) {
   if (!pool) throw new Error('DATABASE_URL is required');
   const accounts=require('./account-store').createAccountStore(pool);pool=accounts.pool;
@@ -53,17 +56,45 @@ function createStore(pool) {
     async deleteFolder(ownerId,id){const client=await pool.connect();try{await client.query('BEGIN');const folder=(await client.query('SELECT id FROM onscreen_v2_folders WHERE id=$1 AND owner_id=$2 FOR UPDATE',[id,ownerId])).rows[0];if(!folder){await client.query('COMMIT');return false;}
       await client.query(`UPDATE onscreen_v2_tests SET data=jsonb_set(data,'{folderId}','null'::jsonb),updated_at=NOW() WHERE owner_id=$1 AND data->>'folderId'=$2`,[ownerId,id]);await client.query('DELETE FROM onscreen_v2_folders WHERE id=$1 AND owner_id=$2',[id,ownerId]);await client.query('COMMIT');return true;
     }catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}},
-    async saveTest(ownerId,test){const client=await pool.connect();try{await client.query('BEGIN');if(test.folderId && !(await client.query('SELECT id FROM onscreen_v2_folders WHERE id=$1 AND owner_id=$2 FOR KEY SHARE',[test.folderId,ownerId])).rows.length)throw new Error('Class folder not found');
-      const r=await client.query(`INSERT INTO onscreen_v2_tests(id,owner_id,data) VALUES($1,$2,$3) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data,updated_at=NOW() WHERE onscreen_v2_tests.owner_id=EXCLUDED.owner_id RETURNING id`,[test.id,ownerId,JSON.stringify(test)]);if(!r.rows.length)throw new Error('Test not found');await client.query('COMMIT');return test;
+    async saveTest(ownerId,test,updateOnly=false){const client=await pool.connect();try{await client.query('BEGIN');if(test.folderId && !(await client.query('SELECT id FROM onscreen_v2_folders WHERE id=$1 AND owner_id=$2 FOR KEY SHARE',[test.folderId,ownerId])).rows.length)throw new Error('Class folder not found');
+      const r=await client.query(updateOnly?"UPDATE onscreen_v2_tests SET data=$3,updated_at=NOW() WHERE id=$1 AND owner_id=$2 AND data->>'deletedAt' IS NULL RETURNING id":`INSERT INTO onscreen_v2_tests(id,owner_id,data) VALUES($1,$2,$3) ON CONFLICT(id) DO UPDATE SET data=EXCLUDED.data,updated_at=NOW() WHERE onscreen_v2_tests.owner_id=EXCLUDED.owner_id AND onscreen_v2_tests.data->>'deletedAt' IS NULL RETURNING id`,[test.id,ownerId,JSON.stringify(test)]);if(!r.rows.length)throw new Error('Test not found');await client.query('COMMIT');return test;
     }catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}},
     async listTests(ownerId) {
-      return (await pool.query('SELECT data FROM onscreen_v2_tests WHERE owner_id=$1 ORDER BY updated_at DESC', [ownerId])).rows.map(r => r.data);
+      return (await pool.query("SELECT data FROM onscreen_v2_tests WHERE owner_id=$1 AND data->>'deletedAt' IS NULL ORDER BY updated_at DESC", [ownerId])).rows.map(r => r.data);
     },
     async getTest(ownerId, id) {
-      return (await pool.query('SELECT data FROM onscreen_v2_tests WHERE id=$1 AND owner_id=$2', [id, ownerId])).rows[0]?.data || null;
+      return (await pool.query("SELECT data FROM onscreen_v2_tests WHERE id=$1 AND owner_id=$2 AND data->>'deletedAt' IS NULL", [id, ownerId])).rows[0]?.data || null;
     },
     async deleteTest(ownerId, id) {
-      await pool.query('DELETE FROM onscreen_v2_tests WHERE id=$1 AND owner_id=$2', [id, ownerId]);
+      return (await pool.query(
+        "UPDATE onscreen_v2_tests SET data=jsonb_set(data,'{deletedAt}',to_jsonb($3::bigint)) WHERE id=$1 AND owner_id=$2 AND data->>'deletedAt' IS NULL RETURNING id",
+        [id,ownerId,Date.now()]
+      )).rows.length>0;
+    },
+    async listTrash(ownerId,now=Date.now()) {
+      const groups=await Promise.all(Object.entries(trashTables).map(async ([kind,table])=>{
+        const {rows}=await pool.query(
+          `SELECT id,COALESCE(NULLIF(data->>'resultTitle',''),data->>'title',data->'test'->>'title') AS title,
+                  (data->>'deletedAt')::bigint AS deleted_at
+             FROM ${table}
+            WHERE owner_id=$1 AND (data->>'deletedAt')::bigint>$2`,
+          [ownerId,now-TRASH_RETENTION_MS]
+        );
+        return rows.map(row=>({id:row.id,title:row.title,kind,deletedAt:Number(row.deleted_at),expiresAt:Number(row.deleted_at)+TRASH_RETENTION_MS}));
+      }));
+      return groups.flat().sort((a,b)=>b.deletedAt-a.deletedAt);
+    },
+    async changeTrash(ownerId,kind,id,restore,now=Date.now()) {
+      if(!Object.hasOwn(trashTables,kind)) return false;
+      const table=trashTables[kind];
+      const condition="WHERE owner_id=$1 AND id=$2 AND (data->>'deletedAt')::bigint>$3 RETURNING id";
+      const query=restore?`UPDATE ${table} SET data=data-'deletedAt' ${condition}`:`DELETE FROM ${table} ${condition}`;
+      return (await pool.query(query,[ownerId,id,now-TRASH_RETENTION_MS])).rows.length>0;
+    },
+    async purgeExpiredTrash(now=Date.now()) {
+      for(const table of Object.values(trashTables)) {
+        await pool.query(`DELETE FROM ${table} WHERE (data->>'deletedAt')::bigint<=$1`,[now-TRASH_RETENTION_MS]);
+      }
     },
     async createSession(s) {
       await pool.query('INSERT INTO onscreen_v2_sessions(id,owner_id,data) VALUES($1,$2,$3)', [s.id, s.ownerId, JSON.stringify(s)]);
@@ -94,7 +125,7 @@ function createStore(pool) {
       } finally { client.release(); }
     },
   };
-  for(const name of ['initializeOnboarding','dismissOnboarding','createFolder','renameFolder','deleteFolder','saveTest','deleteTest']){
+  for(const name of ['initializeOnboarding','dismissOnboarding','createFolder','renameFolder','deleteFolder','saveTest','deleteTest','changeTrash']){
     const operation=store[name];store[name]=(...args)=>accounts.withOwner(args[0],()=>operation(...args));
   }
   const createSession=store.createSession;store.createSession=s=>accounts.withOwner(s.ownerId,()=>createSession(s));

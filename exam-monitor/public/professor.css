@@ -19,3 +19,5 @@ select,textarea{font:inherit;background:#fff;color:#223c31;border:1px solid #c5c
 
 .result-detail-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 #result-close { font-size: 22px; line-height: 1; padding: 8px 12px; }
+
+.tabs { flex-wrap: wrap; }
