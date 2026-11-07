@@ -461,3 +461,6 @@ body {
 body{flex-direction:column;align-items:stretch}.calculator{width:100%;box-sizing:border-box;margin:0 auto}#student-notice{align-self:center;max-width:600px;margin:12px 16px 0}#student-notice:empty{display:none}
 
 .student-brandbar { padding: 14px 24px; background: var(--examio-white); border-bottom: 1px solid var(--examio-line); }
+
+body:has(#calculator-section:not([hidden])) .student-brandbar { display: none; }
+.calc-brandbar { display: flex; justify-content: center; padding: 10px; background: var(--examio-white); border: 1px solid var(--examio-line); border-radius: 14px; }

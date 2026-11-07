@@ -22,10 +22,10 @@ test('AI generation validates source/count and remote structured questions, requ
   let request;
   const generator=createGenerator({key:'test-private-key',model:'configured-model',fetch:async(url,options)=>{
     request=JSON.parse(options.body);assert.equal(url,'https://api.openai.com/v1/responses');
-    return {ok:true,json:async()=>({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify({title:'Generated quiz',questions:[{type:'blank',text:'The capital is ___.',options:[],correctIndex:0,acceptedAnswers:['Seoul'],caseSensitive:false,evidence:'Seoul is the capital.'}]})}]}]})};
+    return {ok:true,json:async()=>({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify({title:'Generated quiz',questions:[{type:'blank',text:'The capital is ___.',options:[],correctIndex:0,acceptedAnswers:['Seoul'],caseSensitive:false,passage:1}]})}]}]})};
   }});
   const r=await generator({source:'Seoul is the capital.',count:1,types:'blank',difficulty:'easy'});
-  assert.equal(r.test.questions[0].type,'blank');assert.equal(request.store,false);assert.equal(request.text.format.type,'json_schema');assert.equal(JSON.stringify(r).includes('test-private-key'),false);
+  assert.equal(r.test.questions[0].type,'blank');assert.equal(r.test.questions[0].evidence,'Seoul is the capital.');assert.equal(request.store,false);assert.equal(request.text.format.type,'json_schema');assert.equal(JSON.stringify(r).includes('test-private-key'),false);
   await assert.rejects(generator({source:'',count:1,types:'blank'}));
   await assert.rejects(createGenerator({})({source:'Seoul is the capital.',count:1}),/configuration/);
 });

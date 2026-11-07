@@ -1,6 +1,7 @@
 const $ = id => document.getElementById(id);
 const els = { tbTitle: $('tb-title'), tbQuestions: $('tb-questions'), tbError: $('tb-error') };
 const socket = io();
+let resultViewVersion=0;
 let auth, account, current, historySession, library = [], folders = [], aiConfigured=false, uploadMaxBytes=5*1024*1024, importMode="import", sessionList = [], editingId = null, tbQuestions = [], popup, recoveringPassword = false;
 let accountGeneration = 0,creationVersion=0,professorTimerSnapshot=null;
 let lastWorkspaceTab = 'launch';
@@ -67,7 +68,7 @@ async function refresh() {
   for (const s of sessionList) {
     if (s.mode === 'test') {
       const c = card(s.title, `${new Date(s.createdAt).toLocaleString()} · ${s.phase} · ${s.students.length} joined`);
-      c.append(button('View results', async () => { historySession = await api(`/sessions/${s.id}`); renderResults(); }));
+      c.append(button('View results', async () => { const version=++resultViewVersion; const session=await api(`/sessions/${s.id}`); if(version!==resultViewVersion)return; historySession=session; renderResults(); }));
       if(s.phase === 'ended') c.append(button('Rename results',()=>renameResults(s)),button('Delete results', () => deleteResults(s), 'danger'));
       $('result-sessions').append(c);
     }
@@ -209,11 +210,18 @@ function renderTable(container, session) {
   }
   table.append(tbody); container.replaceChildren(table);
 }
+function closeResults() {
+  resultViewVersion++;
+  historySession=null;
+  $('result-detail').hidden=true;
+  $('result-students').replaceChildren();
+}
+$('result-close').onclick=()=>{closeResults();$('results-refresh').focus();};
 function renderResults() { $('result-detail').hidden=false; $('result-title').textContent=historySession.title; $('result-delete').hidden=historySession.phase !== 'ended'; $('result-rename').hidden=historySession.phase !== 'ended'; renderTable($('result-students'),historySession); }
 async function deleteResults(session) {
   if(!confirm(`Delete saved results for “${session.title}”? The library test will be kept.`)) return;
   await api(`/sessions/${session.id}`, 'DELETE');
-  if(historySession?.id === session.id) { historySession=null; $('result-detail').hidden=true; $('result-students').replaceChildren(); }
+  if(historySession?.id === session.id) closeResults();
   if(current?.id === session.id) { current=null; $('dashboard').hidden=true; $('calculator-card').hidden=false; }
   await refresh(); notice('Results deleted.');
 }
@@ -305,7 +313,7 @@ async function prepareImport(useAI){
  if(!file&&!source.trim()){$('import-status').textContent='Choose a PDF or DOCX file, or paste source text.';return;}
  if(file)data.append('file',file);else data.append('source',source);
  if(mode==='generate')for(const key of ['count','types','difficulty'])data.append(key,$('ai-'+key).value);
- const route=mode==='generate'?'generate':useAI?'import-ai':'import';$('import-submit').disabled=true;$('import-local').disabled=true;$('import-status').textContent=useAI?'AI is organizing questions and determining answers…':'Reading your test…';
+ const route=mode==='generate'?'generate':useAI?'import-ai':'import';$('import-submit').disabled=true;$('import-local').disabled=true;$('import-status').textContent=mode==='generate'?'AI is preparing questions and answers from your material…':useAI?'AI is organizing questions and determining answers…':'Reading your test…';
  try{const response=await fetch('/api/'+route,{method:'POST',headers:{Authorization:'Bearer '+await token()},body:data});const result=await response.json();if(generation!==accountGeneration||version!==creationVersion)return;if(!response.ok)throw new Error(result.error||'Could not prepare draft.');if(!result.test?.questions?.length)throw new Error('No questions were recognized. Check the format and try again.');
   const title=$('new-title').value.trim(),folderId=$('new-folder-choice').value;openBuilder({...result.test,title:title||result.test.title,folderId});editingId=null;$('draft-review').textContent=[result.test.questions.length+' questions prepared. Review the proposed answers before saving.',...(result.warnings||[])].join(' ');$('import-panel').hidden=true;$('import-source').value='';$('import-file').value='';
  }catch(e){if(generation===accountGeneration&&version===creationVersion)$('import-status').textContent=e.message;}
