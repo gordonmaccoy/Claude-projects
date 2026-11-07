@@ -8,8 +8,8 @@ const els = {
   themeToggle:$('theme-toggle'),testThemeToggle:$('test-theme-toggle'),themeColor:$('theme-color'),testTitle:$('test-title'),
   testQuestions:$('test-questions'),testActions:$('test-actions'),testSubmitBtn:$('test-submit-btn'),testDone:$('test-done'),doneScore:$('done-score'),
 };
-function applyTheme(value) { const theme=value==='light'?'light':'dark'; document.documentElement.dataset.theme=theme; try{localStorage.setItem('exam-monitor-theme',theme);}catch{} }
-try { applyTheme(localStorage.getItem('exam-monitor-theme')); } catch { applyTheme('dark'); }
+function applyTheme(value) { const theme=value==='dark'?'dark':'light'; document.documentElement.dataset.theme=theme; els.themeColor.content=theme==='dark'?'#082d5b':'#f4f7f2'; try{localStorage.setItem('exam-monitor-theme',theme);}catch{} }
+try { applyTheme(localStorage.getItem('exam-monitor-theme')); } catch { applyTheme('light'); }
 for(const el of [els.themeToggle,els.testThemeToggle]) el.onclick=()=>applyTheme(document.documentElement.dataset.theme==='light'?'dark':'light');
 els.sessionCode.textContent=sessionId || 'missing';
 const resumeKey=`onscreen-resume-${sessionId}`, draftKey=`onscreen-draft-${sessionId}`, calculatorKey=`onscreen-calculator-${sessionId}`;
