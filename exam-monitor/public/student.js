@@ -14,8 +14,10 @@ for(const el of [els.themeToggle,els.testThemeToggle]) el.onclick=()=>applyTheme
 els.sessionCode.textContent=sessionId || 'missing';
 const resumeKey=`onscreen-resume-${sessionId}`, draftKey=`onscreen-draft-${sessionId}`, calculatorKey=`onscreen-calculator-${sessionId}`;
 const socket=io(); let joined=false, currentView=null, renderedTest=false, testAnswers={}, submitting=false, draftTimer, updateVersion=0, memoryToken=null;
+let reconnectTimer, connectionVersion=0;
+const connectionNotice=$('student-connection');
 const message=text=>$('student-notice').textContent=text || '';
-const emit=(event,data)=>new Promise(resolve=>socket.timeout(10000).emit(event,data,(err,res)=>resolve(err?{ok:false,error:'Connection interrupted. Please retry.'}:res)));
+const emit=(event,data)=>new Promise(resolve=>socket.timeout(10000).emit(event,data,(err,res)=>resolve(err?{ok:false,timedOut:true,error:'The connection timed out. Please try again.'}:res)));
 function showJoinError(text) { els.joinError.hidden=false; els.joinError.textContent=text; }
 function savedToken() { try { return memoryToken || localStorage.getItem(resumeKey); } catch { return memoryToken; } }
 function saveDraft() { try { localStorage.setItem(draftKey,JSON.stringify(testAnswers)); } catch {} }
@@ -25,17 +27,31 @@ async function join(input) {
     input.resumeToken=memoryToken;
     try { localStorage.setItem(resumeKey,memoryToken); } catch { message('Resume is available while this page stays open. This browser cannot save the resume link across reloads.'); }
   }
+  const connection=connectionVersion;
   const res=await emit('student:join',{sessionId,...input});
-  if(!res.ok) { showJoinError(res.error); return; }
+  if(connection!==connectionVersion)return;
+  if(!res.ok) { if(joined) {
+    connectionNotice.textContent=res.timedOut?'Still reconnecting…':res.error;
+    if(res.timedOut&&input.resumeToken&&socket.connected) reconnectTimer=setTimeout(()=>join({resumeToken:input.resumeToken}),1500);
+  } else showJoinError(res.error); return; }
+  clearTimeout(reconnectTimer);connectionNotice.textContent='';setConnected(true);
   joined=true; memoryToken=res.resumeToken; try{localStorage.setItem(resumeKey,res.resumeToken);}catch{ message('Resume is available while this page stays open. This browser cannot save the resume link across reloads.'); }
   els.joinError.hidden=true; els.meName.textContent=res.view.name;
   showView(res.view); await visibility();
 }
 socket.on('connect',async()=> {
-  setConnected(true); const resumeToken=savedToken();
+  clearTimeout(reconnectTimer);
+  const resumeToken=savedToken();
   if(resumeToken) await join({resumeToken});
+  else setConnected(true);
 });
-socket.on('disconnect',()=> { setConnected(false); if(currentView?.result)return;message('Connection interrupted. Your saved enrollment will resume when you reconnect.'); });
+socket.on('disconnect',()=> {
+  connectionVersion++;
+  setConnected(false);
+  clearTimeout(reconnectTimer);
+  if(!joined || currentView?.result || currentView?.terminal)return;
+  reconnectTimer=setTimeout(()=>{if(!socket.connected)connectionNotice.textContent='Reconnecting… Keep this page open.';},1500);
+});
 function setConnected(ok) { for (const el of [els.connDot,els.testConnDot]) { el.classList.toggle('offline',!ok); el.title=ok?'Connected':'Disconnected'; } }
 els.form.onsubmit=async e=> { e.preventDefault(); const b=els.form.querySelector('button'); b.disabled=true; try { await join({name:els.nameInput.value.trim(),number:$('number-input').value.trim()}); } finally { b.disabled=false; } };
 function showView(view) {
@@ -43,7 +59,8 @@ function showView(view) {
   if(previousExtension!==undefined && view.extensionVersion>previousExtension){extensionNoticeUntil=performance.now()+6000;$('time-notice').textContent='Your professor extended the time by '+(view.lastExtension?.minutes||1)+' minute.';}
   if((view.result||view.failed||view.phase==='ended')&&$('submit-dialog').open)$('submit-dialog').close();
   timerSnapshot={deadlineAt:view.deadlineAt,serverNow:view.serverNow,receivedAt:performance.now()};
-  if(view.terminal){clearTimeout(draftTimer);socket.disconnect();}
+  if(view.terminal){clearTimeout(draftTimer);clearTimeout(reconnectTimer);connectionNotice.textContent='';socket.disconnect();}
+  els.testQuestions.classList.toggle('test-copy-guard',view.mode==='test'&&view.phase==='running'&&!view.result);
   const locked=Boolean(view.failed && !view.result && view.phase==='running');
   $('activity-lock').hidden=!locked;
   els.calcSection.inert=locked; els.testSection.inert=locked;
@@ -89,9 +106,11 @@ function renderTestQuestions(questions) {
 let lastAnsweredQuestion=null;
 async function uploadDraft() {
   if(!joined || currentView?.failed || currentView?.result || currentView?.phase!=='running' || currentView?.mode!=='test') return;
+  if(!socket.connected)return;
   const version=updateVersion;const res=await emit('student:draft',{answers:testAnswers,questionId:lastAnsweredQuestion});
-  if(!res.ok) message('Answers saved on this device. Reconnecting to save them to the server…');
-  else if(version===updateVersion && !currentView?.failed) message('Answers saved.');
+  if(currentView?.result||currentView?.terminal)return;
+  if(!res.ok && version===updateVersion) message(res.timedOut?'Answers are saved on this device. Waiting to sync…':res.error);
+  else if(res.ok && version===updateVersion && !currentView?.failed) message('Answers saved.');
 }
 els.testSubmitBtn.onclick=()=> {
  if(submitting||currentView?.failed||currentView?.result||currentView?.phase!=='running')return;
@@ -118,8 +137,23 @@ function updateTimer(){
  else{els.testQuestions.inert=!!currentView?.failed;els.testSubmitBtn.disabled=submitting;}
 }
 setInterval(updateTimer,250);
-async function visibility() { if(!joined || currentView?.result || currentView?.phase==='ended' || !socket.connected) return; const res=await emit('student:visibility',{visible:!document.hidden}); if(res.view)showView(res.view);if(!res.ok) message(res.error); }
+async function visibility() { if(!joined || currentView?.result || currentView?.phase==='ended' || !socket.connected) return; const res=await emit('student:visibility',{visible:!document.hidden}); if(res.view)showView(res.view);if(!res.ok && !res.timedOut && !currentView?.terminal) message(res.error); }
 document.addEventListener('visibilitychange',visibility);
+function protectedQuestionText(node) {
+  const element=node?.nodeType===Node.ELEMENT_NODE?node:node?.parentElement;
+  return Boolean(element?.closest('.tq-text, .tq-opt-text, .tq-opt-letter') && els.testQuestions.contains(element));
+}
+for(const event of ['contextmenu','dragstart']) els.testQuestions.addEventListener(event,e=>{
+  if(els.testQuestions.classList.contains('test-copy-guard')&&protectedQuestionText(e.target))e.preventDefault();
+});
+document.addEventListener('copy',event=>{
+  if(!els.testQuestions.classList.contains('test-copy-guard') || event.target.closest?.('input, textarea'))return;
+  const selection=window.getSelection();
+  if(!selection || selection.isCollapsed)return;
+  for(let i=0;i<selection.rangeCount;i++){
+    if(selection.getRangeAt(i).intersectsNode(els.testQuestions)){event.preventDefault();return;}
+  }
+});
 window.addEventListener('pagehide',()=> { if(joined && !currentView?.result && currentView?.phase!=='ended') socket.emit('student:visibility',{visible:false},()=>{}); });
 setInterval(()=> { if(joined) { visibility(); if(currentView?.mode==='test' && !currentView?.result) uploadDraft(); } },3000);
 if(!sessionId) { showJoinError('Scan your professor’s QR code to join.');els.form.querySelector('button').disabled=true; }

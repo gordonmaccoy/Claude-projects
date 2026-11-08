@@ -464,3 +464,8 @@ body{flex-direction:column;align-items:stretch}.calculator{width:100%;box-sizing
 
 body:has(#calculator-section:not([hidden])) .student-brandbar { display: none; }
 .calc-brandbar { display: flex; justify-content: center; padding: 10px; background: var(--examio-white); border: 1px solid var(--examio-line); border-radius: 14px; }
+
+#student-connection { align-self: center; max-width: 600px; margin: 12px 16px; color: var(--muted); }
+#student-connection:empty { display: none; }
+.test-copy-guard :is(.tq-text,.tq-opt-text,.tq-opt-letter) { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+@media print { .test-copy-guard { display: none !important; } }

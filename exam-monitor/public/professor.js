@@ -18,7 +18,12 @@ function clearPrivateWorkspace() {
   $('tb-title').value=''; $('password').value='';
   socket.disconnect();
 }
-const notice = message => { $('notice').textContent = message || ''; };
+let noticeTimer;
+const notice = message => {
+  clearTimeout(noticeTimer);
+  $('notice').textContent = message || '';
+  if(message) noticeTimer=setTimeout(()=>notice(''),8000);
+};
 async function token() { return (await auth.auth.getSession()).data.session?.access_token || ''; }
 async function api(route, method = 'GET', body) {
   const generation=accountGeneration;
@@ -35,6 +40,7 @@ const settings=window.createOnScreenSettings({api,notify:notice,onClose:()=>tab(
 }});
 function action(fn) { return async event => { try { notice(''); await fn(event); } catch (e) { notice(e.message); } }; }
 function tab(name) {
+  notice('');
   if(name!=='settings')lastWorkspaceTab=name;
   document.querySelectorAll('.tab').forEach(el => el.hidden = el.id !== name);
   document.querySelectorAll('[data-tab]').forEach(el => el.classList.toggle('selected', el.dataset.tab === name));
@@ -59,7 +65,7 @@ async function refreshTrash() {
       await api(route+'/restore','POST');
       await refreshTrash();
       await refresh();
-      notice('Restored.');
+      if(lastWorkspaceTab==='trash'&&!$('trash').hidden)notice('Restored.');
     }),button('Delete permanently',()=>{
       pendingTrashDelete=route;
       const dialog=$('trash-confirm');
@@ -78,7 +84,7 @@ $('trash-confirm').onclose=action(async()=>{
   if(!route||$('trash-confirm').returnValue!=='delete')return;
   await api(route,'DELETE');
   await refreshTrash();
-  notice('Permanently deleted.');
+  if(!$('trash').hidden)notice('Permanently deleted.');
 });
 async function refresh() {
   [library, sessionList, folders] = await Promise.all([api('/tests'), api('/sessions'),api('/folders')]);
@@ -272,22 +278,29 @@ async function download(s) {
   const url=URL.createObjectURL(await response.blob()); const a=document.createElement('a'); a.href=url; a.download=decodeURIComponent(response.headers.get('content-disposition')?.split("filename*=UTF-8''")[1]||'Examio results.xlsx'); a.click(); setTimeout(()=>URL.revokeObjectURL(url),10000);
 }
 $('live-export').onclick=action(()=>download(current)); $('result-export').onclick=action(()=>download(historySession)); $('results-refresh').onclick=action(refresh);
-socket.on('connect',()=> { if (account) watch().catch(e=>notice(e.message)); });
+socket.on('connect',()=> { if (account) { if($('notice').textContent.startsWith('Live connection lost'))notice(''); watch().catch(e=>notice(e.message)); } });
 socket.on('disconnect',()=> { if (account) notice('Live connection lost. Sessions remain saved; reconnecting…'); });
 socket.on('professor:update',view=> { const listed=sessionList.find(s=>s.id===view.id);if(view.phase==='ended'||(listed&&(listed.title!==view.title||listed.phase!==view.phase)))refresh().catch(e=>notice(e.message));if (current?.id === view.id) { current={...current,...view}; renderDashboard(); } if (historySession?.id===view.id) { historySession={...historySession,...view}; renderResults(); } });
 socket.on('auth:expired',()=> { notice('Please sign in again to reconnect the private dashboard.'); });
-async function signedIn() {
+let workspaceSignIn;
+function signedIn() {
+  if(!workspaceSignIn)workspaceSignIn=loadSignedInWorkspace().finally(()=>{workspaceSignIn=null;});
+  return workspaceSignIn;
+}
+async function loadSignedInWorkspace() {
   let generation=accountGeneration;
   try {
     const verified=await api('/me');
     if(account && account.id!==verified.id) clearPrivateWorkspace();
     generation=accountGeneration;account=verified;
     if(recoveringPassword)return;
-    const onboarding=await api('/onboarding','POST',{});
-    if(generation!==accountGeneration)return;
-    socket.connect();await refresh();await watch();
-    if(generation!==accountGeneration)return;settings.setAccount(verified);$('account-name').textContent=account.email;$('login').hidden=true;$('workspace').hidden=false;$('signout').hidden=false;
-    if(generation===accountGeneration)tour.offer(onboarding);
+    settings.setAccount(verified);$('account-name').textContent=account.email;$('login').hidden=true;$('workspace').hidden=false;$('signout').hidden=false;
+    socket.connect();
+    try {
+      const onboarding=await api('/onboarding','POST',{});
+      await refresh(); await watch();
+      if(generation===accountGeneration)tour.offer(onboarding);
+    } catch(e) { if(generation===accountGeneration)notice(e.message); }
   }catch(e){if(generation!==accountGeneration)return;settings.reset();account=null;$('login').hidden=false;$('workspace').hidden=true;$('signout').hidden=true;$('auth-message').textContent=e.message;}
 }
 async function initAuth() {
@@ -297,10 +310,11 @@ async function initAuth() {
   auth=window.createOnScreenAuth(config.supabaseUrl, config.supabaseKey, {auth:{flowType:'pkce',detectSessionInUrl:true}});
   auth.auth.onAuthStateChange((event) => {
     if (event==='PASSWORD_RECOVERY') { recoveringPassword=true; $('login').hidden=false; $('workspace').hidden=true; $('login-form').hidden=true; $('google').hidden=true; $('new-password-form').hidden=false; }
-    if (event==='SIGNED_IN' || event==='TOKEN_REFRESHED') setTimeout(()=>signedIn(),0);
+    if (event==='SIGNED_IN' && !account) setTimeout(()=>{if(!account)void signedIn();},0);
+    if (event==='TOKEN_REFRESHED') setTimeout(()=>{if(account)watch().catch(e=>notice(e.message));},0);
     if (event==='SIGNED_OUT') { clearPrivateWorkspace(); account=null; $('workspace').hidden=true; $('login').hidden=false; $('signout').hidden=true; }
   });
-  $('login-form').onsubmit=async e=> { e.preventDefault(); const {error}=await auth.auth.signInWithPassword({email:$('email').value,password:$('password').value}); $('auth-message').textContent=error?.message || ''; if (!error) { socket.connect(); await signedIn(); } };
+  $('login-form').onsubmit=async e=> { e.preventDefault(); const {error}=await auth.auth.signInWithPassword({email:$('email').value,password:$('password').value}); $('auth-message').textContent=error?.message || ''; };
   $('signup').onclick=async()=> { const {error}=await auth.auth.signUp({email:$('email').value,password:$('password').value,options:{emailRedirectTo:location.origin+'/professor.html'}}); $('auth-message').textContent=error?.message || 'Check your email to confirm your account, then sign in.'; };
   $('google').onclick=async()=> { const {error}=await auth.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+'/professor.html'}}); if(error) $('auth-message').textContent=error.message; };
   $('signout').onclick=async()=> { await auth.auth.signOut(); };
