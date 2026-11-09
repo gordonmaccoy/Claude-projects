@@ -8,7 +8,7 @@ let accountGeneration = 0,creationVersion=0,professorTimerSnapshot=null;
 let lastWorkspaceTab = 'launch';
 let popupSessionId = null, openingDisplay = false, launching = false;
 function clearPrivateWorkspace() {
-  settings.reset();tour.reset();$('launch-show-names').checked=false;$('result-detail-rows').replaceChildren();lastWorkspaceTab='launch';accountGeneration++;creationVersion++;professorTimerSnapshot=null;if($('answer-ai-dialog').open)$('answer-ai-dialog').close();$('answer-ai-status').textContent='';closeEntry();launchTest=null;$('new-title').value='';for(const id of ['tb-folder','new-folder-choice'])$(id).replaceChildren();$('launch-test-title').textContent='';if($('launch-dialog').open)$('launch-dialog').close();$('creation-choice').hidden=true;
+  settings.reset();tour.reset();$('launch-show-names').checked=false;$('launch-show-scores-live').checked=false;$('result-detail-rows').replaceChildren();lastWorkspaceTab='launch';accountGeneration++;creationVersion++;professorTimerSnapshot=null;if($('answer-ai-dialog').open)$('answer-ai-dialog').close();$('answer-ai-status').textContent='';closeEntry();launchTest=null;$('new-title').value='';for(const id of ['tb-folder','new-folder-choice'])$(id).replaceChildren();$('launch-test-title').textContent='';if($('launch-dialog').open)$('launch-dialog').close();$('creation-choice').hidden=true;
   trashVersion++;pendingTrashDelete=null;if($('trash-confirm').open)$('trash-confirm').close();$('trash-confirm-message').textContent='';$('trash-items').replaceChildren();
   current=null; historySession=null; library=[]; folders=[]; sessionList=[]; $('import-source').value='';$('import-file').value='';$('import-panel').hidden=true;$('draft-review').textContent=''; editingId=null; tbQuestions=[];
   for(const id of ['launch-tests','library-tests','active-sessions','result-sessions','live-students','result-students','tb-questions']) $(id).replaceChildren();
@@ -316,9 +316,10 @@ function renderDashboard() {
   $('extend-time').hidden=current.phase!=='running'||!current.deadlineAt;
   if(current.deadlineAt && (!professorTimerSnapshot||professorTimerSnapshot.id!==current.id||professorTimerSnapshot.serverNow!==current.serverNow||professorTimerSnapshot.deadlineAt!==current.deadlineAt))professorTimerSnapshot={id:current.id,serverNow:current.serverNow||Date.now(),deadlineAt:current.deadlineAt,receivedAt:performance.now()};renderProfessorTimer();
   $('session-rename').hidden=current.mode!=='test';
+  $('launch-score-switch').hidden=current.mode!=='test';
   const scores = current.students.filter(s => s.result).map(s => s.result.percentage);
   $('live-summary').textContent = `${current.students.length} joined · ${current.students.filter(s => s.status === 'green' && !s.result && !s.completed).length} active` +
-    (current.mode === 'test' ? ` · ${scores.length} submitted · ${current.students.filter(s => s.failed).length} FAIL${scores.length ? ` · Average ${Math.round(scores.reduce((a,b) => a+b,0)/scores.length)}%` : ''}` : ' · '+current.students.filter(s=>s.completed).length+' completed');
+    (current.mode === 'test' ? ` · ${scores.length} submitted · ${current.students.filter(s => s.failed).length} FAIL${scores.length && $('launch-show-scores-live').checked ? ` · Average ${Math.round(scores.reduce((a,b) => a+b,0)/scores.length)}%` : ''}` : ' · '+current.students.filter(s=>s.completed).length+' completed');
   renderTable($('live-students'), current);
 }
 function renderProfessorTimer(){
@@ -327,28 +328,30 @@ function renderProfessorTimer(){
  $('session-timer').textContent='Time remaining: '+Math.floor(seconds/60)+' min '+String(seconds%60).padStart(2,'0')+' sec · Ends '+new Date(professorTimerSnapshot.deadlineAt).toLocaleTimeString();
 }
 setInterval(renderProfessorTimer,500);
-$('launch-show-names').onchange=()=>{if(current)renderDashboard();};
+for(const id of ['launch-show-names','launch-show-scores-live'])$(id).onchange=()=>{if(current)renderDashboard();};
 function renderTable(container, session) {
-  const masked=container.id==='live-students'&&!$('launch-show-names').checked;
+  const isLaunch=container.id==='live-students';
+  const masked=isLaunch&&!$('launch-show-names').checked;
+  const showScores=!isLaunch||$('launch-show-scores-live').checked;
   const table = document.createElement('table');
   if(session.mode === 'calculator') {
     table.innerHTML='<thead><tr><th>Student number</th><th>Name</th><th>Status</th><th>Review</th></tr></thead>';
     const body=document.createElement('tbody');
     for(const s of session.students) {
       const row=document.createElement('tr');
-      for(const value of [masked?'—':s.number,masked?'••••••':s.name,s.failed ? 'FAILED' : s.completed?'Completed and closed':s.status === 'green' ? 'Active' : 'Inactive']) { const cell=document.createElement('td'); cell.textContent=value; row.append(cell); }
+      for(const value of [s.number,masked?'••••••':s.name,s.failed ? 'FAILED' : s.completed?'Completed and closed':s.status === 'green' ? 'Active' : 'Inactive']) { const cell=document.createElement('td'); cell.textContent=value; row.append(cell); }
       const review=document.createElement('td');if(s.failed && session.phase==='running')review.append(button('Unlock & continue',()=>unlockStudent(session,s)));row.append(review);body.append(row);
     }
     table.append(body); container.replaceChildren(table); return;
   }
-  table.innerHTML = '<thead><tr><th>Student number</th><th>Name</th><th>Status</th><th>Student progress</th><th>Score</th><th>Original score</th><th>Review</th></tr></thead>';
+  table.innerHTML = '<thead><tr><th>Student number</th><th>Name</th><th>Status</th><th>Student progress</th>'+(showScores?'<th>Score</th><th>Original score</th>':'')+'<th>Review</th></tr></thead>';
   const tbody = document.createElement('tbody');
   for (const s of [...session.students].sort((a,b) => a.number.localeCompare(b.number, undefined, { numeric:true }))) {
     const tr = document.createElement('tr');
-    for (const text of [masked?'—':s.number,masked?'••••••':s.name]) { const td=document.createElement('td'); td.textContent=text; tr.append(td); }
+    for (const text of [s.number,masked?'••••••':s.name]) { const td=document.createElement('td'); td.textContent=text; tr.append(td); }
     const state=document.createElement('td'); const pill=document.createElement('span'); pill.className=`pill ${s.status === 'red' ? 'red' : ''}`; pill.textContent=s.failed ? 'FAILED' : s.completed ? 'Completed and closed' : s.result ? 'Test Submitted' : s.status === 'green' ? 'Active' : 'Inactive'; state.append(pill); tr.append(state);
     const progress=document.createElement('td');progress.textContent=s.progress?`${s.result?'Finished':s.progress.question?'Question '+s.progress.question+' of '+s.progress.total:'Not started'} · ${s.progress.answered}/${s.progress.total} answered`:'—';tr.append(progress);
-    for (const text of [s.score === null ? 'Pending' : `${s.score} / ${s.total}${s.result ? ` · ${s.result.percentage}%` : ''}`, s.result ? `${s.result.originalScore} / ${s.total}` : '—']) { const td=document.createElement('td'); td.textContent=text; tr.append(td); }
+    if(showScores) for (const text of [s.score === null ? 'Pending' : `${s.score} / ${s.total}${s.result ? ` · ${s.result.percentage}%` : ''}`, s.result ? `${s.result.originalScore} / ${s.total}` : '—']) { const td=document.createElement('td'); td.textContent=text; tr.append(td); }
     const review=document.createElement('td');
     if(s.failed && !s.finalized && (s.result || session.phase==='running')) review.append(button(s.result?'Override FAIL':'Unlock & continue',()=>unlockStudent(session,s)));
     if(s.failed && !s.result)review.append(button('Submit Fail score',()=>submitFail(session,s),'danger'));
