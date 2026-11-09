@@ -136,9 +136,12 @@ test('corrections are opt-in and never reveal answers before submission', () => 
     assert.equal(exam.studentView(s,student).corrections?.[0]?.correct,enabled?'4':undefined);
     const zip=require('fflate').unzipSync(require('../export').workbook(s,true));
     const sheet=Buffer.from(zip['xl/worksheets/sheet1.xml']).toString();
-    assert.match(sheet,/student answer/);
+    assert.match(sheet,/Student number.*Name.*Score.*Question 1/);
     assert.match(sheet,/>001<\/t>/);
-    assert.match(sheet,/r="F2"[^>]*><is><t xml:space="preserve">4/);
+    assert.match(sheet,/<c r="D2" s="2"[^>]*><is><t xml:space="preserve">5/);
+    assert.match(sheet,/<c r="D5" s="1"[^>]*><is><t xml:space="preserve">4/);
+    assert.match(sheet,/<c r="C3" s="5"><v>0<\/v>/);
+    assert.match(sheet,/Class average/);
   }
 });
 
