@@ -74,6 +74,16 @@ test('quiz ordering is durable and bulk deletion only removes the owner’s tras
     assert.equal(await store.orderTests('other','',['a','b']),false);
     await store.saveTest('owner',{id:'b',title:'Updated'},true);
     assert.deepEqual((await store.listTests('owner')).map(t=>t.id),['b','a']);
+    const folder=await store.createFolder('owner','Destination');
+    const foreign=await store.createFolder('other','Private');
+    assert.equal(await store.orderTests('owner',foreign.id,['b'],'b'),false);
+    assert.equal(await store.orderTests('owner',folder.id,['a','b'],'b'),false);
+    assert.equal((await store.getTest('owner','b')).folderId,undefined);
+    assert.equal(await store.orderTests('owner',folder.id,['b'],'b'),true);
+    assert.equal((await store.getTest('owner','b')).folderId,folder.id);
+    assert.equal(await store.orderTests('owner','',['a','b'],'b'),true);
+    assert.equal((await store.getTest('owner','b')).folderId,null);
+    assert.deepEqual((await store.listTests('owner')).map(t=>t.id),['a','b']);
     for(const [id,ownerId] of [['old1','owner'],['old2','owner'],['active','owner'],['foreign','other']]){
       await store.createSession({id,ownerId,phase:'ended',...(id!=='active'?{deletedAt:Date.now()}: {})});
     }

@@ -71,12 +71,18 @@ function createStore(pool) {
         [id,ownerId,Date.now()]
       )).rows.length>0;
     },
-    async orderTests(ownerId,folderId,ids) {
+    async orderTests(ownerId,folderId,ids,movedId) {
       const client=await pool.connect();
       try {
         await client.query('BEGIN');
         const {rows}=await client.query("SELECT id FROM onscreen_v2_tests WHERE owner_id=$1 AND COALESCE(data->>'folderId','')=$2 AND data->>'deletedAt' IS NULL FOR UPDATE",[ownerId,folderId]);
         const existing=new Set(rows.map(row=>row.id));
+        if(movedId&&!existing.has(movedId)) {
+          if(folderId&&!await store.getFolder(ownerId,folderId)){await client.query('ROLLBACK');return false;}
+          const moved=await client.query("UPDATE onscreen_v2_tests SET data=jsonb_set(data,'{folderId}',COALESCE(to_jsonb(NULLIF($3::text,'')),'null'::jsonb)) WHERE owner_id=$1 AND id=$2 AND data->>'deletedAt' IS NULL RETURNING id",[ownerId,movedId,folderId]);
+          if(!moved.rows.length){await client.query('ROLLBACK');return false;}
+          existing.add(movedId);
+        }
         if(existing.size!==ids.length||ids.some(id=>!existing.has(id))) {
           await client.query('ROLLBACK');return false;
         }

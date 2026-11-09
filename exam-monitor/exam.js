@@ -209,7 +209,7 @@ function override(s, id, professorId, reason, now = Date.now()) {
   st.hiddenSince = null;
   st.events.push({ type: 'override', at: now, professorId, reason: reason.trim() });
 }
-function status(st, now) { if(st.completedAt)return 'green'; if(st.submission) return isFailed(st)?'red':'green'; return isFailed(st) || !st.visible || now - st.lastSeen > 10000 ? 'red' : 'green'; }
+function status(st, now) { if(st.completedAt)return 'completed'; if(st.submission) return isFailed(st)?'red':'green'; return isFailed(st) || !st.visible || now - st.lastSeen > 10000 ? 'red' : 'green'; }
 function publicView(s, now = Date.now()) {
   return { title: s.resultTitle || s.test?.title || 'Classroom calculator', phase: s.phase,deadlineAt:s.deadlineAt||null,
     students: s.students.map(st => ({ name: st.name, status: isFailed(st)?'failed':st.completedAt?'completed':st.submission?'submitted':status(st,now) })) };

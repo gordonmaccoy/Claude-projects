@@ -8,7 +8,7 @@ let accountGeneration = 0,creationVersion=0,professorTimerSnapshot=null;
 let lastWorkspaceTab = 'launch';
 let popupSessionId = null, openingDisplay = false, launching = false;
 function clearPrivateWorkspace() {
-  settings.reset();tour.reset();$('result-detail-rows').replaceChildren();lastWorkspaceTab='launch';accountGeneration++;creationVersion++;professorTimerSnapshot=null;if($('answer-ai-dialog').open)$('answer-ai-dialog').close();$('answer-ai-status').textContent='';closeEntry();launchTest=null;$('new-title').value='';$('folder-list').replaceChildren();$('folder-menu').open=false;for(const id of ['tb-folder','new-folder-choice'])$(id).replaceChildren();$('launch-test-title').textContent='';if($('launch-dialog').open)$('launch-dialog').close();$('creation-choice').hidden=true;
+  settings.reset();tour.reset();$('result-detail-rows').replaceChildren();lastWorkspaceTab='launch';accountGeneration++;creationVersion++;professorTimerSnapshot=null;if($('answer-ai-dialog').open)$('answer-ai-dialog').close();$('answer-ai-status').textContent='';closeEntry();launchTest=null;$('new-title').value='';for(const id of ['tb-folder','new-folder-choice'])$(id).replaceChildren();$('launch-test-title').textContent='';if($('launch-dialog').open)$('launch-dialog').close();$('creation-choice').hidden=true;
   trashVersion++;pendingTrashDelete=null;if($('trash-confirm').open)$('trash-confirm').close();$('trash-confirm-message').textContent='';$('trash-items').replaceChildren();
   current=null; historySession=null; library=[]; folders=[]; sessionList=[]; $('import-source').value='';$('import-file').value='';$('import-panel').hidden=true;$('draft-review').textContent=''; editingId=null; tbQuestions=[];
   for(const id of ['launch-tests','library-tests','active-sessions','result-sessions','live-students','result-students','tb-questions']) $(id).replaceChildren();
@@ -75,7 +75,7 @@ async function refreshTrash() {
       $('trash-confirm-message').textContent='“'+(item.title||kind)+'” cannot be recovered after this.';
       dialog.showModal();
     },'danger'));
-    if(item.kind==='results'){const label=document.createElement('label');const checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.className='trash-result-select';checkbox.value=item.id;checkbox.onchange=updateTrashSelection;label.append(checkbox,' Select '+(item.title||kind));entry.append(label);}
+    if(item.kind==='results'){entry.classList.add('trash-selectable');const checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.className='trash-result-select';checkbox.setAttribute('aria-label','Select '+(item.title||kind));checkbox.value=item.id;checkbox.onchange=updateTrashSelection;entry.append(checkbox);}
     entry.append(actions);
     container.append(entry);
   }
@@ -113,18 +113,51 @@ $('trash-confirm').onclose=action(async()=>{
   if(version===tabVersion&&!$('trash').hidden)notice(deleted?'Permanently deleted.':'The selected results were already removed.');
 });
 let draggedTest=null;
-async function moveLibraryTest(folderId,fromId,toId) {
-  const ids=library.filter(test=>(test.folderId||'')===folderId).map(test=>test.id);
-  const from=ids.indexOf(fromId),to=ids.indexOf(toId);
-  if(from<0||to<0||from===to)return;
-  ids.splice(to,0,ids.splice(from,1)[0]);
-  await api('/test-order','PUT',{folderId,ids});
-  await refresh();
+function previewQuizMove(list,before) {
+  const row=draggedTest.placeholder;
+  if(before===row||(row.parentElement===list&&row.nextElementSibling===before))return;
+  const siblings=[...new Set([...row.parentElement.children,...list.children])].filter(el=>el!==row&&el!==draggedTest.row);
+  const positions=siblings.map(el=>el.getBoundingClientRect().top);
+  list.insertBefore(row,before);
+  if(!matchMedia('(prefers-reduced-motion: reduce)').matches) siblings.forEach((el,index)=>{
+    const delta=positions[index]-el.getBoundingClientRect().top;
+    if(delta)el.animate([{transform:'translateY('+delta+'px)'},{transform:'translateY(0)'}],{duration:150,easing:'ease-out'});
+  });
+}
+function finishQuizDrag() {
+  const drag=draggedTest;
+  if(!drag)return null;
+  draggedTest=null;
+  drag.row.classList.remove('quiz-dragging');
+  drag.placeholder.remove();
+  return drag;
+}
+function setupQuizDrop(folder,list) {
+  folder.ondragover=event=>{
+    if(!draggedTest)return;
+    event.preventDefault();event.dataTransfer.dropEffect='move';
+    if(!draggedTest.placeholder.parentElement)return;
+    folder.open=true;
+    const rows=[...list.children].filter(row=>row!==draggedTest.row&&row!==draggedTest.placeholder);
+    const before=rows.find(row=>{const rect=row.getBoundingClientRect();return event.clientY<rect.top+rect.height/2;})||null;
+    previewQuizMove(list,before);
+  };
+  folder.ondrop=action(async event=>{
+    if(!draggedTest?.placeholder.parentElement)return;
+    event.preventDefault();
+    const {row,placeholder}=draggedTest;
+    const destination=placeholder.parentElement;
+    const ids=[...destination.children].filter(item=>item!==row).map(item=>item.dataset.testId);
+    finishQuizDrag();
+    await api('/test-order','PUT',{folderId:destination.dataset.folderId,ids,movedId:row.dataset.testId});
+    await refresh();
+  });
 }
 async function refresh() {
   [library, sessionList, folders] = await Promise.all([api('/tests'), api('/sessions'),api('/folders')]);
   const expanded=new Set([...document.querySelectorAll('#launch-tests details[open],#library-tests details[open]')].map(folder=>folder.dataset.folderKey));
-  renderFolderOptions();renderFolderMenu();
+  if(draggedTest)return;
+  renderFolderOptions();
   for (const id of ['launch-tests', 'library-tests', 'active-sessions', 'result-sessions']) $(id).replaceChildren();
   if (!library.length) {
     $('launch-tests').append(card('A fresh start', 'Create your first test in Library, or launch the calculator.'));
@@ -133,32 +166,48 @@ async function refresh() {
   const groups={};
   for(const root of ['launch-tests','library-tests']) for(const folder of [...folders,{id:'',name:'Uncategorized Test'}]) {
     const count=library.filter(t=>(t.folderId||'')===folder.id).length;
-    if(!count && !folders.some(f=>f.id===folder.id))continue;
+    if(!count && !folders.some(f=>f.id===folder.id) && root!=='library-tests')continue;
     const detail=document.createElement('details');detail.className='folder';detail.dataset.folderKey=root+':'+folder.id;detail.open=expanded.has(detail.dataset.folderKey);
-    const summary=document.createElement('summary');summary.textContent=`${folder.name} (${count})`;detail.append(summary);
-    const list=document.createElement('div');list.className=root==='library-tests'?'library-rows':'cards';detail.append(list);$(root).append(detail);groups[root+folder.id]=list;
+    const summary=document.createElement('summary');summary.textContent=`${folder.name} (${count})`;if(root==='library-tests'&&folder.id)summary.append(folderActions(folder));detail.append(summary);
+    const list=document.createElement('div');list.className=root==='library-tests'?'library-rows':'cards';list.dataset.folderId=folder.id;if(root==='library-tests')setupQuizDrop(detail,list);detail.append(list);$(root).append(detail);groups[root+folder.id]=list;
   }
   for (const test of library) {
     const launch = card(test.title, `${test.questions.length} questions · Saved test`);
     launch.append(button('Launch test ↗', () => openLaunch(test), 'primary')); (groups['launch-tests'+(test.folderId||'')]||$('launch-tests')).append(launch);
     const saved=document.createElement('article');saved.className='library-test-row';
     const title=document.createElement('strong');title.textContent=test.title;saved.append(title);
-    const folderId=test.folderId||'';
-    const siblings=library.filter(item=>(item.folderId||'')===folderId);
-    const index=siblings.indexOf(test);
-    const handle=document.createElement('span');handle.textContent='↕';handle.title='Drag to reorder';handle.className='drag-handle';handle.draggable=true;
-    handle.ondragstart=event=>{draggedTest={id:test.id,folderId};event.dataTransfer.setData('text/plain',test.id);event.dataTransfer.effectAllowed='move';};
-    handle.ondragend=()=>draggedTest=null;
-    saved.ondragover=event=>{if(draggedTest?.folderId===folderId)event.preventDefault();};
-    saved.ondrop=action(async event=>{
-      if(draggedTest?.folderId!==folderId)return;
-      event.preventDefault();const from=draggedTest.id;draggedTest=null;await moveLibraryTest(folderId,from,test.id);
-    }); const actions = document.createElement('div'); actions.className = 'actions';
+    saved.dataset.testId=test.id;
+    const handle=document.createElement('button');
+    handle.type='button';handle.textContent='↕';handle.title='Drag to move, or press Up or Down';
+    handle.className='drag-handle';handle.draggable=true;handle.setAttribute('aria-label','Move '+test.title);
+    handle.ondragstart=event=>{
+      const placeholder=document.createElement('div');
+      placeholder.className='library-test-row quiz-drop-preview';placeholder.dataset.testId=test.id;
+      placeholder.textContent=test.title;placeholder.setAttribute('aria-hidden','true');
+      draggedTest={row:saved,placeholder};
+      event.dataTransfer.setData('text/plain',test.id);event.dataTransfer.effectAllowed='move';
+      const rect=saved.getBoundingClientRect();
+      event.dataTransfer.setDragImage(saved,Math.max(0,Math.min(rect.width,event.clientX-rect.left)),rect.height/2);
+      placeholder.style.height=rect.height+'px';
+      requestAnimationFrame(()=>{if(draggedTest?.row===saved){saved.after(placeholder);saved.classList.add('quiz-dragging');}});
+    };
+    handle.ondragend=finishQuizDrag;
+    handle.onkeydown=action(async event=>{
+      if(!['ArrowUp','ArrowDown'].includes(event.key))return;
+      event.preventDefault();
+      const folderId=test.folderId||'';
+      const ids=library.filter(item=>(item.folderId||'')===folderId).map(item=>item.id);
+      const index=ids.indexOf(test.id),next=index+(event.key==='ArrowUp'?-1:1);
+      if(next<0||next>=ids.length)return;
+      [ids[index],ids[next]]=[ids[next],ids[index]];
+      await api('/test-order','PUT',{folderId,ids});await refresh();
+      [...document.querySelectorAll('.library-test-row')].find(row=>row.dataset.testId===test.id)?.querySelector('.drag-handle')?.focus();
+    });
+    const actions = document.createElement('div'); actions.className = 'actions';
     actions.append(button('Edit', () => openBuilder(test)),button('Copy',()=>openEntry({title:'Create copy of a test',value:(test.title.slice(0,73)+' (copy)'),max:80},async title=>{const copy=await api('/tests/'+test.id+'/copy','POST',{title});await refresh();openBuilder(copy);})), button('Delete', async () => {
       if (!confirm(`Move “${test.title}” to Trash for 30 days? Existing sessions keep their copy.`)) return;
       await api(`/tests/${test.id}`, 'DELETE'); await refresh();
     }));
-    for(const [offset,label] of [[-1,'↑'],[1,'↓']]){const target=siblings[index+offset];const arrow=button(label,()=>moveLibraryTest(folderId,test.id,target.id));arrow.disabled=!target;arrow.setAttribute('aria-label',(offset<0?'Move up: ':'Move down: ')+test.title);actions.append(arrow);}
     actions.append(handle);saved.append(actions); (groups['library-tests'+(test.folderId||'')]||$('library-tests')).append(saved);
   }
   for (const s of sessionList) {
@@ -266,10 +315,10 @@ function renderDashboard() {
   $('test-start').hidden = current.phase !== 'waiting'; $('session-end').hidden = current.phase === 'ended';
   $('extend-time').hidden=current.phase!=='running'||!current.deadlineAt;
   if(current.deadlineAt && (!professorTimerSnapshot||professorTimerSnapshot.id!==current.id||professorTimerSnapshot.serverNow!==current.serverNow||professorTimerSnapshot.deadlineAt!==current.deadlineAt))professorTimerSnapshot={id:current.id,serverNow:current.serverNow||Date.now(),deadlineAt:current.deadlineAt,receivedAt:performance.now()};renderProfessorTimer();
-  $('live-export').hidden = current.mode !== 'test';$('session-rename').hidden=current.mode!=='test';
+  $('session-rename').hidden=current.mode!=='test';
   const scores = current.students.filter(s => s.result).map(s => s.result.percentage);
-  $('live-summary').textContent = `${current.students.length} joined · ${current.students.filter(s => s.status === 'green' && !s.result).length} active` +
-    (current.mode === 'test' ? ` · ${scores.length} submitted · ${current.students.filter(s => s.failed).length} FAIL${scores.length ? ` · Average ${Math.round(scores.reduce((a,b) => a+b,0)/scores.length)}%` : ''}` : '');
+  $('live-summary').textContent = `${current.students.length} joined · ${current.students.filter(s => s.status === 'green' && !s.result && !s.completed).length} active` +
+    (current.mode === 'test' ? ` · ${scores.length} submitted · ${current.students.filter(s => s.failed).length} FAIL${scores.length ? ` · Average ${Math.round(scores.reduce((a,b) => a+b,0)/scores.length)}%` : ''}` : ' · '+current.students.filter(s=>s.completed).length+' completed');
   renderTable($('live-students'), current);
 }
 function renderProfessorTimer(){
@@ -295,7 +344,7 @@ function renderTable(container, session) {
   for (const s of [...session.students].sort((a,b) => a.number.localeCompare(b.number, undefined, { numeric:true }))) {
     const tr = document.createElement('tr');
     for (const text of [s.number,s.name]) { const td=document.createElement('td'); td.textContent=text; tr.append(td); }
-    const state=document.createElement('td'); const pill=document.createElement('span'); pill.className=`pill ${s.status === 'red' ? 'red' : ''}`; pill.textContent=s.failed ? 'FAILED' : s.completed ? 'Completed' : s.result ? 'Test Submitted' : s.status === 'green' ? 'Active' : 'Inactive'; state.append(pill); tr.append(state);
+    const state=document.createElement('td'); const pill=document.createElement('span'); pill.className=`pill ${s.status === 'red' ? 'red' : ''}`; pill.textContent=s.failed ? 'FAILED' : s.completed ? 'Completed and closed' : s.result ? 'Test Submitted' : s.status === 'green' ? 'Active' : 'Inactive'; state.append(pill); tr.append(state);
     const progress=document.createElement('td');progress.textContent=s.progress?`${s.result?'Finished':s.progress.question?'Question '+s.progress.question+' of '+s.progress.total:'Not started'} · ${s.progress.answered}/${s.progress.total} answered`:'—';tr.append(progress);
     for (const text of [s.score === null ? 'Pending' : `${s.score} / ${s.total}${s.result ? ` · ${s.result.percentage}%` : ''}`, s.result ? `${s.result.originalScore} / ${s.total}` : '—']) { const td=document.createElement('td'); td.textContent=text; tr.append(td); }
     const review=document.createElement('td');
@@ -357,7 +406,7 @@ $('result-details-tab').onclick=action(async()=>{
   }
 });
 $('result-detail-export').onclick=action(()=>download(historySession,true));
-$('live-export').onclick=action(()=>download(current)); $('result-export').onclick=action(()=>download(historySession)); $('results-refresh').onclick=action(refresh);
+$('result-export').onclick=action(()=>download(historySession)); $('results-refresh').onclick=action(refresh);
 socket.on('connect',()=> { if (account) { if($('notice').textContent.startsWith('Live connection lost'))notice(''); watch().catch(e=>notice(e.message)); } });
 socket.on('disconnect',()=> { if (account) notice('Live connection lost. Sessions remain saved; reconnecting…'); });
 socket.on('professor:update',view=> { const listed=sessionList.find(s=>s.id===view.id);if(view.phase==='ended'||(listed&&(listed.title!==view.title||listed.phase!==view.phase)))refresh().catch(e=>notice(e.message));if (current?.id === view.id) { current={...current,...view}; renderDashboard(); } if (historySession?.id===view.id) { historySession={...historySession,...view}; renderResults(); } });
@@ -407,9 +456,14 @@ initAuth().catch(e=>$('auth-message').textContent=e.message);
 function renderFolderOptions(selected=$('tb-folder').value) {
  for(const id of ['tb-folder','new-folder-choice']){const value=id==='tb-folder'?selected:$(id).value;$(id).replaceChildren(...[{id:'',name:'Uncategorized Test'},...folders].map(f=>{const o=document.createElement('option');o.value=f.id;o.textContent=f.name;return o;}));$(id).value=value;}
 }
-function renderFolderMenu(){
- $('folder-list').replaceChildren();if(!folders.length)$('folder-list').textContent='No class folders yet.';
- for(const f of folders){const row=document.createElement('div');row.className='actions folder-edit-row';const name=document.createElement('strong');name.textContent=f.name;row.append(name,button('Rename',()=>openEntry({title:'Rename folder',value:f.name,max:80},async name=>{await api('/folders/'+f.id,'PATCH',{name});await refresh();})),button('Delete folder',async()=>{if(!confirm('Delete “'+f.name+'”? Its tests will move to Uncategorized Test.'))return;await api('/folders/'+f.id,'DELETE');await refresh();},'danger'));$('folder-list').append(row);}
+function folderActions(folder) {
+  const actions=document.createElement('span');actions.className='folder-inline-actions';
+  actions.append(button('Rename',()=>openEntry({title:'Rename folder',value:folder.name,max:80},async name=>{await api('/folders/'+folder.id,'PATCH',{name});await refresh();})),button('Delete folder',async()=>{
+    if(!confirm('Delete “'+folder.name+'”? Its tests will move to Uncategorized Test.'))return;
+    await api('/folders/'+folder.id,'DELETE');await refresh();
+  },'danger'));
+  actions.onclick=event=>event.preventDefault();
+  return actions;
 }
 let launchTest=null;
 function openLaunch(test){launchTest=test;$('launch-test-title').textContent=test.title;$('launch-duration').value='0';$('launch-show-scores').checked=true;$('launch-shuffle').checked=false;$('launch-corrections').checked=false;$('launch-error').textContent='';$('launch-dialog').showModal();}

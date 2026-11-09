@@ -94,9 +94,9 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
   api.delete('/folders/:id',wrap(async(req,res)=>{if(!await store.deleteFolder(req.user.id,req.params.id))return res.status(404).json({error:'Folder not found'});res.json({ok:true});}));
   api.post('/tests/:id/copy',wrap(async(req,res)=>{const test=await store.getTest(req.user.id,req.params.id);if(!test)return res.status(404).json({error:'Test not found'});const title=req.body.title===undefined?(test.title.slice(0,73)+' (copy)'):req.body.title;const copy=exam.validateTest({...test,title});if(!copy)return res.status(400).json({error:'Use a test title of 1–80 characters.'});res.json(await store.saveTest(req.user.id,{...copy,id:require('node:crypto').randomUUID(),folderId:test.folderId||null}));}));
   api.put('/test-order',wrap(async(req,res)=>{
-    const {folderId='',ids}=req.body;
-    if(typeof folderId!=='string'||!validIdList(ids,1000))return res.status(400).json({error:'Invalid quiz order.'});
-    if(!await store.orderTests(req.user.id,folderId,ids))return res.status(409).json({error:'The folder changed. Refresh and try again.'});
+    const {folderId='',ids,movedId}=req.body;
+    if(typeof folderId!=='string'||!validIdList(ids,1000)||(movedId!==undefined&&!ids.includes(movedId)))return res.status(400).json({error:'Invalid quiz order.'});
+    if(!await store.orderTests(req.user.id,folderId,ids,movedId))return res.status(409).json({error:'The folder changed. Refresh and try again.'});
     res.json({ok:true});
   }));
   function validIdList(ids,max) {
