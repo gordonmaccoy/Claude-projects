@@ -8,7 +8,7 @@ let accountGeneration = 0,creationVersion=0,professorTimerSnapshot=null;
 let lastWorkspaceTab = 'launch';
 let popupSessionId = null, openingDisplay = false, launching = false;
 function clearPrivateWorkspace() {
-  settings.reset();tour.reset();$('result-detail-rows').replaceChildren();lastWorkspaceTab='launch';accountGeneration++;creationVersion++;professorTimerSnapshot=null;if($('answer-ai-dialog').open)$('answer-ai-dialog').close();$('answer-ai-status').textContent='';closeEntry();launchTest=null;$('new-title').value='';for(const id of ['tb-folder','new-folder-choice'])$(id).replaceChildren();$('launch-test-title').textContent='';if($('launch-dialog').open)$('launch-dialog').close();$('creation-choice').hidden=true;
+  settings.reset();tour.reset();$('launch-show-names').checked=false;$('result-detail-rows').replaceChildren();lastWorkspaceTab='launch';accountGeneration++;creationVersion++;professorTimerSnapshot=null;if($('answer-ai-dialog').open)$('answer-ai-dialog').close();$('answer-ai-status').textContent='';closeEntry();launchTest=null;$('new-title').value='';for(const id of ['tb-folder','new-folder-choice'])$(id).replaceChildren();$('launch-test-title').textContent='';if($('launch-dialog').open)$('launch-dialog').close();$('creation-choice').hidden=true;
   trashVersion++;pendingTrashDelete=null;if($('trash-confirm').open)$('trash-confirm').close();$('trash-confirm-message').textContent='';$('trash-items').replaceChildren();
   current=null; historySession=null; library=[]; folders=[]; sessionList=[]; $('import-source').value='';$('import-file').value='';$('import-panel').hidden=true;$('draft-review').textContent=''; editingId=null; tbQuestions=[];
   for(const id of ['launch-tests','library-tests','active-sessions','result-sessions','live-students','result-students','tb-questions']) $(id).replaceChildren();
@@ -208,7 +208,7 @@ async function refresh() {
       if (!confirm(`Move “${test.title}” to Trash for 30 days? Existing sessions keep their copy.`)) return;
       await api(`/tests/${test.id}`, 'DELETE'); await refresh();
     }));
-    actions.append(handle);saved.append(actions); (groups['library-tests'+(test.folderId||'')]||$('library-tests')).append(saved);
+    actions.append(button('Download PDF',()=>downloadFile('/api/tests/'+encodeURIComponent(test.id)+'/pdf',test.title+'.pdf')),handle);saved.append(actions); (groups['library-tests'+(test.folderId||'')]||$('library-tests')).append(saved);
   }
   for (const s of sessionList) {
     if (s.mode === 'test') {
@@ -327,14 +327,16 @@ function renderProfessorTimer(){
  $('session-timer').textContent='Time remaining: '+Math.floor(seconds/60)+' min '+String(seconds%60).padStart(2,'0')+' sec · Ends '+new Date(professorTimerSnapshot.deadlineAt).toLocaleTimeString();
 }
 setInterval(renderProfessorTimer,500);
+$('launch-show-names').onchange=()=>{if(current)renderDashboard();};
 function renderTable(container, session) {
+  const masked=container.id==='live-students'&&!$('launch-show-names').checked;
   const table = document.createElement('table');
   if(session.mode === 'calculator') {
     table.innerHTML='<thead><tr><th>Student number</th><th>Name</th><th>Status</th><th>Review</th></tr></thead>';
     const body=document.createElement('tbody');
     for(const s of session.students) {
       const row=document.createElement('tr');
-      for(const value of [s.number,s.name,s.failed ? 'FAILED' : s.status === 'green' ? 'Active' : 'Inactive']) { const cell=document.createElement('td'); cell.textContent=value; row.append(cell); }
+      for(const value of [masked?'—':s.number,masked?'••••••':s.name,s.failed ? 'FAILED' : s.completed?'Completed and closed':s.status === 'green' ? 'Active' : 'Inactive']) { const cell=document.createElement('td'); cell.textContent=value; row.append(cell); }
       const review=document.createElement('td');if(s.failed && session.phase==='running')review.append(button('Unlock & continue',()=>unlockStudent(session,s)));row.append(review);body.append(row);
     }
     table.append(body); container.replaceChildren(table); return;
@@ -343,7 +345,7 @@ function renderTable(container, session) {
   const tbody = document.createElement('tbody');
   for (const s of [...session.students].sort((a,b) => a.number.localeCompare(b.number, undefined, { numeric:true }))) {
     const tr = document.createElement('tr');
-    for (const text of [s.number,s.name]) { const td=document.createElement('td'); td.textContent=text; tr.append(td); }
+    for (const text of [masked?'—':s.number,masked?'••••••':s.name]) { const td=document.createElement('td'); td.textContent=text; tr.append(td); }
     const state=document.createElement('td'); const pill=document.createElement('span'); pill.className=`pill ${s.status === 'red' ? 'red' : ''}`; pill.textContent=s.failed ? 'FAILED' : s.completed ? 'Completed and closed' : s.result ? 'Test Submitted' : s.status === 'green' ? 'Active' : 'Inactive'; state.append(pill); tr.append(state);
     const progress=document.createElement('td');progress.textContent=s.progress?`${s.result?'Finished':s.progress.question?'Question '+s.progress.question+' of '+s.progress.total:'Not started'} · ${s.progress.answered}/${s.progress.total} answered`:'—';tr.append(progress);
     for (const text of [s.score === null ? 'Pending' : `${s.score} / ${s.total}${s.result ? ` · ${s.result.percentage}%` : ''}`, s.result ? `${s.result.originalScore} / ${s.total}` : '—']) { const td=document.createElement('td'); td.textContent=text; tr.append(td); }
@@ -372,10 +374,17 @@ async function deleteResults(session) {
   await refresh(); if(!$('results').hidden)notice('Results moved to Trash.');
 }
 $('result-delete').onclick=action(()=>deleteResults(historySession));
-async function download(s,detail=false) {
-  const response=await fetch(`/api/sessions/${s.id}/export${detail?'?detail=1':''}`,{headers:{Authorization:`Bearer ${await token()}`}});
-  if (!response.ok) throw new Error('Could not download results. Please sign in and retry.');
-  const url=URL.createObjectURL(await response.blob()); const a=document.createElement('a'); a.href=url; a.download=decodeURIComponent(response.headers.get('content-disposition')?.split("filename*=UTF-8''")[1]||'Examio results.xlsx'); a.click(); setTimeout(()=>URL.revokeObjectURL(url),10000);
+async function downloadFile(path,fallback) {
+  const response=await fetch(path,{headers:{Authorization:'Bearer '+await token()}});
+  if(!response.ok)throw Error('Download failed. Please sign in and retry.');
+  const url=URL.createObjectURL(await response.blob());
+  const link=document.createElement('a');
+  link.href=url;
+  link.download=decodeURIComponent(response.headers.get('content-disposition')?.split("filename*=UTF-8''")[1]||encodeURIComponent(fallback));
+  link.click();setTimeout(()=>URL.revokeObjectURL(url),10000);
+}
+function download(s,detail=false) {
+  return downloadFile('/api/sessions/'+encodeURIComponent(s.id)+'/export'+(detail?'?detail=1':''),'Examio results.xlsx');
 }
 function showResultSummary(){
   notice('');
@@ -383,28 +392,58 @@ function showResultSummary(){
   $('result-summary-tab').setAttribute('aria-pressed','true');$('result-details-tab').setAttribute('aria-pressed','false');
 }
 $('result-summary-tab').onclick=showResultSummary;
+let detailsRequest=null,detailsSnapshot='',detailsPhase;
+function detailsVisible(){return historySession&&!$('results').hidden&&!$('result-details').hidden&&!document.hidden;}
+function renderAnswerGrid(data){
+  const root=$('result-detail-rows');
+  const table=document.createElement('table');table.className='answer-grid';
+  const header=table.createTHead().insertRow();
+  for(const [index,label] of ['Student number','Name','State',...data.questions].entries()){
+    const th=document.createElement('th');th.scope='col';
+    th.textContent=index<3?label:'Q'+(index-2);
+    if(index>=3){th.title=label;th.setAttribute('aria-label','Question '+(index-2)+': '+label);}
+    header.append(th);
+  }
+  const body=table.createTBody();
+  for(const student of data.students){
+    const row=body.insertRow();
+    for(const value of [student.number,student.name,student.submitted?'Submitted':data.phase==='ended'?'No submission':'Draft'])row.insertCell().textContent=value;
+    for(const answer of student.answers){
+      const cell=row.insertCell();cell.className='answer-'+answer.status;
+      const state=answer.status==='correct'?'Correct':answer.status==='incorrect'?'Incorrect':'Unanswered';
+      cell.textContent=(answer.status==='correct'?'✓ ':answer.status==='incorrect'?'✗ ':'')+(answer.letter||answer.answer||'—');
+      cell.title=state+' · '+answer.question+' · Answer: '+(answer.answer||'Unanswered');
+      cell.setAttribute('aria-label',cell.title);
+    }
+  }
+  root.replaceChildren();
+  if(data.students.length)root.append(table);else root.textContent='No students joined.';
+}
+async function refreshAnswerGrid(){
+  if(!detailsVisible())return;
+  const id=historySession.id,version=resultViewVersion;
+  if(detailsRequest?.version===version)return;
+  const request={version};detailsRequest=request;
+  try{
+    const data=await api('/sessions/'+encodeURIComponent(id)+'/details?live=1');
+    if(version!==resultViewVersion||!detailsVisible())return;
+    detailsPhase=data.phase;
+    const snapshot=JSON.stringify(data);
+    if(snapshot!==detailsSnapshot){detailsSnapshot=snapshot;renderAnswerGrid(data);}
+  } catch(error){
+    if(version===resultViewVersion&&detailsVisible())$('result-detail-rows').textContent=error.message;
+    if(version===resultViewVersion)detailsSnapshot='';
+  } finally {if(detailsRequest===request)detailsRequest=null;}
+}
 $('result-details-tab').onclick=action(async()=>{
   if(!historySession)return;
-  const id=historySession.id,version=resultViewVersion;
   $('result-details').hidden=false;$('result-students').hidden=true;
   $('result-summary-tab').setAttribute('aria-pressed','false');$('result-details-tab').setAttribute('aria-pressed','true');
-  const root=$('result-detail-rows');root.textContent='Loading detailed results…';
-  const rows=await api('/sessions/'+id+'/details');
-  if(version!==resultViewVersion||$('result-details').hidden)return;
-  root.replaceChildren();
-  if(!rows.length)root.textContent='No students joined.';
-  for(const student of rows){
-    const section=document.createElement('section');const name=document.createElement('h3');
-    name.textContent=student.name+' · '+student.number;section.append(name);
-    const list=document.createElement('ul');
-    for(const q of student.incorrect){
-      const entry=document.createElement('li');entry.textContent=q.number+'. '+q.question+' | Answer: '+(q.answer||'Unanswered')+' | Correct: '+q.correct;list.append(entry);
-    }
-    if(list.childElementCount)section.append(list);
-    else {const empty=document.createElement('p');empty.textContent=student.submitted?'No incorrect answers.':'No submission.';section.append(empty);}
-    root.append(section);
-  }
+  detailsSnapshot='';detailsPhase=null;
+  $('result-detail-rows').textContent='Loading detailed results…';
+  await refreshAnswerGrid();
 });
+setInterval(()=>{if(detailsPhase!=='ended')void refreshAnswerGrid();},2000);
 $('result-detail-export').onclick=action(()=>download(historySession,true));
 $('result-export').onclick=action(()=>download(historySession)); $('results-refresh').onclick=action(refresh);
 socket.on('connect',()=> { if (account) { if($('notice').textContent.startsWith('Live connection lost'))notice(''); watch().catch(e=>notice(e.message)); } });

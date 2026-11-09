@@ -474,3 +474,8 @@ body:has(#calculator-section:not([hidden])) .student-brandbar { display: none; }
 .question-image { display: block; max-width: 100%; max-height: 420px; object-fit: contain; margin: .5rem 0; }
 #calculator-complete { margin-top: 16px; }
 #student-corrections article { border-top: 1px solid var(--border); padding: 12px 0; text-align: left; }
+
+.correction-incorrect { color: #9e1e2c; }
+.correction-correct { color: #146532; }
+:root[data-theme="dark"] .correction-incorrect { color: #ffabab; }
+:root[data-theme="dark"] .correction-correct { color: #a2ebae; }

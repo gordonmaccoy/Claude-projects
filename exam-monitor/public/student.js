@@ -110,8 +110,8 @@ function renderCorrections(rows) {
     const entry=document.createElement('article');
     const prompt=document.createElement('p');prompt.textContent=row.number+'. '+row.question;entry.append(prompt);
     appendQuestionImage(entry,row.image);
-    const answer=document.createElement('p');answer.textContent='Your answer: '+(row.answer||'Unanswered');entry.append(answer);appendQuestionImage(entry,row.answerImage);
-    const correct=document.createElement('p');correct.textContent='Correct answer: '+row.correct;entry.append(correct);appendQuestionImage(entry,row.correctImage);
+    const answer=document.createElement('p');answer.className='correction-incorrect';answer.textContent='Your answer: '+(row.answer||'Unanswered');entry.append(answer);appendQuestionImage(entry,row.answerImage);
+    const correct=document.createElement('p');correct.className='correction-correct';correct.textContent='Correct answer: '+row.correct;entry.append(correct);appendQuestionImage(entry,row.correctImage);
     container.append(entry);
   }
 }

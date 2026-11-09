@@ -155,7 +155,20 @@ function incorrectAnswers(s,st) {
   });
 }
 function detailedResults(s) {
-  return s.students.map(st=>({number:st.number,name:st.name,submitted:Boolean(st.submission),incorrect:incorrectAnswers(s,st).map(({image,answerImage,correctImage,...row})=>row)}));
+  return s.students.map(st=>{
+    const saved=st.submission?.answers||(s.phase==='waiting'?{}:st.draft)||{};
+    const answers=(s.test?.questions||[]).map((q,index)=>{
+      const value=saved[q.id];
+      const choice=q.options?.find(option=>option.id===value);
+      const key=q.options?.find(option=>option.id===q.correctOptionId);
+      const order=st.optionOrder?.[q.id]||q.options?.map(option=>option.id);
+      const answer=q.type==='blank'?(value?.trim()||''):choice?.text||'';
+      return {number:index+1,question:q.text,answer,letter:choice?String.fromCharCode(65+order.indexOf(choice.id)):null,
+        correct:q.type==='blank'?q.acceptedAnswers.join(' / '):key?.text||'',
+        status:answer?(correctAnswer(q,value)?'correct':'incorrect'):(st.submission?'incorrect':'pending')};
+    });
+    return {number:st.number,name:st.name,submitted:Boolean(st.submission),answers,incorrect:st.submission?answers.filter(row=>row.status==='incorrect'):[]};
+  });
 }
 function completeCalculator(s,id,now=Date.now()) {
   const st=student(s,id);

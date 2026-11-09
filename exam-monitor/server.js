@@ -102,6 +102,14 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
   function validIdList(ids,max) {
     return Array.isArray(ids)&&ids.length>0&&ids.length<=max&&new Set(ids).size===ids.length&&ids.every(id=>typeof id==='string'&&id.length>0&&id.length<=100);
   }
+  api.get('/tests/:id/pdf',wrap(async(req,res)=>{
+    const test=await store.getTest(req.user.id,req.params.id);
+    if(!test)return res.status(404).json({error:'Quiz not found.'});
+    const pdf=await require('./quiz-pdf').quizPdf(test);
+    res.set('Cache-Control','private, no-store');
+    res.set('Content-Disposition', "attachment; filename=quiz.pdf; filename*=UTF-8''"+encodeURIComponent(test.title+'.pdf').replace(/['()*]/g,char=>'%'+char.charCodeAt(0).toString(16)));
+    res.type('application/pdf').send(pdf);
+  }));
   api.get('/tests', wrap(async (req, res) => res.json(await store.listTests(req.user.id))));
   api.post('/tests', wrap(async (req, res) => {
     const test = exam.validateTest(req.body);
@@ -175,7 +183,7 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
     }
     res.json(await decorate(session, req));
   }));
-  api.get('/sessions/:id/details',wrap(async(req,res)=>{const session=await owned(req.params.id,req.user);if(session.mode!=='test')return res.status(400).json({error:'Only tests have detailed results.'});res.json(exam.detailedResults(session));}));
+  api.get('/sessions/:id/details',wrap(async(req,res)=>{const session=await owned(req.params.id,req.user);if(session.mode!=='test')return res.status(400).json({error:'Only tests have detailed results.'});res.set('Cache-Control','private, no-store');res.json(req.query.live==='1'?{phase:session.phase,questions:session.test.questions.map(q=>q.text),students:exam.detailedResults(session)}:exam.detailedResults(session));}));
   api.get('/sessions/:id/export', wrap(async (req, res) => {
     const original = await owned(req.params.id, req.user);
     if (original.mode !== 'test') return res.status(400).json({ error: 'Calculator sessions have no test scores to export.' });
