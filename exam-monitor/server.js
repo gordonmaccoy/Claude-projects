@@ -61,7 +61,7 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
   }
   async function broadcast(s) {
     changed(`professor:${s.id}`, 'professor:update', exam.privateView(s),true);
-    changed(`display:${s.id}`, 'display:update', exam.publicView(s));
+    changed(`display:${s.id}`, 'display:update', exam.publicView(s),true);
     for (const st of s.students) changed(`student:${s.id}:${st.id}`, 'student:update', exam.studentView(s, st),true);
   }
   api.use(settingsController.router);
@@ -93,6 +93,15 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
   api.patch('/folders/:id',wrap(async(req,res)=>{const name=typeof req.body.name==='string'?req.body.name.trim():'';if(!name||name.length>80||/[\x00-\x1f]/.test(name))return res.status(400).json({error:'Use a folder name of 1–80 characters.'});const folder=await store.renameFolder(req.user.id,req.params.id,name);if(!folder)return res.status(404).json({error:'Folder not found'});res.json(folder);}));
   api.delete('/folders/:id',wrap(async(req,res)=>{if(!await store.deleteFolder(req.user.id,req.params.id))return res.status(404).json({error:'Folder not found'});res.json({ok:true});}));
   api.post('/tests/:id/copy',wrap(async(req,res)=>{const test=await store.getTest(req.user.id,req.params.id);if(!test)return res.status(404).json({error:'Test not found'});const title=req.body.title===undefined?(test.title.slice(0,73)+' (copy)'):req.body.title;const copy=exam.validateTest({...test,title});if(!copy)return res.status(400).json({error:'Use a test title of 1–80 characters.'});res.json(await store.saveTest(req.user.id,{...copy,id:require('node:crypto').randomUUID(),folderId:test.folderId||null}));}));
+  api.put('/test-order',wrap(async(req,res)=>{
+    const {folderId='',ids}=req.body;
+    if(typeof folderId!=='string'||!validIdList(ids,1000))return res.status(400).json({error:'Invalid quiz order.'});
+    if(!await store.orderTests(req.user.id,folderId,ids))return res.status(409).json({error:'The folder changed. Refresh and try again.'});
+    res.json({ok:true});
+  }));
+  function validIdList(ids,max) {
+    return Array.isArray(ids)&&ids.length>0&&ids.length<=max&&new Set(ids).size===ids.length&&ids.every(id=>typeof id==='string'&&id.length>0&&id.length<=100);
+  }
   api.get('/tests', wrap(async (req, res) => res.json(await store.listTests(req.user.id))));
   api.post('/tests', wrap(async (req, res) => {
     const test = exam.validateTest(req.body);
@@ -107,6 +116,10 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
   api.delete('/tests/:id', wrap(async (req, res) => {
     if (!await store.deleteTest(req.user.id, req.params.id)) return res.status(404).json({ error: 'Test not found' });
     res.json({ ok: true });
+  }));
+  api.post('/trash/results/delete',wrap(async(req,res)=>{
+    if(!validIdList(req.body.ids,1000))return res.status(400).json({error:'Select results to delete.'});
+    res.json({deleted:await store.deleteTrashResults(req.user.id,req.body.ids)});
   }));
   api.get('/trash',wrap(async(req,res)=>res.json(await store.listTrash(req.user.id))));
   const updateTrash=restore=>wrap(async(req,res)=>{
@@ -162,13 +175,14 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
     }
     res.json(await decorate(session, req));
   }));
+  api.get('/sessions/:id/details',wrap(async(req,res)=>{const session=await owned(req.params.id,req.user);if(session.mode!=='test')return res.status(400).json({error:'Only tests have detailed results.'});res.json(exam.detailedResults(session));}));
   api.get('/sessions/:id/export', wrap(async (req, res) => {
     const original = await owned(req.params.id, req.user);
     if (original.mode !== 'test') return res.status(400).json({ error: 'Calculator sessions have no test scores to export.' });
     const { session } = await store.mutate(req.params.id, s => exam.sweep(s));
     res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.set('Content-Disposition', `attachment; filename="onscreen-${session.id}.xlsx"; filename*=UTF-8''${encodeURIComponent(exportFilename(session)).replace(/['()*]/g,c=>"%"+c.charCodeAt(0).toString(16).toUpperCase())}`);
-    res.send(workbook(session));
+    res.set('Content-Disposition', `attachment; filename="onscreen-${session.id}.xlsx"; filename*=UTF-8''${encodeURIComponent(exportFilename(session,req.query.detail==='1')).replace(/['()*]/g,c=>"%"+c.charCodeAt(0).toString(16).toUpperCase())}`);
+    res.send(workbook(session,req.query.detail==='1'));
   }));
   app.use('/api', api);
   app.use(express.static(path.join(__dirname, 'public'), { etag: false }));
@@ -212,7 +226,7 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
       if (!s || typeof token !== 'string' || s.displayToken !== token) throw new Error('Invalid display link');
       socket.join(`display:${sessionId}`);
       const joinUrl = `${config.origin || `http://${socket.handshake.headers.host}`}/student.html?session=${s.id}`;
-      return { view: exam.publicView(s), joinUrl, qrDataUrl: await QRCode.toDataURL(joinUrl, { width: 600, margin: 2 }) };
+      return { view: {...exam.publicView(s),serverNow:Date.now()}, joinUrl, qrDataUrl: await QRCode.toDataURL(joinUrl, { width: 600, margin: 2 }) };
     });
     on('student:join', async input => {
       const { session, result } = await store.mutate(input.sessionId, s => {
@@ -256,6 +270,7 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
       if(questionId && st.draft[questionId]?.trim())exam.progress(s,id,questionId);
       else if(st.progressQuestionId && !st.draft[st.progressQuestionId]?.trim())st.progressQuestionId=null;
     }));
+    on('student:complete-calculator',()=>studentMutation((s,id,now)=>exam.completeCalculator(s,id,now)));
     on('student:submit', ({ answers }) => studentMutation((s, id, now) => exam.submit(s, id, answers,now)));
     // Disconnection never ends an exam or constitutes confirmed hidden time.
     // Last heartbeat expires to red. Resume tokens reconnect the original enrollment.

@@ -118,3 +118,54 @@ test('durable deadline starts with test, extension notifies, expiry submits save
 test('timer expiry preserves FAIL, and selected-answer progress ignores blank or focus-only updates',()=>{const s=exam.newSession('p',fixture().test,1000,{durationMinutes:1});const j=exam.join(s,{name:'Kim',number:'1'},1200);exam.start(s,2000);assert.throws(()=>exam.progress(s,j.studentId,'q'));s.students[0].draft={q:'a'};exam.progress(s,j.studentId,'q');assert.equal(exam.privateView(s).students[0].progress.question,1);exam.visibility(s,j.studentId,false,3000);exam.sweep(s,62000);assert.equal(exam.privateView(s).students[0].result.score,0);assert.equal(exam.privateView(s).students[0].result.originalScore,1);assert.equal(exam.publicView(s).students[0].status,'failed');assert.equal(exam.studentView(s,s.students[0]).result.originalScore,undefined);});
 
 test('shuffled answer order persists per student without exposing correct keys or changing IDs',()=>{const s=exam.newSession('p',fixture().test,1000,{shuffleAnswers:true});const j=exam.join(s,{name:'Kim',number:'1'},1200);exam.start(s,2000);const first=exam.studentView(s,s.students[0]).test.questions[0];assert.ok(s.students[0].optionOrder.q);assert.deepEqual(first.options.map(o=>o.id).sort(),['a','b']);assert.deepEqual(exam.studentView(JSON.parse(JSON.stringify(s)),s.students[0]).test.questions[0].options,first.options);assert.equal(first.correctOptionId,undefined);assert.equal(exam.submit(s,j.studentId,{q:'a'},2100).score,1);});
+
+test('corrections are opt-in and never reveal answers before submission', () => {
+  for (const enabled of [false,true]) {
+    const s=fixture();
+    s.showCorrections=enabled;
+    s.durationMinutes=2;
+    const {studentId}=exam.join(s,{name:'Kim',number:'001'},1000);
+    const student=exam.student(s,studentId);
+    exam.start(s,2000);
+    assert.equal(exam.publicView(s,2000).deadlineAt,122000);
+    assert.equal(exam.studentView(s,student).corrections,undefined);
+    exam.submit(s,studentId,{q:'b'},3000);
+    const details=exam.detailedResults(s)[0];
+    assert.equal(details.incorrect[0].answer,'5');
+    assert.equal(details.incorrect[0].correct,'4');
+    assert.equal(exam.studentView(s,student).corrections?.[0]?.correct,enabled?'4':undefined);
+    const zip=require('fflate').unzipSync(require('../export').workbook(s,true));
+    const sheet=Buffer.from(zip['xl/worksheets/sheet1.xml']).toString();
+    assert.match(sheet,/student answer/);
+    assert.match(sheet,/>001<\/t>/);
+    assert.match(sheet,/r="F2"[^>]*><is><t xml:space="preserve">4/);
+  }
+});
+
+test('calculator completion is terminal without a grade or visibility failure', () => {
+  const s=exam.newSession('owner',null,1000);
+  const {studentId}=exam.join(s,{name:'Kim',number:'001'},1000);
+  const student=exam.student(s,studentId);
+  exam.completeCalculator(s,studentId,2000);
+  exam.visibility(s,studentId,false,3000);
+  exam.sweep(s,10000);
+  assert.equal(exam.isFailed(student),false);
+  assert.equal(exam.studentView(s,student).terminal,true);
+  assert.equal(exam.studentView(s,student).result,null);
+  assert.equal(exam.publicView(s).students[0].status,'completed');
+});
+
+test('validated question and choice images reach only the authorized test view',()=>{
+  const input=fixture().test;
+  const image='data:image/png;base64,iVBORw0KGgo=';
+  input.questions[0].image=image;
+  input.questions[0].options[0].image=image;
+  const test=exam.validateTest(input);
+  const s=exam.newSession('owner',test,1000);
+  const {studentId}=exam.join(s,{name:'Kim',number:'001'},1000);
+  exam.start(s,2000);
+  assert.equal(exam.studentView(s,exam.student(s,studentId)).test.questions[0].options[0].image,image);
+  assert.equal(JSON.stringify(exam.publicView(s)).includes(image),false);
+  input.questions[0].image='data:image/svg+xml;base64,AAAA';
+  assert.equal(exam.validateTest(input),null);
+});

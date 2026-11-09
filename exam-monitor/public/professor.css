@@ -21,3 +21,11 @@ select,textarea{font:inherit;background:#fff;color:#223c31;border:1px solid #c5c
 #result-close { font-size: 22px; line-height: 1; padding: 8px 12px; }
 
 .tabs { flex-wrap: wrap; }
+
+.library-rows { display: grid; gap: 6px; }
+.library-test-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 12px; background: white; border: 1px solid var(--examio-line); border-radius: 8px; }
+.library-test-row strong { flex: 1; min-width: 10ch; overflow-wrap: anywhere; }
+.library-test-row .actions { gap: 5px; }
+.library-test-row .actions button { padding: 6px 9px; }
+.tb-image { display: block; max-width: 220px; max-height: 140px; object-fit: contain; margin: 8px 0; }
+#result-details { margin-top: 12px; }

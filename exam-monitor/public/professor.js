@@ -8,7 +8,7 @@ let accountGeneration = 0,creationVersion=0,professorTimerSnapshot=null;
 let lastWorkspaceTab = 'launch';
 let popupSessionId = null, openingDisplay = false, launching = false;
 function clearPrivateWorkspace() {
-  settings.reset();tour.reset();lastWorkspaceTab='launch';accountGeneration++;creationVersion++;professorTimerSnapshot=null;if($('answer-ai-dialog').open)$('answer-ai-dialog').close();$('answer-ai-status').textContent='';closeEntry();launchTest=null;$('new-title').value='';$('folder-list').replaceChildren();$('folder-menu').open=false;for(const id of ['tb-folder','new-folder-choice'])$(id).replaceChildren();$('launch-test-title').textContent='';if($('launch-dialog').open)$('launch-dialog').close();$('creation-choice').hidden=true;
+  settings.reset();tour.reset();$('result-detail-rows').replaceChildren();lastWorkspaceTab='launch';accountGeneration++;creationVersion++;professorTimerSnapshot=null;if($('answer-ai-dialog').open)$('answer-ai-dialog').close();$('answer-ai-status').textContent='';closeEntry();launchTest=null;$('new-title').value='';$('folder-list').replaceChildren();$('folder-menu').open=false;for(const id of ['tb-folder','new-folder-choice'])$(id).replaceChildren();$('launch-test-title').textContent='';if($('launch-dialog').open)$('launch-dialog').close();$('creation-choice').hidden=true;
   trashVersion++;pendingTrashDelete=null;if($('trash-confirm').open)$('trash-confirm').close();$('trash-confirm-message').textContent='';$('trash-items').replaceChildren();
   current=null; historySession=null; library=[]; folders=[]; sessionList=[]; $('import-source').value='';$('import-file').value='';$('import-panel').hidden=true;$('draft-review').textContent=''; editingId=null; tbQuestions=[];
   for(const id of ['launch-tests','library-tests','active-sessions','result-sessions','live-students','result-students','tb-questions']) $(id).replaceChildren();
@@ -18,7 +18,8 @@ function clearPrivateWorkspace() {
   $('tb-title').value=''; $('password').value='';
   socket.disconnect();
 }
-let noticeTimer;
+let noticeTimer, workspaceTab='launch', tabVersion=0;
+document.addEventListener('visibilitychange',()=>{if(document.hidden){tabVersion++;notice('');}});
 const notice = message => {
   clearTimeout(noticeTimer);
   $('notice').textContent = message || '';
@@ -38,9 +39,9 @@ const settings=window.createOnScreenSettings({api,notify:notice,onClose:()=>tab(
   await auth.auth.signOut({scope:'local'});clearPrivateWorkspace();account=null;$('workspace').hidden=true;$('login').hidden=false;$('signout').hidden=true;
   $('auth-message').textContent=result.state==='deleted'?'Your account and Examio data have been deleted.':'Account deletion has started. You are signed out while it completes.';
 }});
-function action(fn) { return async event => { try { notice(''); await fn(event); } catch (e) { notice(e.message); } }; }
+function action(fn) { return async event => { const version=tabVersion; try { notice(''); await fn(event); } catch (e) { if(version===tabVersion)notice(e.message); } }; }
 function tab(name) {
-  notice('');
+  if(name!==workspaceTab){workspaceTab=name;tabVersion++;notice('');}
   if(name!=='settings')lastWorkspaceTab=name;
   document.querySelectorAll('.tab').forEach(el => el.hidden = el.id !== name);
   document.querySelectorAll('[data-tab]').forEach(el => el.classList.toggle('selected', el.dataset.tab === name));
@@ -53,6 +54,7 @@ async function refreshTrash() {
   const items=await api('/trash');
   if(version!==trashVersion)return;
   const container=$('trash-items');
+  $('trash-select-all').checked=false;
   container.replaceChildren();
   if(!items.length) container.append(card('Trash is empty','Deleted quizzes and results will appear here.'));
   for(const item of items) {
@@ -73,21 +75,55 @@ async function refreshTrash() {
       $('trash-confirm-message').textContent='“'+(item.title||kind)+'” cannot be recovered after this.';
       dialog.showModal();
     },'danger'));
+    if(item.kind==='results'){const label=document.createElement('label');const checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.className='trash-result-select';checkbox.value=item.id;checkbox.onchange=updateTrashSelection;label.append(checkbox,' Select '+(item.title||kind));entry.append(label);}
     entry.append(actions);
     container.append(entry);
   }
+  updateTrashSelection();
 }
+const selectedTrash=()=>[...document.querySelectorAll('.trash-result-select:checked')].map(input=>input.value);
+function updateTrashSelection(){
+  const total=document.querySelectorAll('.trash-result-select').length;
+  const selected=selectedTrash().length;
+  $('trash-select-all').disabled=!total;
+  $('trash-select-all').checked=total>0&&selected===total;
+  $('trash-select-all').indeterminate=selected>0&&selected<total;
+  $('trash-delete-selected').disabled=!selected;
+}
+$('trash-select-all').onchange=event=>{
+  document.querySelectorAll('.trash-result-select').forEach(input=>input.checked=event.target.checked);
+  updateTrashSelection();
+};
+$('trash-delete-selected').onclick=()=>{
+  const ids=selectedTrash();
+  if(!ids.length)return;
+  pendingTrashDelete=ids;
+  $('trash-confirm').returnValue='';
+  $('trash-confirm-message').textContent='Permanently delete '+ids.length+' selected results? This cannot be undone.';
+  $('trash-confirm').showModal();
+};
 $('trash-refresh').onclick=action(refreshTrash);
 $('trash-confirm').onclose=action(async()=>{
   const route=pendingTrashDelete;
   pendingTrashDelete=null;
   if(!route||$('trash-confirm').returnValue!=='delete')return;
-  await api(route,'DELETE');
+  const version=tabVersion;
+  const deleted=Array.isArray(route)?(await api('/trash/results/delete','POST',{ids:route})).deleted:(await api(route,'DELETE'),1);
   await refreshTrash();
-  if(!$('trash').hidden)notice('Permanently deleted.');
+  if(version===tabVersion&&!$('trash').hidden)notice(deleted?'Permanently deleted.':'The selected results were already removed.');
 });
+let draggedTest=null;
+async function moveLibraryTest(folderId,fromId,toId) {
+  const ids=library.filter(test=>(test.folderId||'')===folderId).map(test=>test.id);
+  const from=ids.indexOf(fromId),to=ids.indexOf(toId);
+  if(from<0||to<0||from===to)return;
+  ids.splice(to,0,ids.splice(from,1)[0]);
+  await api('/test-order','PUT',{folderId,ids});
+  await refresh();
+}
 async function refresh() {
   [library, sessionList, folders] = await Promise.all([api('/tests'), api('/sessions'),api('/folders')]);
+  const expanded=new Set([...document.querySelectorAll('#launch-tests details[open],#library-tests details[open]')].map(folder=>folder.dataset.folderKey));
   renderFolderOptions();renderFolderMenu();
   for (const id of ['launch-tests', 'library-tests', 'active-sessions', 'result-sessions']) $(id).replaceChildren();
   if (!library.length) {
@@ -98,23 +134,37 @@ async function refresh() {
   for(const root of ['launch-tests','library-tests']) for(const folder of [...folders,{id:'',name:'Uncategorized Test'}]) {
     const count=library.filter(t=>(t.folderId||'')===folder.id).length;
     if(!count && !folders.some(f=>f.id===folder.id))continue;
-    const detail=document.createElement('details');detail.className='folder';detail.open=true;
+    const detail=document.createElement('details');detail.className='folder';detail.dataset.folderKey=root+':'+folder.id;detail.open=expanded.has(detail.dataset.folderKey);
     const summary=document.createElement('summary');summary.textContent=`${folder.name} (${count})`;detail.append(summary);
-    const list=document.createElement('div');list.className='cards';detail.append(list);$(root).append(detail);groups[root+folder.id]=list;
+    const list=document.createElement('div');list.className=root==='library-tests'?'library-rows':'cards';detail.append(list);$(root).append(detail);groups[root+folder.id]=list;
   }
   for (const test of library) {
     const launch = card(test.title, `${test.questions.length} questions · Saved test`);
     launch.append(button('Launch test ↗', () => openLaunch(test), 'primary')); (groups['launch-tests'+(test.folderId||'')]||$('launch-tests')).append(launch);
-    const saved = card(test.title, `${test.questions.length} questions`); const actions = document.createElement('div'); actions.className = 'actions';
-    actions.append(button('Edit', () => openBuilder(test)),button('Create copy',()=>openEntry({title:'Create copy of a test',value:(test.title.slice(0,73)+' (copy)'),max:80},async title=>{const copy=await api('/tests/'+test.id+'/copy','POST',{title});await refresh();openBuilder(copy);})), button('Delete', async () => {
+    const saved=document.createElement('article');saved.className='library-test-row';
+    const title=document.createElement('strong');title.textContent=test.title;saved.append(title);
+    const folderId=test.folderId||'';
+    const siblings=library.filter(item=>(item.folderId||'')===folderId);
+    const index=siblings.indexOf(test);
+    const handle=document.createElement('span');handle.textContent='↕';handle.title='Drag to reorder';handle.className='drag-handle';handle.draggable=true;
+    handle.ondragstart=event=>{draggedTest={id:test.id,folderId};event.dataTransfer.setData('text/plain',test.id);event.dataTransfer.effectAllowed='move';};
+    handle.ondragend=()=>draggedTest=null;
+    saved.ondragover=event=>{if(draggedTest?.folderId===folderId)event.preventDefault();};
+    saved.ondrop=action(async event=>{
+      if(draggedTest?.folderId!==folderId)return;
+      event.preventDefault();const from=draggedTest.id;draggedTest=null;await moveLibraryTest(folderId,from,test.id);
+    }); const actions = document.createElement('div'); actions.className = 'actions';
+    actions.append(button('Edit', () => openBuilder(test)),button('Copy',()=>openEntry({title:'Create copy of a test',value:(test.title.slice(0,73)+' (copy)'),max:80},async title=>{const copy=await api('/tests/'+test.id+'/copy','POST',{title});await refresh();openBuilder(copy);})), button('Delete', async () => {
       if (!confirm(`Move “${test.title}” to Trash for 30 days? Existing sessions keep their copy.`)) return;
       await api(`/tests/${test.id}`, 'DELETE'); await refresh();
-    })); saved.append(actions); (groups['library-tests'+(test.folderId||'')]||$('library-tests')).append(saved);
+    }));
+    for(const [offset,label] of [[-1,'↑'],[1,'↓']]){const target=siblings[index+offset];const arrow=button(label,()=>moveLibraryTest(folderId,test.id,target.id));arrow.disabled=!target;arrow.setAttribute('aria-label',(offset<0?'Move up: ':'Move down: ')+test.title);actions.append(arrow);}
+    actions.append(handle);saved.append(actions); (groups['library-tests'+(test.folderId||'')]||$('library-tests')).append(saved);
   }
   for (const s of sessionList) {
     if (s.mode === 'test') {
       const c = card(s.title, `${new Date(s.createdAt).toLocaleString()} · ${s.phase} · ${s.students.length} joined`);
-      c.append(button('View results', async () => { const version=++resultViewVersion; const session=await api(`/sessions/${s.id}`); if(version!==resultViewVersion)return; historySession=session; renderResults(); }));
+      c.append(button('View results', async () => { const version=++resultViewVersion; const session=await api(`/sessions/${s.id}`); if(version!==resultViewVersion)return; historySession=session; showResultSummary();renderResults(); }));
       if(s.phase === 'ended') c.append(button('Rename results',()=>renameResults(s)),button('Delete results', () => deleteResults(s), 'danger'));
       $('result-sessions').append(c);
     }
@@ -245,7 +295,7 @@ function renderTable(container, session) {
   for (const s of [...session.students].sort((a,b) => a.number.localeCompare(b.number, undefined, { numeric:true }))) {
     const tr = document.createElement('tr');
     for (const text of [s.number,s.name]) { const td=document.createElement('td'); td.textContent=text; tr.append(td); }
-    const state=document.createElement('td'); const pill=document.createElement('span'); pill.className=`pill ${s.status === 'red' ? 'red' : ''}`; pill.textContent=s.failed ? 'FAILED' : s.result ? 'Test Submitted' : s.status === 'green' ? 'Active' : 'Inactive'; state.append(pill); tr.append(state);
+    const state=document.createElement('td'); const pill=document.createElement('span'); pill.className=`pill ${s.status === 'red' ? 'red' : ''}`; pill.textContent=s.failed ? 'FAILED' : s.completed ? 'Completed' : s.result ? 'Test Submitted' : s.status === 'green' ? 'Active' : 'Inactive'; state.append(pill); tr.append(state);
     const progress=document.createElement('td');progress.textContent=s.progress?`${s.result?'Finished':s.progress.question?'Question '+s.progress.question+' of '+s.progress.total:'Not started'} · ${s.progress.answered}/${s.progress.total} answered`:'—';tr.append(progress);
     for (const text of [s.score === null ? 'Pending' : `${s.score} / ${s.total}${s.result ? ` · ${s.result.percentage}%` : ''}`, s.result ? `${s.result.originalScore} / ${s.total}` : '—']) { const td=document.createElement('td'); td.textContent=text; tr.append(td); }
     const review=document.createElement('td');
@@ -257,6 +307,7 @@ function renderTable(container, session) {
   table.append(tbody); container.replaceChildren(table);
 }
 function closeResults() {
+  $('result-details').hidden=true;$('result-detail-rows').replaceChildren();
   resultViewVersion++;
   historySession=null;
   $('result-detail').hidden=true;
@@ -269,14 +320,43 @@ async function deleteResults(session) {
   await api(`/sessions/${session.id}`, 'DELETE');
   if(historySession?.id === session.id) closeResults();
   if(current?.id === session.id) { current=null; $('dashboard').hidden=true; $('calculator-card').hidden=false; }
-  await refresh(); notice('Results moved to Trash.');
+  await refresh(); if(!$('results').hidden)notice('Results moved to Trash.');
 }
 $('result-delete').onclick=action(()=>deleteResults(historySession));
-async function download(s) {
-  const response=await fetch(`/api/sessions/${s.id}/export`,{headers:{Authorization:`Bearer ${await token()}`}});
+async function download(s,detail=false) {
+  const response=await fetch(`/api/sessions/${s.id}/export${detail?'?detail=1':''}`,{headers:{Authorization:`Bearer ${await token()}`}});
   if (!response.ok) throw new Error('Could not download results. Please sign in and retry.');
   const url=URL.createObjectURL(await response.blob()); const a=document.createElement('a'); a.href=url; a.download=decodeURIComponent(response.headers.get('content-disposition')?.split("filename*=UTF-8''")[1]||'Examio results.xlsx'); a.click(); setTimeout(()=>URL.revokeObjectURL(url),10000);
 }
+function showResultSummary(){
+  notice('');
+  $('result-details').hidden=true;$('result-students').hidden=false;
+  $('result-summary-tab').setAttribute('aria-pressed','true');$('result-details-tab').setAttribute('aria-pressed','false');
+}
+$('result-summary-tab').onclick=showResultSummary;
+$('result-details-tab').onclick=action(async()=>{
+  if(!historySession)return;
+  const id=historySession.id,version=resultViewVersion;
+  $('result-details').hidden=false;$('result-students').hidden=true;
+  $('result-summary-tab').setAttribute('aria-pressed','false');$('result-details-tab').setAttribute('aria-pressed','true');
+  const root=$('result-detail-rows');root.textContent='Loading detailed results…';
+  const rows=await api('/sessions/'+id+'/details');
+  if(version!==resultViewVersion||$('result-details').hidden)return;
+  root.replaceChildren();
+  if(!rows.length)root.textContent='No students joined.';
+  for(const student of rows){
+    const section=document.createElement('section');const name=document.createElement('h3');
+    name.textContent=student.name+' · '+student.number;section.append(name);
+    const list=document.createElement('ul');
+    for(const q of student.incorrect){
+      const entry=document.createElement('li');entry.textContent=q.number+'. '+q.question+' | Answer: '+(q.answer||'Unanswered')+' | Correct: '+q.correct;list.append(entry);
+    }
+    if(list.childElementCount)section.append(list);
+    else {const empty=document.createElement('p');empty.textContent=student.submitted?'No incorrect answers.':'No submission.';section.append(empty);}
+    root.append(section);
+  }
+});
+$('result-detail-export').onclick=action(()=>download(historySession,true));
 $('live-export').onclick=action(()=>download(current)); $('result-export').onclick=action(()=>download(historySession)); $('results-refresh').onclick=action(refresh);
 socket.on('connect',()=> { if (account) { if($('notice').textContent.startsWith('Live connection lost'))notice(''); watch().catch(e=>notice(e.message)); } });
 socket.on('disconnect',()=> { if (account) notice('Live connection lost. Sessions remain saved; reconnecting…'); });
@@ -332,9 +412,9 @@ function renderFolderMenu(){
  for(const f of folders){const row=document.createElement('div');row.className='actions folder-edit-row';const name=document.createElement('strong');name.textContent=f.name;row.append(name,button('Rename',()=>openEntry({title:'Rename folder',value:f.name,max:80},async name=>{await api('/folders/'+f.id,'PATCH',{name});await refresh();})),button('Delete folder',async()=>{if(!confirm('Delete “'+f.name+'”? Its tests will move to Uncategorized Test.'))return;await api('/folders/'+f.id,'DELETE');await refresh();},'danger'));$('folder-list').append(row);}
 }
 let launchTest=null;
-function openLaunch(test){launchTest=test;$('launch-test-title').textContent=test.title;$('launch-duration').value='0';$('launch-show-scores').checked=true;$('launch-shuffle').checked=false;$('launch-error').textContent='';$('launch-dialog').showModal();}
+function openLaunch(test){launchTest=test;$('launch-test-title').textContent=test.title;$('launch-duration').value='0';$('launch-show-scores').checked=true;$('launch-shuffle').checked=false;$('launch-corrections').checked=false;$('launch-error').textContent='';$('launch-dialog').showModal();}
 $('launch-cancel').onclick=()=> $('launch-dialog').close();
-$('launch-form').onsubmit=async e=>{e.preventDefault();$('launch-confirm').disabled=true;try{await launchSession({testId:launchTest.id,durationMinutes:Number($('launch-duration').value),showScores:$('launch-show-scores').checked,shuffleAnswers:$('launch-shuffle').checked});$('launch-dialog').close();}catch(e){$('launch-error').textContent=e.message;}finally{$('launch-confirm').disabled=false;}};
+$('launch-form').onsubmit=async e=>{e.preventDefault();$('launch-confirm').disabled=true;try{await launchSession({testId:launchTest.id,durationMinutes:Number($('launch-duration').value),showScores:$('launch-show-scores').checked,shuffleAnswers:$('launch-shuffle').checked,showCorrections:$('launch-corrections').checked});$('launch-dialog').close();}catch(e){$('launch-error').textContent=e.message;}finally{$('launch-confirm').disabled=false;}};
 $('extend-time').onclick=action(async()=>{const updated=await api('/sessions/'+current.id+'/extend','POST',{});updateSession(updated);notice('Added 1 minute (60 seconds). New end time: '+new Date(updated.deadlineAt).toLocaleTimeString());});
 let entryAction=null;
 function closeEntry(){entryAction=null;if($('entry-dialog').open)$('entry-dialog').close();}
@@ -386,6 +466,41 @@ function addQuestion() {
 }
 function moveQuestion(from,to) {if(to<0||to>=tbQuestions.length||from===to)return;tbQuestions.splice(to,0,tbQuestions.splice(from,1)[0]);renderTestBuilder();}
 let draggingQuestion=null;
+let pendingImages=0;
+function imageControl(target,labelText) {
+  const panel=document.createElement('div');
+  const label=document.createElement('label');label.textContent=labelText;
+  const picker=document.createElement('input');picker.type='file';picker.accept='image/png,image/jpeg,image/webp';
+  label.append(picker);panel.append(label);
+  const status=document.createElement('p');status.setAttribute('role','status');panel.append(status);
+  if(target.image){
+    const preview=document.createElement('img');preview.className='tb-image';preview.alt=labelText;preview.src=target.image;
+    panel.append(preview,button('Remove image',()=>{delete target.image;renderTestBuilder();}));
+  }
+  picker.onchange=async()=>{
+    const file=picker.files[0];
+    if(!file)return;
+    if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>5*1024*1024){
+      status.textContent='Choose a PNG, JPEG, or WebP image up to 5 MB.';return;
+    }
+    const version=creationVersion;
+    picker.disabled=true;pendingImages++;
+    let bitmap;
+    try {
+      bitmap=await createImageBitmap(file);
+      const scale=Math.min(1,960/Math.max(bitmap.width,bitmap.height));
+      const canvas=document.createElement('canvas');
+      canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));
+      const context=canvas.getContext('2d');
+      context.fillStyle='white';context.fillRect(0,0,canvas.width,canvas.height);context.drawImage(bitmap,0,0,canvas.width,canvas.height);
+      const encoded=canvas.toDataURL('image/jpeg',0.75);
+      if(encoded.length>180000)throw Error('This image is too detailed. Choose a smaller image.');
+      if(version===creationVersion&&panel.isConnected){target.image=encoded;renderTestBuilder();}
+    } catch(error) {status.textContent=error.message||'Could not read this image.';}
+    finally {bitmap?.close();pendingImages--;picker.disabled=false;}
+  };
+  return panel;
+}
 function renderTestBuilder() {
  els.tbQuestions.replaceChildren();
  tbQuestions.forEach((q,i)=> {
@@ -396,12 +511,12 @@ function renderTestBuilder() {
   const pointsLabel=document.createElement('label');pointsLabel.textContent='Points';const points=document.createElement('input');points.type='number';points.className='tb-points';points.min='0.01';points.max='1000';points.step='0.01';points.value=q.points??1;points.setAttribute('aria-label','Question '+(i+1)+' points');points.oninput=()=>q.points=Number(points.value);pointsLabel.append(points);header.append(pointsLabel);
   if(tbQuestions.length>1)header.append(button('Remove question',()=>{tbQuestions.splice(i,1);renderTestBuilder();}));card.append(header);
   const type=document.createElement('select');type.className='tb-q-type';type.setAttribute('aria-label','Question '+(i+1)+' type');for(const [value,label] of [['mc','Multiple choice'],['blank','Fill in the blank']]){const o=document.createElement('option');o.value=value;o.textContent=label;type.append(o);}type.value=q.type||'mc';type.onchange=()=>{q.type=type.value;if(q.type==='blank'){q.acceptedAnswers=q.acceptedAnswers||[];q.caseSensitive=q.caseSensitive||false;}else if(!q.options){q.options=[{id:q.id+'_a',text:''},{id:q.id+'_b',text:''}];q.correctOptionId='';}renderTestBuilder();};card.append(type);
-  const text=document.createElement('input');text.className='tb-q-text';text.placeholder='Question text…';text.setAttribute('aria-label','Question '+(i+1)+' text');text.maxLength=1000;text.value=q.text;text.oninput=()=>q.text=text.value;card.append(text);
+  const text=document.createElement('input');text.className='tb-q-text';text.placeholder='Question text…';text.setAttribute('aria-label','Question '+(i+1)+' text');text.maxLength=1000;text.value=q.text;text.oninput=()=>q.text=text.value;card.append(text,imageControl(q,'Question image (optional)'));
   if(q.type==='blank') {
    const label=document.createElement('label');label.textContent='Accepted answers (one per line)';const answers=document.createElement('textarea');answers.className='tb-accepted';answers.rows=3;answers.value=(q.acceptedAnswers||[]).join('\n');answers.oninput=()=>q.acceptedAnswers=answers.value.split('\n').map(s=>s.trim()).filter(Boolean);label.append(answers);card.append(label);
    const sensitive=document.createElement('label');const check=document.createElement('input');check.type='checkbox';check.checked=q.caseSensitive;check.onchange=()=>q.caseSensitive=check.checked;sensitive.append(check,' Case sensitive');card.append(sensitive);
   } else {
-   (q.options||[]).forEach((o,j)=>{const row=document.createElement('div');row.className='tb-option-row';const radio=document.createElement('input');radio.type='radio';radio.name=q.id;radio.checked=q.correctOptionId===o.id;radio.setAttribute('aria-label','Correct answer '+String.fromCharCode(65+j));radio.onchange=()=>q.correctOptionId=o.id;const input=document.createElement('input');input.className='tb-opt-text';input.maxLength=500;input.placeholder='Option '+String.fromCharCode(65+j);input.value=o.text;input.oninput=()=>o.text=input.value;row.append(radio,input);if(q.options.length>2)row.append(button('Remove option',()=>{q.options.splice(j,1);if(q.correctOptionId===o.id)q.correctOptionId='';renderTestBuilder();}));card.append(row);});
+   (q.options||[]).forEach((o,j)=>{const row=document.createElement('div');row.className='tb-option-row';const radio=document.createElement('input');radio.type='radio';radio.name=q.id;radio.checked=q.correctOptionId===o.id;radio.setAttribute('aria-label','Correct answer '+String.fromCharCode(65+j));radio.onchange=()=>q.correctOptionId=o.id;const input=document.createElement('input');input.className='tb-opt-text';input.maxLength=500;input.placeholder='Option '+String.fromCharCode(65+j);input.value=o.text;input.oninput=()=>o.text=input.value;row.append(radio,input);if(q.options.length>2)row.append(button('Remove option',()=>{q.options.splice(j,1);if(q.correctOptionId===o.id)q.correctOptionId='';renderTestBuilder();}));card.append(row,imageControl(o,'Image for option '+String.fromCharCode(65+j)+' (optional)'));});
    if(q.options.length<5)card.append(button('+ Add Option',()=>{q.options.push({id:q.id+'_'+crypto.randomUUID(),text:''});renderTestBuilder();}));
   }
   if(q.answerExplanation){const reason=document.createElement('p');reason.className='answer-rationale';reason.textContent='AI answer rationale: '+q.answerExplanation;card.append(reason);}
@@ -409,6 +524,9 @@ function renderTestBuilder() {
  });
 }
 function collectTest() {
+ if(pendingImages)return {error:'Wait for images to finish loading.'};
+ const imageSize=tbQuestions.reduce((sum,q)=>sum+(q.image?.length||0)+(q.type==='blank'?0:(q.options||[]).reduce((total,o)=>total+(o.image?.length||0),0)),0);
+ if(imageSize>600000)return {error:'These images are too large together. Remove or resize some images before saving.'};
  const title=els.tbTitle.value.trim();if(!title)return {error:'Please enter a test title.'};
  for(const [i,q] of tbQuestions.entries()) {
   if(!Number.isFinite(q.points??1)||(q.points??1)<=0||(q.points??1)>1000||Math.abs((q.points??1)*100-Math.round((q.points??1)*100))>0.000001)return {error:'Q'+(i+1)+': Enter positive points, up to1000, with at most2 decimals.'};
@@ -416,7 +534,7 @@ function collectTest() {
   if(q.type==='blank'){if(!q.acceptedAnswers?.length||q.acceptedAnswers.length>20||q.acceptedAnswers.some(a=>a.length>300))return {error:'Q'+(i+1)+': Enter 1–20 accepted answers, each up to 300 characters.'};}
   else {if(q.options.some(o=>!o.text.trim()))return {error:'Q'+(i+1)+': Each option needs text.'};if(!q.correctOptionId)return {error:'Q'+(i+1)+': Please mark the correct answer.'};}
  }
- const questions=tbQuestions.map(q=>q.type==='blank'?{id:q.id,type:'blank',points:q.points??1,text:q.text,acceptedAnswers:q.acceptedAnswers,caseSensitive:q.caseSensitive,...(q.evidence?{evidence:q.evidence}:{}),...(q.answerExplanation?{answerExplanation:q.answerExplanation}:{})}:{id:q.id,type:'mc',points:q.points??1,text:q.text,options:q.options,correctOptionId:q.correctOptionId,...(q.evidence?{evidence:q.evidence}:{}),...(q.answerExplanation?{answerExplanation:q.answerExplanation}:{})});
+ const questions=tbQuestions.map(q=>q.type==='blank'?{id:q.id,type:'blank',points:q.points??1,text:q.text,...(q.image?{image:q.image}:{}),acceptedAnswers:q.acceptedAnswers,caseSensitive:q.caseSensitive,...(q.evidence?{evidence:q.evidence}:{}),...(q.answerExplanation?{answerExplanation:q.answerExplanation}:{})}:{id:q.id,type:'mc',points:q.points??1,text:q.text,...(q.image?{image:q.image}:{}),options:q.options,correctOptionId:q.correctOptionId,...(q.evidence?{evidence:q.evidence}:{}),...(q.answerExplanation?{answerExplanation:q.answerExplanation}:{})});
  return {test:{title,folderId:$('tb-folder').value||null,questions}};
 }
 function showTbError(msg){els.tbError.textContent=msg;els.tbError.hidden=false;}

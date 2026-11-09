@@ -469,3 +469,8 @@ body:has(#calculator-section:not([hidden])) .student-brandbar { display: none; }
 #student-connection:empty { display: none; }
 .test-copy-guard :is(.tq-text,.tq-opt-text,.tq-opt-letter) { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 @media print { .test-copy-guard { display: none !important; } }
+
+.test-timer { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 3; }
+.question-image { display: block; max-width: 100%; max-height: 420px; object-fit: contain; margin: .5rem 0; }
+#calculator-complete { margin-top: 16px; }
+#student-corrections article { border-top: 1px solid var(--border); padding: 12px 0; text-align: left; }

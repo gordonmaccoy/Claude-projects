@@ -63,3 +63,22 @@ test('Trash isolates owners and restores or expires quizzes and results', async 
     assert.equal((await db.query("SELECT id FROM onscreen_v2_tests WHERE id='quiz'")).rows.length, 0);
   } finally { await db.close(); }
 });
+
+test('quiz ordering is durable and bulk deletion only removes the owner’s trashed results',async()=>{
+  const db=new PGlite();
+  const pool={query:(...a)=>db.query(...a),connect:async()=>({query:(...a)=>db.query(...a),release(){}})};
+  try {
+    const store=createStore(pool);await store.init();
+    for(const id of ['a','b']) await store.saveTest('owner',{id,title:id});
+    assert.equal(await store.orderTests('owner','',['b','a']),true);
+    assert.equal(await store.orderTests('other','',['a','b']),false);
+    await store.saveTest('owner',{id:'b',title:'Updated'},true);
+    assert.deepEqual((await store.listTests('owner')).map(t=>t.id),['b','a']);
+    for(const [id,ownerId] of [['old1','owner'],['old2','owner'],['active','owner'],['foreign','other']]){
+      await store.createSession({id,ownerId,phase:'ended',...(id!=='active'?{deletedAt:Date.now()}: {})});
+    }
+    assert.equal(await store.deleteTrashResults('owner',['old1','old2','active','foreign']),2);
+    assert.equal((await store.listTrash('other')).length,1);
+    assert.equal((await store.listSessions('owner')).length,1);
+  } finally {await db.close();}
+});

@@ -14,6 +14,7 @@ for(const el of [els.themeToggle,els.testThemeToggle]) el.onclick=()=>applyTheme
 els.sessionCode.textContent=sessionId || 'missing';
 const resumeKey=`onscreen-resume-${sessionId}`, draftKey=`onscreen-draft-${sessionId}`, calculatorKey=`onscreen-calculator-${sessionId}`;
 const socket=io(); let joined=false, currentView=null, renderedTest=false, testAnswers={}, submitting=false, draftTimer, updateVersion=0, memoryToken=null;
+let completingCalculator=false;
 let reconnectTimer, connectionVersion=0;
 const connectionNotice=$('student-connection');
 const message=text=>$('student-notice').textContent=text || '';
@@ -59,16 +60,26 @@ function showView(view) {
   if(previousExtension!==undefined && view.extensionVersion>previousExtension){extensionNoticeUntil=performance.now()+6000;$('time-notice').textContent='Your professor extended the time by '+(view.lastExtension?.minutes||1)+' minute.';}
   if((view.result||view.failed||view.phase==='ended')&&$('submit-dialog').open)$('submit-dialog').close();
   timerSnapshot={deadlineAt:view.deadlineAt,serverNow:view.serverNow,receivedAt:performance.now()};
-  if(view.terminal){clearTimeout(draftTimer);clearTimeout(reconnectTimer);connectionNotice.textContent='';socket.disconnect();}
+  if(view.terminal){clearTimeout(draftTimer);clearTimeout(reconnectTimer);connectionNotice.textContent='';if(!view.completed||!completingCalculator)socket.disconnect();}
   els.testQuestions.classList.toggle('test-copy-guard',view.mode==='test'&&view.phase==='running'&&!view.result);
   const locked=Boolean(view.failed && !view.result && view.phase==='running');
   $('activity-lock').hidden=!locked;
   els.calcSection.inert=locked; els.testSection.inert=locked;
   if(!locked && $('student-notice').textContent.startsWith('FAIL')) message('');
   els.joinSection.hidden=true; els.calcSection.hidden=true; els.testSection.hidden=true; $('waiting-section').hidden=true;
+  if(view.completed) {
+    try{localStorage.removeItem(calculatorKey);}catch{}
+    els.testSection.hidden=false;els.testDone.hidden=false;els.testActions.hidden=true;els.testQuestions.replaceChildren();
+    els.testTitle.textContent='Calculator completed';
+    els.doneScore.textContent='You can now close this tab.';
+    $('student-corrections').hidden=true;
+    message('');
+    return;
+  }
   if(view.result) {
     els.testSection.hidden=false; els.testDone.hidden=false; els.testActions.hidden=true; els.testQuestions.replaceChildren();
     els.testTitle.textContent='Test submitted'; els.doneScore.textContent=view.result.hidden?'Your test was submitted. Your professor will share the results.':`Your score: ${view.result.score} / ${view.result.total} · ${view.result.percentage}%${view.result.failed?' · FAIL':''}`;
+    renderCorrections(view.corrections);
     $('test-timer').hidden=true;$('time-notice').textContent='';try{localStorage.removeItem(draftKey);}catch{} return;
   }
   if(view.phase==='ended') { try{localStorage.removeItem(calculatorKey);}catch{} message('Your professor ended the session.'); els.joinSection.hidden=false; els.form.querySelector('button').disabled=true; return; }
@@ -84,10 +95,40 @@ function showView(view) {
 }
 socket.on('student:finished',view=>{showView(view);socket.disconnect();});
 socket.on('student:update',view=> { if(joined) showView(view); });
+function appendQuestionImage(parent,source) {
+  if(!source)return;
+  const image=document.createElement('img');
+  image.className='question-image';image.alt='Image supplied by the professor';image.src=source;
+  parent.append(image);
+}
+function renderCorrections(rows) {
+  const container=$('student-corrections');
+  container.replaceChildren();container.hidden=!Array.isArray(rows)||!rows.length;
+  if(container.hidden)return;
+  const heading=document.createElement('h2');heading.textContent='Corrections';container.append(heading);
+  for(const row of rows) {
+    const entry=document.createElement('article');
+    const prompt=document.createElement('p');prompt.textContent=row.number+'. '+row.question;entry.append(prompt);
+    appendQuestionImage(entry,row.image);
+    const answer=document.createElement('p');answer.textContent='Your answer: '+(row.answer||'Unanswered');entry.append(answer);appendQuestionImage(entry,row.answerImage);
+    const correct=document.createElement('p');correct.textContent='Correct answer: '+row.correct;entry.append(correct);appendQuestionImage(entry,row.correctImage);
+    container.append(entry);
+  }
+}
+$('calculator-complete').onclick=async()=>{
+  const button=$('calculator-complete');
+  button.disabled=true;completingCalculator=true;
+  try {
+    const response=await emit('student:complete-calculator',{});
+    if(response.view)showView(response.view);
+    if(!response.ok&&!currentView?.completed)message(response.error);
+    if(currentView?.completed){socket.disconnect();window.close();}
+  } finally {completingCalculator=false;button.disabled=false;}
+};
 function renderTestQuestions(questions) {
   els.testQuestions.replaceChildren();
   questions.forEach((q,i)=> {
-    const card=document.createElement('div');card.className='tq-card';const p=document.createElement('p');p.className='tq-text';p.textContent=`${i+1}. ${q.text} (${q.points??1} ${(q.points??1)===1?'point':'points'})`;card.append(p);
+    const card=document.createElement('div');card.className='tq-card';const p=document.createElement('p');p.className='tq-text';p.textContent=`${i+1}. ${q.text} (${q.points??1} ${(q.points??1)===1?'point':'points'})`;card.append(p);appendQuestionImage(card,q.image);
     card.dataset.questionId=q.id;
     const options=document.createElement('div'); options.className='tq-options';
     if(q.type==='blank') {
@@ -98,7 +139,7 @@ function renderTestQuestions(questions) {
       const label=document.createElement('label');label.className='tq-option';const radio=document.createElement('input');radio.type='radio';radio.name=q.id;radio.value=o.id;radio.checked=testAnswers[q.id]===o.id;
       radio.onchange=()=> { testAnswers[q.id]=o.id;lastAnsweredQuestion=q.id; updateVersion++;saveDraft();clearTimeout(draftTimer);draftTimer=setTimeout(uploadDraft,400); };
       const letter=document.createElement('span');letter.className='tq-opt-letter';letter.textContent=String.fromCharCode(65+j);
-      const text=document.createElement('span');text.className='tq-opt-text';text.textContent=o.text;label.append(radio,letter,text);options.append(label);
+      const text=document.createElement('span');text.className='tq-opt-text';text.textContent=o.text;label.append(radio,letter,text);appendQuestionImage(text,o.image);options.append(label);
     });card.append(options);els.testQuestions.append(card);
   });
 
@@ -155,7 +196,7 @@ document.addEventListener('copy',event=>{
   }
 });
 window.addEventListener('pagehide',()=> { if(joined && !currentView?.result && currentView?.phase!=='ended') socket.emit('student:visibility',{visible:false},()=>{}); });
-setInterval(()=> { if(joined) { visibility(); if(currentView?.mode==='test' && !currentView?.result) uploadDraft(); } },3000);
+setInterval(()=> { if(joined&&!currentView?.terminal) { visibility(); if(currentView?.mode==='test' && !currentView?.result) uploadDraft(); } },3000);
 if(!sessionId) { showJoinError('Scan your professor’s QR code to join.');els.form.querySelector('button').disabled=true; }
 // --- Calculator ---
 
