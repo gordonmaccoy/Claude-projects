@@ -186,3 +186,16 @@ button { font: inherit; }
 .walkthrough-steps { margin: 0; padding: 0; list-style-position: inside; }
 .walkthrough-steps li::marker { color: var(--blue); font-weight: 800; }
 .walkthrough-steps .feature-card { min-height: 0; }
+
+.walkthrough-layout { display: grid; grid-template-columns: minmax(220px, 310px) minmax(0, 1fr); align-items: center; gap: clamp(24px, 5vw, 68px); max-width: 970px; margin: auto; }
+.walkthrough-video { margin: 0; }
+.walkthrough-video video { display: block; width: 100%; height: auto; aspect-ratio: 9 / 16; border-radius: 18px; background: var(--navy); box-shadow: var(--shadow); }
+.walkthrough-video figcaption { margin-top: 10px; text-align: center; color: var(--muted); font-size: .8rem; }
+.walkthrough-steps { display: grid; gap: 12px; }
+.walkthrough-transcript { margin-top: 18px; line-height: 1.6; }
+.walkthrough-transcript summary { cursor: pointer; font-weight: 700; color: var(--navy); }
+.walkthrough-transcript li + li { margin-top: 8px; }
+@media (max-width: 680px) {
+  .walkthrough-layout { grid-template-columns: 1fr; }
+  .walkthrough-video { width: min(100%, 310px); margin-inline: auto; }
+}

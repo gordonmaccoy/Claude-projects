@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#f4f7f2">
   <meta name="description" content="Examio helps educators launch classroom tests, monitor student activity and grade results in the browser—without student installs.">
   <title>Examio — No Installation. Live Monitoring. Instant Results.</title>
-  <link rel="stylesheet" href="/landing.css">
+  <link rel="stylesheet" href="/landing.css?v=walkthrough-video">
   <script src="/landing.js" defer></script>
 <link rel="stylesheet" href="/examio.css">
 </head>
@@ -76,11 +76,34 @@
         <p class="eyebrow">HOW IT WORKS</p>
         <h2 id="walkthrough-title">Run a test in three steps</h2>
       </div>
-      <ol class="feature-grid walkthrough-steps">
+      <div class="walkthrough-layout">
+        <figure class="walkthrough-video">
+          <video controls playsinline preload="none" width="720" height="1280"
+                 poster="/landing/examio-walkthrough-poster.png"
+                 aria-label="Examio test walkthrough">
+            <source src="/landing/examio-walkthrough.mp4" type="video/mp4">
+            <a href="/landing/examio-walkthrough.mp4">Download the Examio walkthrough</a>
+          </video>
+          <figcaption>56 seconds · On-screen instructions and music</figcaption>
+        </figure>
+        <div>
+          <ol class="walkthrough-steps">
         <li class="feature-card"><h3>Launch a test</h3><p>Choose a test from your library and open the classroom display on your projector.</p></li>
         <li class="feature-card"><h3>Let students join</h3><p>Students scan the QR code and join in their browser. Start when everyone is ready and follow their progress from your private dashboard.</p></li>
         <li class="feature-card"><h3>Review and export results</h3><p>See scores as students submit and download your class results as an Excel file.</p></li>
       </ol>
+          <details class="walkthrough-transcript">
+            <summary>Read the video walkthrough</summary>
+            <ol>
+              <li>Sign in as a professor, choose a saved test, and select Launch test. Set a time limit, show scores, and shuffle answer choices as needed.</li>
+              <li>Open the classroom display on the projector. Expand the QR code so students can scan it. Students enter their number and name, then wait for the professor.</li>
+              <li>Verify who joined and start the test. Active students appear in green on the classroom display. Students answer questions on their phones and see the countdown if a timer is set.</li>
+              <li>When a student switches away, their name turns red and Examio records a monitoring event. If the page stays hidden for more than five seconds, the attempt is marked FAIL. The professor can unlock it or submit the fail score.</li>
+              <li>Students finish and submit their answers. They can check their score if enabled. The professor ends the session, reviews Results, and downloads the Excel scores.</li>
+            </ol>
+          </details>
+        </div>
+      </div>
     </section>
 
     <section class="features section-wrap" id="features" aria-labelledby="features-title">
