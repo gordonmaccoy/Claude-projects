@@ -330,16 +330,21 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
   return { app, server, io, tick, runSettingsJobs:()=>settingsController.runJobs(), close: async () => { if (timer) clearInterval(timer);if(settingsTimer)clearInterval(settingsTimer);if(trashTimer)clearInterval(trashTimer); await new Promise(resolve => io.close(resolve)); } };
 }
 async function main() {
-  if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required. Configure Railway Development PostgreSQL.');
+  if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required. Configure PostgreSQL for this deployment.');
   const config = authConfig();
-  if (process.env.RAILWAY_ENVIRONMENT_NAME && process.env.RAILWAY_ENVIRONMENT_NAME.toLowerCase() !== 'development') {
-    throw new Error('This V2 build is restricted to Railway Development');
+  const environment = process.env.RAILWAY_ENVIRONMENT_NAME?.toLowerCase();
+  if (environment === 'public' && process.env.EXAMIO_PUBLIC_RELEASE === '1') {
+    if (process.env.APP_ORIGIN !== 'https://examio.io' || !config.url || !config.key) {
+      throw new Error('The public release requires https://examio.io and Supabase Auth configuration.');
+    }
+  } else if (environment && environment !== 'development') {
+    throw new Error('Use Railway Development or explicitly enable the separate Public release.');
   }
   if (!config.url || !config.key) console.warn('Professor sign-in disabled: configure Development Supabase Auth.');
   const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 10, connectionTimeoutMillis: 10000 });
   const store = createStore(pool); await store.init();
   const runtime = createApp({ store, config, verifyUser: createVerifier(config) });
-  runtime.server.listen(process.env.PORT || 3100, () => console.log('OnScreen V2 development server started'));
+  runtime.server.listen(process.env.PORT || 3100, () => console.log('Examio server started'));
   for (const signal of ['SIGTERM', 'SIGINT']) process.once(signal, async () => { await runtime.close(); await pool.end(); });
 }
 if (require.main === module) main().catch(error => { console.error('Startup failed:', error.message); process.exitCode = 1; });
