@@ -31,6 +31,45 @@ async function main() {
   async function enterForm(value){await page.locator('#entry-value').fill(value);await page.locator('#entry-save').click();await page.locator('#entry-dialog').waitFor({state:'hidden'});}
   const out=path.join(__dirname,'../../.tmp/onscreen-v2');fs.mkdirSync(out,{recursive:true});
   try {
+    if(process.env.EXAMIO_UI_LANGUAGE_ONLY==='1'){
+      const exam=require('../exam');
+      const test=require('../onboarding').createStarterTest('ko');
+      for(const [language,locale,joinLabel,submitLabel] of [
+        ['en','ko-KR','Join','Submit test'],
+        ['ko','en-US','참여하기','시험 제출']
+      ]){
+        const session=exam.newSession('alice',test,Date.now(),{language});
+        await store.createSession(session);
+        const studentContext=await browser.newContext({locale});
+        const student=await studentContext.newPage();
+        await student.goto(base+'/student.html?session='+session.id+'&language='+locale);
+        await student.locator('#number-input').fill('001');
+        await student.locator('#name-input').fill('Student');
+        assert.equal(await student.locator('html').getAttribute('lang'),language);
+        assert.equal(await student.locator('[data-language-switch]').count(),0);
+        await student.getByRole('button',{name:joinLabel,exact:true}).click();
+        await student.locator('#waiting-section').waitFor({state:'visible'});
+        await store.mutate(session.id,s=>exam.start(s));
+        await student.reload();
+        await student.locator('.tq-option').first().waitFor();
+        assert.match(await student.locator('.tq-text').first().textContent(),/대한민국의 수도는 어디인가요/);
+        await student.locator('.tq-option').first().click();
+        await student.getByRole('button',{name:submitLabel,exact:true}).click();
+        await student.locator('#submit-confirm').click();
+        await student.locator('#test-done').waitFor({state:'visible'});
+        assert.match(await student.locator('#done-score').textContent(),language==='ko'?/점수:/:/Your score:/);
+        await studentContext.close();
+      }
+      const koreanContext=await browser.newContext({locale:'ko-KR'});
+      const landing=await koreanContext.newPage();
+      await landing.goto(base);
+      assert.equal(await landing.locator('html').getAttribute('lang'),'ko');
+      await landing.locator('[data-language-switch]').selectOption('en');
+      await landing.waitForFunction(()=>document.documentElement.lang==='en');
+      await koreanContext.close();
+      console.log('English and Korean student sessions and landing language choice verified.');
+      return;
+    }
     await page.goto(base+'/professor.html');await page.locator('#workspace').waitFor({state:'visible'});
     await page.locator('#tour-dialog').waitFor({state:'visible',timeout:4000});
     await page.locator('#tour-target').waitFor({state:'visible',timeout:2000});assert.match(await page.locator('#tour-heading').textContent(),/Launch a practice test/);

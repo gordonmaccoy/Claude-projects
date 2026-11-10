@@ -15,11 +15,11 @@ window.createOnScreenTour=function(api){
  let index=0,phase=0,seen=false,busy=false,epoch=0,previousFocus=null,renderId=0;
  function render(){
   const scene=scenes[index],frame=scene.frames[phase],id=++renderId;
-  byId('tour-step').textContent=(index+1)+' of '+scenes.length;byId('tour-screen').textContent=scene.screen;
-  byId('tour-heading').textContent=scene.title;byId('tour-body').textContent=frame[1];stage.classList.toggle('phone',!!scene.phone);
-  back.disabled=(index===0&&phase===0)||busy;skip.disabled=busy;next.disabled=busy;next.hidden=!!frame[2];next.textContent=index===scenes.length-1?'Get started':scene.next||'Next';
-  action.hidden=!frame[2];action.textContent=frame[2]||'';action.disabled=busy;target.hidden=true;target.disabled=busy;
-  target.setAttribute('aria-label','Demo: '+(frame[2]||''));image.alt=scene.screen+' — '+scene.title+' (example screenshot)';
+  byId('tour-step').textContent=window.examioLanguage.t('{step} of {total}',{step:index+1,total:scenes.length});byId('tour-screen').textContent=window.examioLanguage.t(scene.screen);
+  byId('tour-heading').textContent=window.examioLanguage.t(scene.title);byId('tour-body').textContent=window.examioLanguage.t(frame[1]);stage.classList.toggle('phone',!!scene.phone);
+  back.disabled=(index===0&&phase===0)||busy;skip.disabled=busy;next.disabled=busy;next.hidden=!!frame[2];next.textContent=window.examioLanguage.t(index===scenes.length-1?'Get started':scene.next||'Next');
+  action.hidden=!frame[2];action.textContent=window.examioLanguage.t(frame[2]||'');action.disabled=busy;target.hidden=true;target.disabled=busy;
+  target.setAttribute('aria-label','Demo: '+(window.examioLanguage.t(frame[2]||'')));image.alt=scene.screen+' — '+scene.title+' (example screenshot)';
   const bounds=window.onScreenTourFrames?.[frame[0]];
   function loaded(){if(id!==renderId)return;stage.classList.remove('unavailable');if(bounds&&frame[2]){target.style.left=bounds.x+'%';target.style.top=bounds.y+'%';target.style.width=bounds.w+'%';target.style.height=bounds.h+'%';target.hidden=false;}}
   image.onload=loaded;image.onerror=()=>{if(id!==renderId)return;stage.classList.add('unavailable');target.hidden=true;};

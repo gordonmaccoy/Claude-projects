@@ -2,6 +2,18 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const exam = require('../exam');
 const fixture = () => exam.newSession('p1', { title: 'Quiz', questions: [{ id: 'q', text: '2+2?', options: [{ id: 'a', text: '4' }, { id: 'b', text: '5' }], correctOptionId: 'a' }] }, 1000);
+test('student interface language comes from the session and preserves authored content', () => {
+  const session = exam.newSession('p1', fixture().test, 1000, {language:'ko'});
+  const {studentId} = exam.join(session, {name:'Kim',number:'001',language:'en'}, 1000);
+  const student = exam.student(session, studentId);
+  assert.equal(exam.studentView(session, student).language, 'ko');
+  exam.start(session, 2000);
+  assert.equal(exam.studentView(session, student).test.questions[0].text, '2+2?');
+  assert.equal(exam.privateView(session).language, 'ko');
+  delete session.language;
+  assert.equal(exam.studentView(session, student).language, 'en');
+  assert.throws(() => exam.newSession('p1', null, 1000, {language:'fr'}), /Invalid session language/);
+});
 test('waiting room withholds questions and failure; public view never leaks private data', () => {
   const s = fixture(); const j = exam.join(s, { name: 'Kim', number: '001' }, 1000);
   exam.visibility(s, j.studentId, false, 1100); exam.sweep(s, 20000);

@@ -1,10 +1,21 @@
+const {t}=window.examioLanguage;
 const $ = id => document.getElementById(id);
+$('add-practice-test').onclick=action(async()=>{
+  const control=$('add-practice-test');
+  control.disabled=true;
+  try {
+    await api('/practice-test','POST',{language:window.examioLanguage.current});
+    await refresh();
+    notice('Practice test added.');
+  } finally { control.disabled=false; }
+});
 const els = { tbTitle: $('tb-title'), tbQuestions: $('tb-questions'), tbError: $('tb-error') };
 const socket = io();
 let resultViewVersion=0;
 let trashVersion=0, pendingTrashDelete=null;
 let auth, account, current, historySession, library = [], folders = [], aiConfigured=false, uploadMaxBytes=5*1024*1024, importMode="import", sessionList = [], editingId = null, tbQuestions = [], popup, recoveringPassword = false;
 let accountGeneration = 0,creationVersion=0,professorTimerSnapshot=null;
+$('calculator-language').value=window.examioLanguage.current;
 let lastWorkspaceTab = 'launch';
 let popupSessionId = null, openingDisplay = false, launching = false;
 function clearPrivateWorkspace() {
@@ -22,7 +33,7 @@ let noticeTimer, workspaceTab='launch', tabVersion=0;
 document.addEventListener('visibilitychange',()=>{if(document.hidden){tabVersion++;notice('');}});
 const notice = message => {
   clearTimeout(noticeTimer);
-  $('notice').textContent = message || '';
+  $('notice').textContent = t(message || '');
   if(message) noticeTimer=setTimeout(()=>notice(''),8000);
 };
 async function token() { return (await auth.auth.getSession()).data.session?.access_token || ''; }
@@ -47,7 +58,7 @@ function tab(name) {
   document.querySelectorAll('[data-tab]').forEach(el => el.classList.toggle('selected', el.dataset.tab === name));
 }
 document.querySelectorAll('[data-tab]').forEach(el => el.onclick = () => { tab(el.dataset.tab); if (el.dataset.tab === 'results') refresh().catch(e => notice(e.message)); if(el.dataset.tab==='trash') refreshTrash().catch(e=>notice(e.message)); });
-function button(text, fn, className = '') { const b = document.createElement('button'); b.textContent = text; b.className = className; b.onclick = action(fn); return b; }
+function button(text, fn, className = '') { const b = document.createElement('button'); b.textContent = t(text); b.className = className; b.onclick = action(fn); return b; }
 function card(title, subtitle) { const c = document.createElement('article'); c.className = 'card'; const h = document.createElement('h3'); h.textContent = title; const p = document.createElement('p'); p.textContent = subtitle; c.append(h,p); return c; }
 async function refreshTrash() {
   const version=++trashVersion;
@@ -63,11 +74,11 @@ async function refreshTrash() {
     const entry=card(item.title||kind,kind+' · Expires '+new Date(item.expiresAt).toLocaleString());
     const actions=document.createElement('div');
     actions.className='actions';
-    actions.append(button('Restore',async()=>{
+    actions.append(button(t('Restore'),async()=>{
       await api(route+'/restore','POST');
       await refreshTrash();
       await refresh();
-      if(lastWorkspaceTab==='trash'&&!$('trash').hidden)notice('Restored.');
+      if(lastWorkspaceTab==='trash'&&!$('trash').hidden)notice(t('Restored.'));
     }),button('Delete permanently',()=>{
       pendingTrashDelete=route;
       const dialog=$('trash-confirm');
@@ -110,7 +121,7 @@ $('trash-confirm').onclose=action(async()=>{
   const version=tabVersion;
   const deleted=Array.isArray(route)?(await api('/trash/results/delete','POST',{ids:route})).deleted:(await api(route,'DELETE'),1);
   await refreshTrash();
-  if(version===tabVersion&&!$('trash').hidden)notice(deleted?'Permanently deleted.':'The selected results were already removed.');
+  if(version===tabVersion&&!$('trash').hidden)notice(deleted?t('Permanently deleted.'):'The selected results were already removed.');
 });
 let draggedTest=null;
 function previewQuizMove(list,before) {
@@ -160,11 +171,11 @@ async function refresh() {
   renderFolderOptions();
   for (const id of ['launch-tests', 'library-tests', 'active-sessions', 'result-sessions']) $(id).replaceChildren();
   if (!library.length) {
-    $('launch-tests').append(card('A fresh start', 'Create your first test in Library, or launch the calculator.'));
+    $('launch-tests').append(card(t('A fresh start'), t('Create your first test in Library, or launch the calculator.')));
     $('library-tests').append(card('Your library starts here', 'Save a test and use it again with any class.'));
   }
   const groups={};
-  for(const root of ['launch-tests','library-tests']) for(const folder of [...folders,{id:'',name:'Uncategorized Test'}]) {
+  for(const root of ['launch-tests','library-tests']) for(const folder of [...folders,{id:'',name:t('Uncategorized Test')}]) {
     const count=library.filter(t=>(t.folderId||'')===folder.id).length;
     if(!count && !folders.some(f=>f.id===folder.id) && root!=='library-tests')continue;
     const detail=document.createElement('details');detail.className='folder';detail.dataset.folderKey=root+':'+folder.id;detail.open=expanded.has(detail.dataset.folderKey);
@@ -172,8 +183,8 @@ async function refresh() {
     const list=document.createElement('div');list.className=root==='library-tests'?'library-rows':'cards';list.dataset.folderId=folder.id;if(root==='library-tests')setupQuizDrop(detail,list);detail.append(list);$(root).append(detail);groups[root+folder.id]=list;
   }
   for (const test of library) {
-    const launch = card(test.title, `${test.questions.length} questions · Saved test`);
-    launch.append(button('Launch test ↗', () => openLaunch(test), 'primary')); (groups['launch-tests'+(test.folderId||'')]||$('launch-tests')).append(launch);
+    const launch = card(test.title, t('{count} questions · Saved test',{count:test.questions.length}));
+    launch.append(button(t('Launch test ↗'), () => openLaunch(test), 'primary')); (groups['launch-tests'+(test.folderId||'')]||$('launch-tests')).append(launch);
     const saved=document.createElement('article');saved.className='library-test-row';
     const title=document.createElement('strong');title.textContent=test.title;saved.append(title);
     saved.dataset.testId=test.id;
@@ -204,27 +215,27 @@ async function refresh() {
       [...document.querySelectorAll('.library-test-row')].find(row=>row.dataset.testId===test.id)?.querySelector('.drag-handle')?.focus();
     });
     const actions = document.createElement('div'); actions.className = 'actions';
-    actions.append(button('Edit', () => openBuilder(test)),button('Copy',()=>openEntry({title:'Create copy of a test',value:(test.title.slice(0,73)+' (copy)'),max:80},async title=>{const copy=await api('/tests/'+test.id+'/copy','POST',{title});await refresh();openBuilder(copy);})), button('Delete', async () => {
+    actions.append(button(t('Edit'), () => openBuilder(test)),button(t('Copy'),()=>openEntry({title:t('Create copy of a test'),value:(test.title.slice(0,73)+' (copy)'),max:80},async title=>{const copy=await api('/tests/'+test.id+'/copy','POST',{title});await refresh();openBuilder(copy);})), button(t('Delete'), async () => {
       if (!confirm(`Move “${test.title}” to Trash for 30 days? Existing sessions keep their copy.`)) return;
       await api(`/tests/${test.id}`, 'DELETE'); await refresh();
     }));
-    actions.append(button('Download PDF',()=>downloadFile('/api/tests/'+encodeURIComponent(test.id)+'/pdf',test.title+'.pdf')),handle);saved.append(actions); (groups['library-tests'+(test.folderId||'')]||$('library-tests')).append(saved);
+    actions.append(button(t('Download PDF'),()=>downloadFile('/api/tests/'+encodeURIComponent(test.id)+'/pdf',test.title+'.pdf')),handle);saved.append(actions); (groups['library-tests'+(test.folderId||'')]||$('library-tests')).append(saved);
   }
   for (const s of sessionList) {
     if (s.mode === 'test') {
       const c = card(s.title, `${new Date(s.createdAt).toLocaleString()} · ${s.phase} · ${s.students.length} joined`);
-      c.append(button('View results', async () => { const version=++resultViewVersion; const session=await api(`/sessions/${s.id}`); if(version!==resultViewVersion)return; historySession=session; showResultSummary();renderResults(); }));
+      c.append(button(t('View results'), async () => { const version=++resultViewVersion; const session=await api(`/sessions/${s.id}`); if(version!==resultViewVersion)return; historySession=session; showResultSummary();renderResults(); }));
       if(s.phase === 'ended') c.append(button('Rename results',()=>renameResults(s)),button('Delete results', () => deleteResults(s), 'danger'));
       $('result-sessions').append(c);
     }
-    if (s.phase !== 'ended') $('active-sessions').append(button(`${s.title} · ${s.phase}`, () => openSession(s.id)));
+    if (s.phase !== 'ended') $('active-sessions').append(button(`${s.title} · ${t(s.phase)}`, () => openSession(s.id)));
   }
   if (!sessionList.some(s => s.mode === 'test')) $('result-sessions').append(card('No test results yet', 'Results from tests will be saved here. Calculator sessions do not create results.'));
   if(current && !sessionList.some(s=>s.id===current.id && s.phase!=='ended')){current=null;renderDashboard();}
 }
 function openBuilder(test) {
   creationVersion++;els.tbQuestions.inert=false;$('tb-start-btn').disabled=false;$('tb-add-q-btn').disabled=false;$('tb-answer-ai').disabled=!aiConfigured;$('answer-ai-status').textContent='';tab('library');$('creation-choice').hidden=true;$('import-panel').hidden=true; editingId = test?.id || null;
-  $('test-builder').hidden = false; $('builder-heading').textContent = test?.id ? 'Edit test' : 'Create a test';
+  $('test-builder').hidden = false; $('builder-heading').textContent = test?.id ? t('Edit test') : 'Create a test';
   els.tbTitle.value = test?.title || ''; renderFolderOptions(test?.folderId||''); $('draft-review').textContent=''; tbQuestions = structuredClone(test?.questions || []); hideTbError();
   if (!tbQuestions.length) addQuestion(); else renderTestBuilder();
   $('test-builder').scrollIntoView({ behavior: 'smooth' });
@@ -237,7 +248,7 @@ $('tb-cancel-btn').onclick = () =>{creationVersion++;$('test-builder').hidden=tr
 $('tb-start-btn').onclick = action(async () => {
   const collected = collectTest(); if (collected.error) return showTbError(collected.error);
   await api('/tests', 'POST', { ...collected.test, ...(editingId ? { id: editingId } : {}) });
-  $('test-builder').hidden = true; await refresh(); notice('Test saved.');
+  $('test-builder').hidden = true; await refresh(); notice(t('Test saved.'));
 });
 async function launchSession(payload) {
   if (launching) return;
@@ -297,7 +308,7 @@ async function watch() {
 $('calculator-launch').onclick = action(async () => {
   const existing = sessionList.find(s => s.mode === 'calculator' && s.phase !== 'ended');
   if (existing) { await openSession(existing.id); await openClassroomDisplay(current); }
-  else await launchSession({ mode: 'calculator' });
+  else await launchSession({ mode: 'calculator',language:$('calculator-language').value });
 });
 $('display-open').onclick = action(() => current && openClassroomDisplay(current));
 $('test-start').onclick = action(async () => { if (!confirm('Start this test now? Hidden pages for more than 5 seconds will receive FAIL.')) return; current = await api(`/sessions/${current.id}/start`, 'POST', {}); renderDashboard(); });
@@ -311,7 +322,7 @@ function renderDashboard() {
   if (!current || current.phase==='ended') {professorTimerSnapshot=null;current=null;$('dashboard').hidden=true;$('live-students').replaceChildren();$('calculator-card').hidden=false;return;}
   $('dashboard').hidden = false; $('session-title').textContent = current.title;
   $('calculator-card').hidden = current.mode === 'calculator' && current.phase !== 'ended';
-  $('session-phase').textContent = current.phase === 'waiting' ? 'Waiting room open · Questions appear when you start the test.' : current.phase === 'running' ? 'Session in progress' : 'Session ended · Results saved';
+  $('session-phase').textContent = current.phase === 'waiting' ? t('Waiting room open · Questions appear when you start the test.') : current.phase === 'running' ? 'Session in progress' : t('Session ended · Results saved');
   $('test-start').hidden = current.phase !== 'waiting'; $('session-end').hidden = current.phase === 'ended';
   $('extend-time').hidden=current.phase!=='running'||!current.deadlineAt;
   if(current.deadlineAt && (!professorTimerSnapshot||professorTimerSnapshot.id!==current.id||professorTimerSnapshot.serverNow!==current.serverNow||professorTimerSnapshot.deadlineAt!==current.deadlineAt))professorTimerSnapshot={id:current.id,serverNow:current.serverNow||Date.now(),deadlineAt:current.deadlineAt,receivedAt:performance.now()};renderProfessorTimer();
@@ -335,27 +346,27 @@ function renderTable(container, session) {
   const showScores=!isLaunch||$('launch-show-scores-live').checked;
   const table = document.createElement('table');
   if(session.mode === 'calculator') {
-    table.innerHTML='<thead><tr><th>Student number</th><th>Name</th><th>Status</th><th>Review</th></tr></thead>';
+    table.innerHTML='<thead><tr><th>'+t('Student number')+'</th><th>'+t('Name')+'</th><th>'+t('Status')+'</th><th>'+t('Review')+'</th></tr></thead>';
     const body=document.createElement('tbody');
     for(const s of session.students) {
       const row=document.createElement('tr');
-      for(const value of [s.number,masked?'••••••':s.name,s.failed ? 'FAILED' : s.completed?'Completed and closed':s.status === 'green' ? 'Active' : 'Inactive']) { const cell=document.createElement('td'); cell.textContent=value; row.append(cell); }
-      const review=document.createElement('td');if(s.failed && session.phase==='running')review.append(button('Unlock & continue',()=>unlockStudent(session,s)));row.append(review);body.append(row);
+      for(const value of [s.number,masked?'••••••':s.name,s.failed ? t('FAILED') : s.completed?'Completed and closed':s.status === 'green' ? t('Active') : t('Inactive')]) { const cell=document.createElement('td'); cell.textContent=value; row.append(cell); }
+      const review=document.createElement('td');if(s.failed && session.phase==='running')review.append(button(t('Unlock & continue'),()=>unlockStudent(session,s)));row.append(review);body.append(row);
     }
     table.append(body); container.replaceChildren(table); return;
   }
-  table.innerHTML = '<thead><tr><th>Student number</th><th>Name</th><th>Status</th><th>Student progress</th>'+(showScores?'<th>Score</th><th>Original score</th>':'')+'<th>Review</th></tr></thead>';
+  table.innerHTML = '<thead><tr><th>'+t('Student number')+'</th><th>'+t('Name')+'</th><th>'+t('Status')+'</th><th>'+t('Student progress')+'</th>'+(showScores?'<th>'+t('Score')+'</th><th>'+t('Original score')+'</th>':'')+'<th>'+t('Review')+'</th></tr></thead>';
   const tbody = document.createElement('tbody');
   for (const s of [...session.students].sort((a,b) => a.number.localeCompare(b.number, undefined, { numeric:true }))) {
     const tr = document.createElement('tr');
     for (const text of [s.number,masked?'••••••':s.name]) { const td=document.createElement('td'); td.textContent=text; tr.append(td); }
-    const state=document.createElement('td'); const pill=document.createElement('span'); pill.className=`pill ${s.status === 'red' ? 'red' : ''}`; pill.textContent=s.failed ? 'FAILED' : s.completed ? 'Completed and closed' : s.result ? 'Test Submitted' : s.status === 'green' ? 'Active' : 'Inactive'; state.append(pill); tr.append(state);
-    const progress=document.createElement('td');progress.textContent=s.progress?`${s.result?'Finished':s.progress.question?'Question '+s.progress.question+' of '+s.progress.total:'Not started'} · ${s.progress.answered}/${s.progress.total} answered`:'—';tr.append(progress);
-    if(showScores) for (const text of [s.score === null ? 'Pending' : `${s.score} / ${s.total}${s.result ? ` · ${s.result.percentage}%` : ''}`, s.result ? `${s.result.originalScore} / ${s.total}` : '—']) { const td=document.createElement('td'); td.textContent=text; tr.append(td); }
+    const state=document.createElement('td'); const pill=document.createElement('span'); pill.className=`pill ${s.status === 'red' ? 'red' : ''}`; pill.textContent=s.failed ? t('FAILED') : s.completed ? 'Completed and closed' : s.result ? 'Test Submitted' : s.status === 'green' ? t('Active') : t('Inactive'); state.append(pill); tr.append(state);
+    const progress=document.createElement('td');progress.textContent=s.progress?`${s.result?t('Finished'):s.progress.question?t('Question {number} of {total}',{number:s.progress.question,total:s.progress.total}):t('Not started')} · ${t('{answered}/{total} answered',s.progress)}`:'—';tr.append(progress);
+    if(showScores) for (const text of [s.score === null ? t('Pending') : `${s.score} / ${s.total}${s.result ? ` · ${s.result.percentage}%` : ''}`, s.result ? `${s.result.originalScore} / ${s.total}` : '—']) { const td=document.createElement('td'); td.textContent=text; tr.append(td); }
     const review=document.createElement('td');
-    if(s.failed && !s.finalized && (s.result || session.phase==='running')) review.append(button(s.result?'Override FAIL':'Unlock & continue',()=>unlockStudent(session,s)));
-    if(s.failed && !s.result)review.append(button('Submit Fail score',()=>submitFail(session,s),'danger'));
-    const details=document.createElement('details'); const summary=document.createElement('summary'); summary.textContent=`${s.events.length} monitoring events`; details.append(summary);
+    if(s.failed && !s.finalized && (s.result || session.phase==='running')) review.append(button(s.result?t('Override FAIL'):t('Unlock & continue'),()=>unlockStudent(session,s)));
+    if(s.failed && !s.result)review.append(button(t('Submit Fail score'),()=>submitFail(session,s),'danger'));
+    const details=document.createElement('details'); const summary=document.createElement('summary'); summary.textContent=t('{count} monitoring events',{count:s.events.length}); details.append(summary);
     const list=document.createElement('ul'); for (const e of s.events) { const li=document.createElement('li'); li.textContent=`${new Date(e.at).toLocaleTimeString()} · ${e.type}${e.reason ? ` · ${e.reason}` : ''}`; list.append(li); } details.append(list); review.append(details); tr.append(review); tbody.append(tr);
   }
   table.append(tbody); container.replaceChildren(table);
@@ -374,7 +385,7 @@ async function deleteResults(session) {
   await api(`/sessions/${session.id}`, 'DELETE');
   if(historySession?.id === session.id) closeResults();
   if(current?.id === session.id) { current=null; $('dashboard').hidden=true; $('calculator-card').hidden=false; }
-  await refresh(); if(!$('results').hidden)notice('Results moved to Trash.');
+  await refresh(); if(!$('results').hidden)notice(t('Results moved to Trash.'));
 }
 $('result-delete').onclick=action(()=>deleteResults(historySession));
 async function downloadFile(path,fallback) {
@@ -410,7 +421,7 @@ function renderAnswerGrid(data){
   const body=table.createTBody();
   for(const student of data.students){
     const row=body.insertRow();
-    for(const value of [student.number,student.name,student.submitted?'Submitted':data.phase==='ended'?'No submission':'Draft'])row.insertCell().textContent=value;
+    for(const value of [student.number,student.name,student.submitted?t('Submitted'):data.phase==='ended'?t('No submission'):t('Draft')])row.insertCell().textContent=value;
     for(const answer of student.answers){
       const cell=row.insertCell();cell.className='answer-'+answer.status;
       const state=answer.status==='correct'?'Correct':answer.status==='incorrect'?'Incorrect':'Unanswered';
@@ -420,7 +431,7 @@ function renderAnswerGrid(data){
     }
   }
   root.replaceChildren();
-  if(data.students.length)root.append(table);else root.textContent='No students joined.';
+  if(data.students.length)root.append(table);else root.textContent=t('No students joined.');
 }
 async function refreshAnswerGrid(){
   if(!detailsVisible())return;
@@ -443,7 +454,7 @@ $('result-details-tab').onclick=action(async()=>{
   $('result-details').hidden=false;$('result-students').hidden=true;
   $('result-summary-tab').setAttribute('aria-pressed','false');$('result-details-tab').setAttribute('aria-pressed','true');
   detailsSnapshot='';detailsPhase=null;
-  $('result-detail-rows').textContent='Loading detailed results…';
+  $('result-detail-rows').textContent=t('Loading detailed results…');
   await refreshAnswerGrid();
 });
 setInterval(()=>{if(detailsPhase!=='ended')void refreshAnswerGrid();},2000);
@@ -468,7 +479,7 @@ async function loadSignedInWorkspace() {
     settings.setAccount(verified);$('account-name').textContent=account.email;$('login').hidden=true;$('workspace').hidden=false;$('signout').hidden=false;
     socket.connect();
     try {
-      const onboarding=await api('/onboarding','POST',{});
+      const onboarding=await api('/onboarding','POST',{language:window.examioLanguage.current});
       await refresh(); await watch();
       if(generation===accountGeneration)tour.offer(onboarding);
     } catch(e) { if(generation===accountGeneration)notice(e.message); }
@@ -485,22 +496,22 @@ async function initAuth() {
     if (event==='TOKEN_REFRESHED') setTimeout(()=>{if(account)watch().catch(e=>notice(e.message));},0);
     if (event==='SIGNED_OUT') { clearPrivateWorkspace(); account=null; $('workspace').hidden=true; $('login').hidden=false; $('signout').hidden=true; }
   });
-  $('login-form').onsubmit=async e=> { e.preventDefault(); const {error}=await auth.auth.signInWithPassword({email:$('email').value,password:$('password').value}); $('auth-message').textContent=error?.message || ''; };
-  $('signup').onclick=async()=> { const {error}=await auth.auth.signUp({email:$('email').value,password:$('password').value,options:{emailRedirectTo:location.origin+'/professor.html'}}); $('auth-message').textContent=error?.message || 'Check your email to confirm your account, then sign in.'; };
+  $('login-form').onsubmit=async e=> { e.preventDefault(); const {error}=await auth.auth.signInWithPassword({email:$('email').value,password:$('password').value}); $('auth-message').textContent=error?.t(message || ''); };
+  $('signup').onclick=async()=> { const {error}=await auth.auth.signUp({email:$('email').value,password:$('password').value,options:{emailRedirectTo:location.origin+'/professor.html'}}); $('auth-message').textContent=error?.message || t('Check your email to confirm your account, then sign in.'); };
   $('google').onclick=async()=> { const {error}=await auth.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+'/professor.html'}}); if(error) $('auth-message').textContent=error.message; };
   $('signout').onclick=async()=> { await auth.auth.signOut(); };
-  $('reset-password').onclick=async()=> { const {error}=await auth.auth.resetPasswordForEmail($('email').value,{redirectTo:location.origin+'/professor.html'}); $('auth-message').textContent=error?.message || 'Check your email for a password reset link.'; };
-  $('new-password-form').onsubmit=async e=> { e.preventDefault(); const {error}=await auth.auth.updateUser({password:$('new-password').value}); $('auth-message').textContent=error?.message || 'Password updated.'; if(!error) { recoveringPassword=false; $('new-password-form').hidden=true; $('login-form').hidden=false; $('google').hidden=false; await signedIn(); } };
+  $('reset-password').onclick=async()=> { const {error}=await auth.auth.resetPasswordForEmail($('email').value,{redirectTo:location.origin+'/professor.html'}); $('auth-message').textContent=error?.message || t('Check your email for a password reset link.'); };
+  $('new-password-form').onsubmit=async e=> { e.preventDefault(); const {error}=await auth.auth.updateUser({password:$('new-password').value}); $('auth-message').textContent=error?.message || t('Password updated.'); if(!error) { recoveringPassword=false; $('new-password-form').hidden=true; $('login-form').hidden=false; $('google').hidden=false; await signedIn(); } };
   if ((await auth.auth.getSession()).data.session) await signedIn();
 }
 initAuth().catch(e=>$('auth-message').textContent=e.message);
 
 function renderFolderOptions(selected=$('tb-folder').value) {
- for(const id of ['tb-folder','new-folder-choice']){const value=id==='tb-folder'?selected:$(id).value;$(id).replaceChildren(...[{id:'',name:'Uncategorized Test'},...folders].map(f=>{const o=document.createElement('option');o.value=f.id;o.textContent=f.name;return o;}));$(id).value=value;}
+ for(const id of ['tb-folder','new-folder-choice']){const value=id==='tb-folder'?selected:$(id).value;$(id).replaceChildren(...[{id:'',name:t('Uncategorized Test')},...folders].map(f=>{const o=document.createElement('option');o.value=f.id;o.textContent=f.name;return o;}));$(id).value=value;}
 }
 function folderActions(folder) {
   const actions=document.createElement('span');actions.className='folder-inline-actions';
-  actions.append(button('Rename',()=>openEntry({title:'Rename folder',value:folder.name,max:80},async name=>{await api('/folders/'+folder.id,'PATCH',{name});await refresh();})),button('Delete folder',async()=>{
+  actions.append(button(t('Rename'),()=>openEntry({title:t('Rename folder'),value:folder.name,max:80},async name=>{await api('/folders/'+folder.id,'PATCH',{name});await refresh();})),button(t('Delete folder'),async()=>{
     if(!confirm('Delete “'+folder.name+'”? Its tests will move to Uncategorized Test.'))return;
     await api('/folders/'+folder.id,'DELETE');await refresh();
   },'danger'));
@@ -508,14 +519,14 @@ function folderActions(folder) {
   return actions;
 }
 let launchTest=null;
-function openLaunch(test){launchTest=test;$('launch-test-title').textContent=test.title;$('launch-duration').value='0';$('launch-show-scores').checked=true;$('launch-shuffle').checked=false;$('launch-corrections').checked=false;$('launch-error').textContent='';$('launch-dialog').showModal();}
+function openLaunch(test){$('launch-language').value=window.examioLanguage.current;launchTest=test;$('launch-test-title').textContent=test.title;$('launch-duration').value='0';$('launch-show-scores').checked=true;$('launch-shuffle').checked=false;$('launch-corrections').checked=false;$('launch-error').textContent='';$('launch-dialog').showModal();}
 $('launch-cancel').onclick=()=> $('launch-dialog').close();
-$('launch-form').onsubmit=async e=>{e.preventDefault();$('launch-confirm').disabled=true;try{await launchSession({testId:launchTest.id,durationMinutes:Number($('launch-duration').value),showScores:$('launch-show-scores').checked,shuffleAnswers:$('launch-shuffle').checked,showCorrections:$('launch-corrections').checked});$('launch-dialog').close();}catch(e){$('launch-error').textContent=e.message;}finally{$('launch-confirm').disabled=false;}};
+$('launch-form').onsubmit=async e=>{e.preventDefault();$('launch-confirm').disabled=true;try{await launchSession({testId:launchTest.id,language:$('launch-language').value,durationMinutes:Number($('launch-duration').value),showScores:$('launch-show-scores').checked,shuffleAnswers:$('launch-shuffle').checked,showCorrections:$('launch-corrections').checked});$('launch-dialog').close();}catch(e){$('launch-error').textContent=e.message;}finally{$('launch-confirm').disabled=false;}};
 $('extend-time').onclick=action(async()=>{const updated=await api('/sessions/'+current.id+'/extend','POST',{});updateSession(updated);notice('Added 1 minute (60 seconds). New end time: '+new Date(updated.deadlineAt).toLocaleTimeString());});
 let entryAction=null;
 function closeEntry(){entryAction=null;if($('entry-dialog').open)$('entry-dialog').close();}
 function openEntry({title,label='Name',value='',max=120,help='',save='Save'},fn){
- $('entry-title').textContent=title;$('entry-label').firstChild.textContent=label;$('entry-value').value=value;$('entry-value').maxLength=max;$('entry-help').textContent=help;$('entry-error').textContent='';$('entry-save').textContent=save;$('entry-save').disabled=false;$('entry-cancel').disabled=false;entryAction=fn;$('entry-dialog').showModal();$('entry-value').focus();
+ $('entry-title').textContent=t(title);$('entry-label').firstChild.textContent=t(label);$('entry-value').value=value;$('entry-value').maxLength=max;$('entry-help').textContent=t(help);$('entry-error').textContent='';$('entry-save').textContent=t(save);$('entry-save').disabled=false;$('entry-cancel').disabled=false;entryAction=fn;$('entry-dialog').showModal();$('entry-value').focus();
 }
 $('entry-cancel').onclick=closeEntry;$('entry-dialog').addEventListener('cancel',()=>{entryAction=null;});
 $('entry-form').onsubmit=async e=>{e.preventDefault();const value=$('entry-value').value.trim();if(!value)return;const fn=entryAction,generation=accountGeneration;if(!fn)return;$('entry-save').disabled=true;$('entry-cancel').disabled=true;
@@ -523,37 +534,37 @@ $('entry-form').onsubmit=async e=>{e.preventDefault();const value=$('entry-value
 };
 $('new-folder').onclick=()=>openEntry({title:'New class folder',max:80},async name=>{await api('/folders','POST',{name});await refresh();});
 function updateSession(updated){if(current?.id===updated.id){current=updated;renderDashboard();}if(historySession?.id===updated.id){historySession=updated;renderResults();}}
-function unlockStudent(session,student){openEntry({title:student.result?'Override FAIL':'Unlock & continue',label:'Reason',max:500,help:'Review '+student.name+'’s incident, then record why you are allowing continuation.',save:student.result?'Override FAIL':'Unlock & continue'},async reason=>updateSession(await api('/sessions/'+session.id+'/override','POST',{studentId:student.id,reason})));}
-function submitFail(session,student){openEntry({title:'Submit Fail score',label:'Reason',value:'Confirmed by professor',max:500,help:'Finalize '+student.name+' at 0%. This closes their attempt and stops their connection. Their saved answers and original score remain in the private record.',save:'Submit Fail score'},async reason=>updateSession(await api('/sessions/'+session.id+'/finalize-fail','POST',{studentId:student.id,reason})));}
+function unlockStudent(session,student){openEntry({title:student.result?t('Override FAIL'):t('Unlock & continue'),label:'Reason',max:500,help:'Review '+student.name+'’s incident, then record why you are allowing continuation.',save:student.result?t('Override FAIL'):t('Unlock & continue')},async reason=>updateSession(await api('/sessions/'+session.id+'/override','POST',{studentId:student.id,reason})));}
+function submitFail(session,student){openEntry({title:t('Submit Fail score'),label:'Reason',value:'Confirmed by professor',max:500,help:'Finalize '+student.name+' at 0%. This closes their attempt and stops their connection. Their saved answers and original score remain in the private record.',save:t('Submit Fail score')},async reason=>updateSession(await api('/sessions/'+session.id+'/finalize-fail','POST',{studentId:student.id,reason})));}
 function renameResults(session){openEntry({title:session.phase==='ended'?'Rename results':'Rename session',value:session.title,help:'This name will be used for this session, its results and Excel filename. The Library test stays unchanged.'},async title=>{updateSession(await api('/sessions/'+session.id,'PATCH',{title}));await refresh();});}
 $('result-rename').onclick=()=>renameResults(historySession);$('session-rename').onclick=()=>renameResults(current);
 function openImport(mode){
- creationVersion++;importMode=mode;$('import-panel').hidden=false;$('ai-options').hidden=false;$('generation-settings').hidden=mode!=='generate';$('import-local').hidden=mode!=='import';$('import-heading').textContent=mode==='generate'?'Create with AI':'Upload a test · AI assisted';
- $('import-help').textContent=mode==='generate'?'Create new questions from source material. AI proposes answer keys for your review.':'Upload or paste an existing test. AI organizes the questions and determines missing correct answers, preserving recognized wording, choices, points and supplied keys. Only uncertain answers need extra attention.';
+ creationVersion++;importMode=mode;$('import-panel').hidden=false;$('ai-options').hidden=false;$('generation-settings').hidden=mode!=='generate';$('import-local').hidden=mode!=='import';$('import-heading').textContent=mode==='generate'?'Create with AI':t('Upload a test · AI assisted');
+ $('import-help').textContent=mode==='generate'?t('Create new questions from source material. AI proposes answer keys for your review.'):t('Upload or paste an existing test. AI organizes the questions and determines missing correct answers, preserving recognized wording, choices, points and supplied keys. Only uncertain answers need extra attention.');
  $('ai-consent-text').textContent=mode==='generate'?'Send this source to OpenAI to generate questions and answers. API usage charges apply.':'Send this test material to OpenAI to organize questions and determine answers. API usage charges apply.';
- $('ai-config-note').textContent=aiConfigured?'':'AI setup is required in Development. You can still import an existing test without AI.';$('import-status').textContent='';$('import-submit').textContent=mode==='import'?'Prepare with AI':'Prepare draft';$('import-submit').disabled=!aiConfigured;$('import-panel').scrollIntoView({behavior:'smooth'});
+ $('ai-config-note').textContent=aiConfigured?'':t('AI setup is required in Development. You can still import an existing test without AI.');$('import-status').textContent='';$('import-submit').textContent=mode==='import'?t('Prepare with AI'):'Prepare draft';$('import-submit').disabled=!aiConfigured;$('import-panel').scrollIntoView({behavior:'smooth'});
 }
 $('import-source').oninput=()=>{if($('import-source').value.trim())$('import-file').value='';};$('import-file').onchange=()=>{if($('import-file').files.length)$('import-source').value='';};
 $('upload-test').onclick=()=>openImport('import');$('create-ai').onclick=()=>openImport('generate');$('import-cancel').onclick=()=>{creationVersion++;$('import-panel').hidden=true;};
 async function prepareImport(useAI){
  const mode=importMode,version=creationVersion,generation=accountGeneration;
- if(useAI&&!$('ai-consent').checked){$('import-status').textContent='Confirm that this material may be sent to OpenAI.';return;}
+ if(useAI&&!$('ai-consent').checked){$('import-status').textContent=t('Confirm that this material may be sent to OpenAI.');return;}
  const data=new FormData(),file=$('import-file').files[0],source=$('import-source').value;
  if(file&&file.size>uploadMaxBytes){const mb=Math.ceil(file.size/1024/1024*100)/100;$('import-status').textContent='File “'+file.name+'” is too large for the '+(uploadMaxBytes/1024/1024)+' MB limit ('+mb+' MB). Choose a smaller file or paste its text.';return;}
- if(!file&&!source.trim()){$('import-status').textContent='Choose a PDF or DOCX file, or paste source text.';return;}
+ if(!file&&!source.trim()){$('import-status').textContent=t('Choose a PDF or DOCX file, or paste source text.');return;}
  if(file)data.append('file',file);else data.append('source',source);
  if(mode==='generate')for(const key of ['count','types','difficulty'])data.append(key,$('ai-'+key).value);
- const route=mode==='generate'?'generate':useAI?'import-ai':'import';$('import-submit').disabled=true;$('import-local').disabled=true;$('import-status').textContent=mode==='generate'?'AI is preparing questions and answers from your material…':useAI?'AI is organizing questions and determining answers…':'Reading your test…';
+ const route=mode==='generate'?'generate':useAI?'import-ai':'import';$('import-submit').disabled=true;$('import-local').disabled=true;$('import-status').textContent=mode==='generate'?t('AI is preparing questions and answers from your material…'):useAI?t('AI is organizing questions and determining answers…'):t('Reading your test…');
  try{const response=await fetch('/api/'+route,{method:'POST',headers:{Authorization:'Bearer '+await token()},body:data});const result=await response.json();if(generation!==accountGeneration||version!==creationVersion)return;if(!response.ok)throw new Error(result.error||'Could not prepare draft.');if(!result.test?.questions?.length)throw new Error('No questions were recognized. Check the format and try again.');
   const title=$('new-title').value.trim(),folderId=$('new-folder-choice').value;openBuilder({...result.test,title:title||result.test.title,folderId});editingId=null;$('draft-review').textContent=[result.test.questions.length+' questions prepared. Review the proposed answers before saving.',...(result.warnings||[])].join(' ');$('import-panel').hidden=true;$('import-source').value='';$('import-file').value='';
  }catch(e){if(generation===accountGeneration&&version===creationVersion)$('import-status').textContent=e.message;}
  finally{if(generation===accountGeneration){$('import-local').disabled=false;if(version===creationVersion)$('import-submit').disabled=!aiConfigured;}}
 }
 $('import-form').onsubmit=action(async e=>{e.preventDefault();await prepareImport(true);});$('import-local').onclick=action(()=>prepareImport(false));
-$('tb-answer-ai').onclick=()=>{if(aiConfigured)$('answer-ai-dialog').showModal();else $('answer-ai-status').textContent='AI setup is required in Development.';};$('answer-ai-cancel').onclick=()=> $('answer-ai-dialog').close();
+$('tb-answer-ai').onclick=()=>{if(aiConfigured)$('answer-ai-dialog').showModal();else $('answer-ai-status').textContent=t('AI setup is required in Development.');};$('answer-ai-cancel').onclick=()=> $('answer-ai-dialog').close();
 $('answer-ai-confirm').onclick=async()=>{
- $('answer-ai-dialog').close();const version=creationVersion,generation=accountGeneration;$('answer-ai-status').textContent='AI is determining missing answers…';els.tbQuestions.inert=true;for(const id of ['tb-start-btn','tb-add-q-btn','tb-answer-ai'])$(id).disabled=true;
- try{const result=await api('/answer-key','POST',{test:{title:els.tbTitle.value.trim(),questions:tbQuestions}});if(version!==creationVersion||generation!==accountGeneration||$('test-builder').hidden)return;tbQuestions=result.test.questions;renderTestBuilder();$('draft-review').textContent=(result.warnings||[]).join(' ');$('answer-ai-status').textContent='Proposed answer keys are ready. Review, then save.';}
+ $('answer-ai-dialog').close();const version=creationVersion,generation=accountGeneration;$('answer-ai-status').textContent=t('AI is determining missing answers…');els.tbQuestions.inert=true;for(const id of ['tb-start-btn','tb-add-q-btn','tb-answer-ai'])$(id).disabled=true;
+ try{const result=await api('/answer-key','POST',{test:{title:els.tbTitle.value.trim(),questions:tbQuestions}});if(version!==creationVersion||generation!==accountGeneration||$('test-builder').hidden)return;tbQuestions=result.test.questions;renderTestBuilder();$('draft-review').textContent=(result.warnings||[]).join(' ');$('answer-ai-status').textContent=t('Proposed answer keys are ready. Review, then save.');}
  catch(e){if(version===creationVersion&&generation===accountGeneration)$('answer-ai-status').textContent=e.message;}
  finally{if(version===creationVersion&&generation===accountGeneration){els.tbQuestions.inert=false;for(const id of ['tb-start-btn','tb-add-q-btn'])$(id).disabled=false;$('tb-answer-ai').disabled=!aiConfigured;}}
 };
@@ -571,7 +582,7 @@ function imageControl(target,labelText) {
   const status=document.createElement('p');status.setAttribute('role','status');panel.append(status);
   if(target.image){
     const preview=document.createElement('img');preview.className='tb-image';preview.alt=labelText;preview.src=target.image;
-    panel.append(preview,button('Remove image',()=>{delete target.image;renderTestBuilder();}));
+    panel.append(preview,button(t('Remove image'),()=>{delete target.image;renderTestBuilder();}));
   }
   picker.onchange=async()=>{
     const file=picker.files[0];
@@ -604,16 +615,16 @@ function renderTestBuilder() {
   const header=document.createElement('div');header.className='tb-q-header';const handle=document.createElement('span');handle.textContent='⠿ Q'+(i+1);handle.draggable=true;handle.className='drag-handle';handle.title='Drag to reorder';handle.ondragstart=e=>{draggingQuestion=i;e.dataTransfer.setData('text/plain',String(i));e.dataTransfer.effectAllowed='move';};handle.ondragend=()=>draggingQuestion=null;
   card.ondragover=e=> {if(draggingQuestion!==null)e.preventDefault();};card.ondrop=e=> {e.preventDefault();if(draggingQuestion!==null)moveQuestion(draggingQuestion,i);draggingQuestion=null;};header.append(handle);
   const up=button('↑',()=>moveQuestion(i,i-1));up.disabled=i===0;up.setAttribute('aria-label','Move question '+(i+1)+' up');const down=button('↓',()=>moveQuestion(i,i+1));down.disabled=i===tbQuestions.length-1;down.setAttribute('aria-label','Move question '+(i+1)+' down');header.append(up,down);
-  const pointsLabel=document.createElement('label');pointsLabel.textContent='Points';const points=document.createElement('input');points.type='number';points.className='tb-points';points.min='0.01';points.max='1000';points.step='0.01';points.value=q.points??1;points.setAttribute('aria-label','Question '+(i+1)+' points');points.oninput=()=>q.points=Number(points.value);pointsLabel.append(points);header.append(pointsLabel);
-  if(tbQuestions.length>1)header.append(button('Remove question',()=>{tbQuestions.splice(i,1);renderTestBuilder();}));card.append(header);
+  const pointsLabel=document.createElement('label');pointsLabel.textContent=t('Points');const points=document.createElement('input');points.type='number';points.className='tb-points';points.min='0.01';points.max='1000';points.step='0.01';points.value=q.points??1;points.setAttribute('aria-label','Question '+(i+1)+' points');points.oninput=()=>q.points=Number(points.value);pointsLabel.append(points);header.append(pointsLabel);
+  if(tbQuestions.length>1)header.append(button(t('Remove question'),()=>{tbQuestions.splice(i,1);renderTestBuilder();}));card.append(header);
   const type=document.createElement('select');type.className='tb-q-type';type.setAttribute('aria-label','Question '+(i+1)+' type');for(const [value,label] of [['mc','Multiple choice'],['blank','Fill in the blank']]){const o=document.createElement('option');o.value=value;o.textContent=label;type.append(o);}type.value=q.type||'mc';type.onchange=()=>{q.type=type.value;if(q.type==='blank'){q.acceptedAnswers=q.acceptedAnswers||[];q.caseSensitive=q.caseSensitive||false;}else if(!q.options){q.options=[{id:q.id+'_a',text:''},{id:q.id+'_b',text:''}];q.correctOptionId='';}renderTestBuilder();};card.append(type);
   const text=document.createElement('input');text.className='tb-q-text';text.placeholder='Question text…';text.setAttribute('aria-label','Question '+(i+1)+' text');text.maxLength=1000;text.value=q.text;text.oninput=()=>q.text=text.value;card.append(text,imageControl(q,'Question image (optional)'));
   if(q.type==='blank') {
-   const label=document.createElement('label');label.textContent='Accepted answers (one per line)';const answers=document.createElement('textarea');answers.className='tb-accepted';answers.rows=3;answers.value=(q.acceptedAnswers||[]).join('\n');answers.oninput=()=>q.acceptedAnswers=answers.value.split('\n').map(s=>s.trim()).filter(Boolean);label.append(answers);card.append(label);
+   const label=document.createElement('label');label.textContent=t('Accepted answers (one per line)');const answers=document.createElement('textarea');answers.className='tb-accepted';answers.rows=3;answers.value=(q.acceptedAnswers||[]).join('\n');answers.oninput=()=>q.acceptedAnswers=answers.value.split('\n').map(s=>s.trim()).filter(Boolean);label.append(answers);card.append(label);
    const sensitive=document.createElement('label');const check=document.createElement('input');check.type='checkbox';check.checked=q.caseSensitive;check.onchange=()=>q.caseSensitive=check.checked;sensitive.append(check,' Case sensitive');card.append(sensitive);
   } else {
-   (q.options||[]).forEach((o,j)=>{const row=document.createElement('div');row.className='tb-option-row';const radio=document.createElement('input');radio.type='radio';radio.name=q.id;radio.checked=q.correctOptionId===o.id;radio.setAttribute('aria-label','Correct answer '+String.fromCharCode(65+j));radio.onchange=()=>q.correctOptionId=o.id;const input=document.createElement('input');input.className='tb-opt-text';input.maxLength=500;input.placeholder='Option '+String.fromCharCode(65+j);input.value=o.text;input.oninput=()=>o.text=input.value;row.append(radio,input);if(q.options.length>2)row.append(button('Remove option',()=>{q.options.splice(j,1);if(q.correctOptionId===o.id)q.correctOptionId='';renderTestBuilder();}));card.append(row,imageControl(o,'Image for option '+String.fromCharCode(65+j)+' (optional)'));});
-   if(q.options.length<5)card.append(button('+ Add Option',()=>{q.options.push({id:q.id+'_'+crypto.randomUUID(),text:''});renderTestBuilder();}));
+   (q.options||[]).forEach((o,j)=>{const row=document.createElement('div');row.className='tb-option-row';const radio=document.createElement('input');radio.type='radio';radio.name=q.id;radio.checked=q.correctOptionId===o.id;radio.setAttribute('aria-label','Correct answer '+String.fromCharCode(65+j));radio.onchange=()=>q.correctOptionId=o.id;const input=document.createElement('input');input.className='tb-opt-text';input.maxLength=500;input.placeholder='Option '+String.fromCharCode(65+j);input.value=o.text;input.oninput=()=>o.text=input.value;row.append(radio,input);if(q.options.length>2)row.append(button(t('Remove option'),()=>{q.options.splice(j,1);if(q.correctOptionId===o.id)q.correctOptionId='';renderTestBuilder();}));card.append(row,imageControl(o,'Image for option '+String.fromCharCode(65+j)+' (optional)'));});
+   if(q.options.length<5)card.append(button(t('+ Add Option'),()=>{q.options.push({id:q.id+'_'+crypto.randomUUID(),text:''});renderTestBuilder();}));
   }
   if(q.answerExplanation){const reason=document.createElement('p');reason.className='answer-rationale';reason.textContent='AI answer rationale: '+q.answerExplanation;card.append(reason);}
   if(q.evidence){const evidence=document.createElement('p');evidence.className='source-evidence';evidence.textContent='Source excerpt: '+q.evidence;card.append(evidence);}els.tbQuestions.append(card);

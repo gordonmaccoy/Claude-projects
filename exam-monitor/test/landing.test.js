@@ -60,6 +60,7 @@ test('carousel rotates counter-clockwise every three seconds and pauses accessib
   let interval = null;
   let intervalDelay = null;
   const window = {
+    examioLanguage: {setup() {}, t: (text, values) => values ? text.replace('{screen}', values.screen) : text},
     matchMedia: () => motion,
     clearInterval() { interval = null; },
     setInterval(callback, delay) { interval = callback; intervalDelay = delay; return 1; }

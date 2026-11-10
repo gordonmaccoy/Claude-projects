@@ -48,9 +48,11 @@ function validateTest(input) {
 }
 
 function launchOptions(input={}) {
+ const language=input.language??'en';
+ if(language!=='en'&&language!=='ko')throw new Error('Invalid session language');
  const durationMinutes=input.durationMinutes??0,showScores=input.showScores??true,shuffleAnswers=input.shuffleAnswers??false,showCorrections=input.showCorrections??false;
  if(!Number.isInteger(durationMinutes)||durationMinutes<0||durationMinutes>360||typeof showScores!=='boolean'||typeof shuffleAnswers!=='boolean'||typeof showCorrections!=='boolean')throw new Error('Invalid launch options');
- return {durationMinutes,showScores,shuffleAnswers,showCorrections};
+ return {durationMinutes,showScores,shuffleAnswers,showCorrections,language};
 }
 function newSession(ownerId, test, now = Date.now(), options={}) {
  const settings=launchOptions(options);
@@ -224,11 +226,11 @@ function override(s, id, professorId, reason, now = Date.now()) {
 }
 function status(st, now) { if(st.completedAt)return 'completed'; if(st.submission) return isFailed(st)?'red':'green'; return isFailed(st) || !st.visible || now - st.lastSeen > 10000 ? 'red' : 'green'; }
 function publicView(s, now = Date.now()) {
-  return { title: s.resultTitle || s.test?.title || 'Classroom calculator', phase: s.phase,deadlineAt:s.deadlineAt||null,
+  return { title: s.resultTitle || s.test?.title || 'Classroom calculator', phase: s.phase,calculator:s.mode==='calculator'&&!s.resultTitle,deadlineAt:s.deadlineAt||null,
     students: s.students.map(st => ({ name: st.name, status: isFailed(st)?'failed':st.completedAt?'completed':st.submission?'submitted':status(st,now) })) };
 }
 function privateView(s, now = Date.now()) {
-  return { id: s.id, mode: s.mode, title: s.resultTitle || s.test?.title || 'Classroom calculator', phase: s.phase,
+  return { id: s.id, mode: s.mode, language:s.language??'en', title: s.resultTitle || s.test?.title || 'Classroom calculator', phase: s.phase,
     durationMinutes:s.durationMinutes||0,deadlineAt:s.deadlineAt||null,showScores:s.showScores!==false,shuffleAnswers:!!s.shuffleAnswers,extensionVersion:s.extensionVersion||0,
     createdAt: s.createdAt, startedAt: s.startedAt, endedAt: s.endedAt, displayToken: s.displayToken,
     students: s.students.map(st => ({ id: st.id, number: st.number, name: st.name, status: status(st, now),
@@ -239,7 +241,7 @@ function privateView(s, now = Date.now()) {
 }
 function studentView(s, st) {
   const internal=result(s,st);const final=internal?{score:internal.score,total:internal.total,percentage:internal.percentage,failed:internal.failed,submittedAt:internal.submittedAt}:null;
-  return { phase: s.phase, mode: s.mode, name: st.name, failed: isFailed(st), completed:Boolean(st.completedAt),terminal:Boolean(st.completedAt||st.submission?.professorFinalized),deadlineAt:s.deadlineAt||null,extensionVersion:s.extensionVersion||0,lastExtension:s.lastExtension?{minutes:s.lastExtension.minutes}:null,
+  return { phase: s.phase, mode: s.mode, language:s.language??'en', name: st.name, failed: isFailed(st), completed:Boolean(st.completedAt),terminal:Boolean(st.completedAt||st.submission?.professorFinalized),deadlineAt:s.deadlineAt||null,extensionVersion:s.extensionVersion||0,lastExtension:s.lastExtension?{minutes:s.lastExtension.minutes}:null,
     test: s.test && s.phase === 'running' && !st.submission ? { title: s.resultTitle || s.test.title,
       questions: s.test.questions.map(q => ({ id: q.id, type:q.type || 'mc', points:q.points??1,text: q.text, ...(q.image?{image:q.image}:{}), ...(q.type === 'blank' ? {} : {options:st.optionOrder?.[q.id]?st.optionOrder[q.id].map(id=>q.options.find(o=>o.id===id)):q.options}) })) } : null,
     ...(final && !final.failed && s.showCorrections===true?{corrections:incorrectAnswers(s,st)}:{}),

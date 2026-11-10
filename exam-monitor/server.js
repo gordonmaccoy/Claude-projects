@@ -66,7 +66,11 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
   }
   api.use(settingsController.router);
   api.get('/me', (req, res) => res.json(req.user));
-  api.post('/onboarding',wrap(async(req,res)=>res.json(await store.initializeOnboarding(req.user.id,require('./onboarding').createStarterTest()))));
+  api.post('/onboarding',wrap(async(req,res)=>res.json(await store.initializeOnboarding(req.user.id,require('./onboarding').createStarterTest(req.body?.language)))));
+  api.post('/practice-test',wrap(async(req,res)=>{
+    const starter=require('./onboarding').createStarterTest(req.body?.language);
+    res.json(await store.saveTest(req.user.id,starter));
+  }));
   api.post('/onboarding/dismiss',wrap(async(req,res)=>{
     const state=await store.dismissOnboarding(req.user.id);
     if(!state)return res.status(409).json({error:'Please reload the workspace before dismissing the tour.'});
@@ -193,6 +197,10 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
     res.send(workbook(session,req.query.detail==='1'));
   }));
   app.use('/api', api);
+  app.get('/session-language/:id',wrap(async(req,res)=>{
+    const session=/^[A-F0-9]{12}$/.test(req.params.id)?await store.getSession(req.params.id):null;
+    res.set('Cache-Control','no-store').json({language:session?.language??'en'});
+  }));
   app.use(express.static(path.join(__dirname, 'public'), { etag: false }));
   app.get('/', (req, res) => res.redirect('/professor.html'));
   app.use((error, req, res, next) => {
