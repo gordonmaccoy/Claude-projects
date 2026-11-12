@@ -87,7 +87,7 @@ window.examioKorean = {
   "Student interface language": "학생 화면 언어",
   "Language": "언어",
   "72 seconds · On-screen instructions and music": "72초 · 화면 안내 및 음악",
-  "A better classroom test day": "더 편리한 강의실 시험",
+  "Seamless online testing & monitoring": "간편한 온라인 시험 및 모니터링",
   "AI-Assisted Test Creation": "AI 시험 제작 지원",
   "Choose a test from your library and open the classroom display on your projector.": "라이브러리에서 시험을 선택하고 프로젝터에 강의실 화면을 띄우세요.",
   "Classroom display": "강의실 화면",
