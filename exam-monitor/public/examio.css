@@ -20,6 +20,8 @@
 .examio-brand small { font-size: .54rem; font-weight: 800; letter-spacing: .14em; white-space: nowrap; }
 .examio-brand i { color: #25aa42; font-style: normal; margin: 0 .1rem; }
 .language-bar { display: flex; justify-content: flex-end; padding: .5rem 1rem; }
+.policy-links { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center; padding: 1rem; font: .875rem/1.5 var(--examio-font); }
+.policy-links a { color: var(--examio-action); }
 [data-language-switch] {
   width: auto;
   padding: .4rem .55rem;

@@ -1,0 +1,36 @@
+.policy-page {
+  margin: 0;
+  color: var(--examio-ink);
+  background: var(--examio-paper);
+  font: 1rem/1.7 var(--examio-font);
+}
+.policy-page header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+  padding: 1.5rem max(1.25rem, calc((100% - 64rem) / 2));
+  background: var(--examio-white);
+  border-bottom: 1px solid var(--examio-line);
+}
+.policy-page nav, .policy-page footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+}
+.policy-page main {
+  max-width: 48rem;
+  margin: 2rem auto;
+  padding: clamp(1.25rem, 4vw, 3rem);
+  background: var(--examio-white);
+  border: 1px solid var(--examio-line);
+  border-radius: 1rem;
+}
+.policy-page h1 { font-size: clamp(2rem, 6vw, 2.75rem); line-height: 1.2; }
+.policy-page h2 { font-size: 1.3rem; margin-top: 2rem; line-height: 1.4; }
+.policy-page a { color: var(--examio-action); text-underline-offset: .2em; }
+.policy-page a:focus-visible { outline: 3px solid var(--examio-action); outline-offset: 4px; }
+.policy-date { color: var(--examio-muted); }
+.policy-page footer { justify-content: center; padding: 1.5rem; }
+@media (max-width: 540px) { .policy-page main { margin: 1rem .75rem; } }
