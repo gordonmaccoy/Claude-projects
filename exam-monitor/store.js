@@ -10,6 +10,7 @@ function createStore(pool) {
     async init() {
       await accounts.init();
       await sharing.init();
+      await games.init();
       await pool.query(`CREATE TABLE IF NOT EXISTS onscreen_v2_onboarding (
         owner_id TEXT PRIMARY KEY, data JSONB NOT NULL
       )`);
@@ -171,6 +172,7 @@ function createStore(pool) {
   const createSession=store.createSession;store.createSession=s=>accounts.withOwner(s.ownerId,()=>createSession(s));
   const mutate=store.mutate;store.mutate=async(id,fn)=>{const owner=(await pool.query('SELECT owner_id FROM onscreen_v2_sessions WHERE id=$1',[id])).rows[0]?.owner_id;if(!owner)throw new Error('Session not found');return accounts.withOwner(owner,()=>mutate(id,fn));};
   const sharing=require('./sharing-store').createSharingStore(pool,accounts,store);
-  return Object.assign(store,accounts.methods,sharing.methods);
+  const games=require('./game-store').createGameStore(pool,accounts);
+  return Object.assign(store,accounts.methods,sharing.methods,games.methods);
 }
 module.exports = { createStore };

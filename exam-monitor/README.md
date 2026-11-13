@@ -72,3 +72,14 @@ and no client policies; these tables are not intended for direct Supabase Data A
 The existing one-replica server architecture is unchanged.
 
 Run `node --test test/sharing*.test.js` for persistence, HTTP and UI-controller tests.
+
+## Live game mode
+Open **Games** from the professor workspace. The separate Game Library supports multiple-choice games, question timers, explicit copies to/from the Test Library and optional pre-question media. Copying to tests omits game media/timers and uses one academic point per question; unsupported test question types require explicit compatible-only copying.
+
+Players join `/game-player.html` by six-digit PIN or the host QR code, select an avatar and nickname, and keep their browser resume token to reconnect without losing points. A new device requires a teacher-approved recovery code. Nicknames are not authentication. New entrants cannot join after the game starts. Teacher controls reveal/leaderboard/next; all-answer finish counts disconnected participants until timeout.
+
+Scores use the published classic single-select Kahoot time formula (under 500ms: 1000; otherwise rounded `1000*(1-elapsed/duration/2)`), with zero for incorrect/late responses. Server receipt timing is authoritative; network/device delays mean this is not millisecond-accurate cross-device fairness. Temporary game data is separate from academic results, survives process restart, and expires after 24 hours without meaningful activity. Closing deletes it. No saved reports or gradebook changes.
+
+Optional media uses HTTPS direct image/audio/video URLs or supported YouTube URLs. It is loaded on host/display only, not student phones. Third-party media may be unavailable, blocked, or unsupported by a browser; teachers can continue without it. No media server download/upload service is added. Native audio/video controls are teacher-operated. Question images are embedded as in tests.
+
+Verification: `npm test`, `npm run build`, `npm run check`; `npm run test:game-ui` exercises the game with an installed Playwright browser (optional `CHROME_BIN` executable path). Requires the existing single-server deployment model; polling does not add multi-replica coordination.

@@ -261,6 +261,9 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
     try{res.json(await exportMailer.send({session,user:req.user,email:req.user.email,detail:req.body.detail,requestId:req.body.requestId}));}
     catch(error){res.status(error.status||502).json({error:error.message});}
   }));
+  const gameController=require('./game-routes').createGameController({store,origin});
+  api.use(gameController.api);
+  app.use('/game-api',gameController.publicApi);
   app.use('/api', api);
   app.get('/session-language/:id',wrap(async(req,res)=>{
     const session=/^[A-F0-9]{12}$/.test(req.params.id)?await store.getSession(req.params.id):null;
@@ -389,11 +392,13 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
     finally { sweeping = false; }
   }
   const timer = sweepInterval ? setInterval(tick, sweepInterval) : null;
+  let gameSweeping=false;
+  const gameTimer=sweepInterval?setInterval(async()=>{if(gameSweeping)return;gameSweeping=true;try{await gameController.tick();}catch(error){console.error('Game storage unavailable:',error.message);}finally{gameSweeping=false;}},sweepInterval):null;
   const purgeTrash=()=>store.purgeExpiredTrash().catch(()=>console.error('Trash cleanup failed'));
   const trashTimer=sweepInterval?setInterval(purgeTrash,60*60*1000):null;
   if(trashTimer) void purgeTrash();
   const settingsTimer = sweepInterval ? setInterval(()=>settingsController.runJobs().catch(()=>console.error('Support background retry failed')),60000) : null;
-  return { app, server, io, tick, runSettingsJobs:()=>settingsController.runJobs(), close: async () => { if (timer) clearInterval(timer);if(settingsTimer)clearInterval(settingsTimer);if(trashTimer)clearInterval(trashTimer); await new Promise(resolve => io.close(resolve)); } };
+  return { app, server, io, tick, runSettingsJobs:()=>settingsController.runJobs(), close: async () => { if (timer) clearInterval(timer);if(gameTimer)clearInterval(gameTimer);if(settingsTimer)clearInterval(settingsTimer);if(trashTimer)clearInterval(trashTimer); await new Promise(resolve => io.close(resolve)); } };
 }
 async function main() {
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required. Configure PostgreSQL for this deployment.');
