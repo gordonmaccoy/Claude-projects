@@ -32,6 +32,8 @@ setInterval(renderTimer,250);
 function render(view) {
   if(['en','ko'].includes(view.language)&&displayLanguage!==view.language){window.examioLanguage.apply(view.language);displayLanguage=view.language;}
   $('class-pause').hidden=view.phase!=='paused';
+  $('class-room-banner').hidden=!view.roomName;
+  $('class-room-name').textContent=view.roomName||'';
   timer=view.phase==='paused'&&view.remainingMs!=null?{remainingMs:view.remainingMs}:view.phase==='running'&&view.deadlineAt?{deadline:view.deadlineAt,serverNow:view.serverNow,received:performance.now()}:null;
   renderTimer();
   $('title').textContent=view.calculator?t('Classroom calculator'):view.title;

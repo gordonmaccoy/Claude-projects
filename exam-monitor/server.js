@@ -32,6 +32,12 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
   const wrap = fn => (req, res, next) => Promise.resolve(fn(req, res)).catch(next);
   app.get('/health', wrap(async (req, res) => { await store.activeSessions(); res.json({ ok: true }); }));
   app.get('/api/config', (req, res) => res.json({ supabaseUrl: config.url || '', supabaseKey: config.key || '',uploadMaxBytes:MAX_BYTES,aiConfigured,exportEmailConfigured:exportMailer.configured }));
+  app.post('/api/rooms/resolve',wrap(async(req,res)=>{
+    let room;try{room=require('./rooms').roomName(req.body?.roomName);}catch(e){return res.status(400).json({error:e.message});}
+    const session=await store.findRoom(room.key);
+    if(!session)return res.status(404).json({error:'Room not found. Check the name on your classroom display.'});
+    res.json({joinUrl:'/student.html?session='+encodeURIComponent(session.id)});
+  }));
   app.use('/api', (req, res, next) => Promise.resolve().then(async () => {
     const token = /^Bearer (.+)$/.exec(req.headers.authorization || '')?.[1];
     req.user = await verifyUser(token);
@@ -154,8 +160,12 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
   api.post('/sessions', wrap(async (req, res) => {
     const test = req.body.mode === 'calculator' ? null : await store.getTest(req.user.id, req.body.testId);
     if (!test && req.body.mode !== 'calculator') return res.status(404).json({ error: 'Saved test not found' });
-    const s = exam.newSession(req.user.id, test,Date.now(),req.body);
-    await store.createSession(s); res.json(await decorate(s, req));
+    for(let attempt=0;attempt<8;attempt++){
+      let s;try{s=exam.newSession(req.user.id,test,Date.now(),req.body);}catch(e){return res.status(400).json({error:e.message});}
+      try{await store.createSession(s);return res.json(await decorate(s,req));}
+      catch(e){if(e.code!=='23505'||e.constraint!=='onscreen_v2_active_room')throw e;if(req.body.roomName!==undefined)return res.status(409).json({error:'That room name is already in use. Choose another name.'});}
+    }
+    res.status(503).json({error:'Unable to reserve a room name. Please try again.'});
   }));
   api.get('/sessions/:id', wrap(async (req, res) => res.json(await decorate(await owned(req.params.id, req.user), req))));
   api.patch('/sessions/:id',wrap(async(req,res)=>{

@@ -22,6 +22,7 @@ function createStore(pool) {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`);
       await pool.query(`CREATE INDEX IF NOT EXISTS onscreen_v2_sessions_owner ON onscreen_v2_sessions(owner_id)`);
+      await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS onscreen_v2_active_room ON onscreen_v2_sessions ((data->>'roomKey')) WHERE data->>'phase'<>'ended' AND data->>'deletedAt' IS NULL`);
       await pool.query(`CREATE TABLE IF NOT EXISTS onscreen_v2_folder_order (owner_id TEXT PRIMARY KEY, ids JSONB NOT NULL)`);
       await pool.query(`CREATE TABLE IF NOT EXISTS onscreen_v2_folders (
         id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, name TEXT NOT NULL,
@@ -134,6 +135,9 @@ function createStore(pool) {
     async createSession(s) {
       await pool.query('INSERT INTO onscreen_v2_sessions(id,owner_id,data) VALUES($1,$2,$3)', [s.id, s.ownerId, JSON.stringify(s)]);
       return s;
+    },
+    async findRoom(key){
+      return (await pool.query(`SELECT data FROM onscreen_v2_sessions WHERE data->>'roomKey'=$1 AND data->>'phase'<>'ended' AND data->>'deletedAt' IS NULL AND NOT EXISTS(SELECT 1 FROM onscreen_v2_accounts a WHERE a.owner_id=onscreen_v2_sessions.owner_id AND a.state<>'active')`,[key])).rows[0]?.data||null;
     },
     async getSession(id) {
       return (await pool.query("SELECT data FROM onscreen_v2_sessions WHERE id=$1 AND data->>'deletedAt' IS NULL AND NOT EXISTS(SELECT 1 FROM onscreen_v2_accounts a WHERE a.owner_id=onscreen_v2_sessions.owner_id AND a.state<>'active')", [id])).rows[0]?.data || null;

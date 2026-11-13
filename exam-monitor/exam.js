@@ -56,7 +56,9 @@ function launchOptions(input={}) {
 }
 function newSession(ownerId, test, now = Date.now(), options={}) {
  const settings=launchOptions(options);
+ const room=options.roomName===undefined?require('./rooms').generateRoomName():require('./rooms').roomName(options.roomName);
   return { id: randomBytes(6).toString('hex').toUpperCase(), ownerId, displayToken: token(),
+    roomName:room.name,roomKey:room.key,
     mode: test ? 'test' : 'calculator', test: test ? structuredClone(test) : null,
     phase: test ? 'waiting' : 'running', createdAt: now, startedAt: test ? null : now,
     ...settings,deadlineAt:null,extensionVersion:0,endedAt: null, students: [] };
@@ -241,11 +243,11 @@ function override(s, id, professorId, reason, now = Date.now()) {
 }
 function status(st, now) { if(st.completedAt)return 'completed'; if(st.submission) return isFailed(st)?'red':'green'; return isFailed(st) || !st.visible || now - st.lastSeen > 10000 ? 'red' : 'green'; }
 function publicView(s, now = Date.now()) {
-  return { title: s.resultTitle || s.test?.title || 'Classroom calculator', language:s.language??'en', phase: s.phase,remainingMs:remainingTime(s,now),calculator:s.mode==='calculator'&&!s.resultTitle,deadlineAt:s.deadlineAt||null,
+  return { roomName:s.roomName||null,title: s.resultTitle || s.test?.title || 'Classroom calculator', language:s.language??'en', phase: s.phase,remainingMs:remainingTime(s,now),calculator:s.mode==='calculator'&&!s.resultTitle,deadlineAt:s.deadlineAt||null,
     students: s.students.map(st => ({ name: st.name, status: isFailed(st)?'failed':st.completedAt?'completed':st.submission?'submitted':status(st,now) })) };
 }
 function privateView(s, now = Date.now()) {
-  return { id: s.id, mode: s.mode, language:s.language??'en', title: s.resultTitle || s.test?.title || 'Classroom calculator', phase: s.phase,
+  return { id: s.id, roomName:s.roomName||null,mode: s.mode, language:s.language??'en', title: s.resultTitle || s.test?.title || 'Classroom calculator', phase: s.phase,
     remainingMs:remainingTime(s,now),durationMinutes:s.durationMinutes||0,deadlineAt:s.deadlineAt||null,showScores:s.showScores!==false,shuffleAnswers:!!s.shuffleAnswers,extensionVersion:s.extensionVersion||0,
     createdAt: s.createdAt, startedAt: s.startedAt, endedAt: s.endedAt, displayToken: s.displayToken,
     students: s.students.map(st => ({ id: st.id, number: st.number, name: st.name, status: status(st, now),
