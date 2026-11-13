@@ -256,7 +256,7 @@ $('import-file').onchange=()=>{$('clear-import-file').hidden=!$('import-file').f
 $('tb-add-q-btn').onclick = () => { if (tbQuestions.length < 100) addQuestion(); };
 $('tb-cancel-btn').onclick = () =>{creationVersion++;$('test-builder').hidden=true;};
 $('tb-start-btn').onclick = action(async () => {
-  const collected = collectTest(); if (collected.error) return showTbError(collected.error);
+  const collected = collectTest(); if (collected.error) return showTbError(collected);
   await api('/tests', 'POST', { ...collected.test, ...(editingId ? { id: editingId } : {}) });
   $('test-builder').hidden = true; await refresh(); notice(t('Test saved.'));
 });
@@ -670,6 +670,7 @@ function imageControl(target,labelText) {
   return panel;
 }
 function renderTestBuilder() {
+ hideTbError();
  els.tbQuestions.replaceChildren();
  tbQuestions.forEach((q,i)=> {
   const card=document.createElement('div');card.className='tb-q-card';card.dataset.index=i;
@@ -688,6 +689,7 @@ function renderTestBuilder() {
    if(q.options.length<5)card.append(button(t('+ Add Option'),()=>{q.options.push({id:q.id+'_'+crypto.randomUUID(),text:''});renderTestBuilder();}));
   }
   if(q.answerExplanation){const reason=document.createElement('p');reason.className='answer-rationale';reason.textContent='AI answer rationale: '+q.answerExplanation;card.append(reason);}
+  updateAnswerWarning(card,q,i);card.addEventListener('input',()=>{hideTbError();updateAnswerWarning(card,q,i);});card.addEventListener('change',()=>{hideTbError();updateAnswerWarning(card,q,i);});
   if(q.evidence){const evidence=document.createElement('p');evidence.className='source-evidence';evidence.textContent='Source excerpt: '+q.evidence;card.append(evidence);}els.tbQuestions.append(card);
  });
 }
@@ -695,15 +697,45 @@ function collectTest() {
  if(pendingImages)return {error:'Wait for images to finish loading.'};
  const imageSize=tbQuestions.reduce((sum,q)=>sum+(q.image?.length||0)+(q.type==='blank'?0:(q.options||[]).reduce((total,o)=>total+(o.image?.length||0),0)),0);
  if(imageSize>600000)return {error:'These images are too large together. Remove or resize some images before saving.'};
- const title=els.tbTitle.value.trim();if(!title)return {error:'Please enter a test title.'};
+ const title=els.tbTitle.value.trim();if(!title)return {error:'Please enter a test title.',field:'#tb-title'};
  for(const [i,q] of tbQuestions.entries()) {
-  if(!Number.isFinite(q.points??1)||(q.points??1)<=0||(q.points??1)>1000||Math.abs((q.points??1)*100-Math.round((q.points??1)*100))>0.000001)return {error:'Q'+(i+1)+': Enter positive points, up to1000, with at most2 decimals.'};
-  if(!q.text.trim())return {error:'Q'+(i+1)+': Question text is required.'};
-  if(q.type==='blank'){if(!q.acceptedAnswers?.length||q.acceptedAnswers.length>20||q.acceptedAnswers.some(a=>a.length>300))return {error:'Q'+(i+1)+': Enter 1–20 accepted answers, each up to 300 characters.'};}
-  else {if(q.options.some(o=>!o.text.trim()))return {error:'Q'+(i+1)+': Each option needs text.'};if(!q.correctOptionId)return {error:'Q'+(i+1)+': Please mark the correct answer.'};}
+  if(!Number.isFinite(q.points??1)||(q.points??1)<=0||(q.points??1)>1000||Math.abs((q.points??1)*100-Math.round((q.points??1)*100))>0.000001)return {error:'Q'+(i+1)+': Enter positive points, up to 1000, with at most 2 decimals.',questionIndex:i,field:'.tb-points'};
+  if(!q.text.trim())return {error:'Q'+(i+1)+': Question text is required.',questionIndex:i,field:'.tb-q-text'};
+  if(q.type==='blank'){
+   const detail={questionIndex:i,field:'.tb-accepted'};
+   if(!q.acceptedAnswers?.length)return {error:'Question '+(i+1)+' needs a correct answer before this quiz can be saved. Enter it in Accepted answers, one answer per line.',...detail};
+   if(q.acceptedAnswers.length>20)return {error:'Question '+(i+1)+': Enter at most 20 accepted answers, one per line.',...detail};
+   if(q.acceptedAnswers.some(a=>a.length>300))return {error:'Question '+(i+1)+': Each accepted answer must be 300 characters or fewer.',...detail};
+  }
+  else {if(q.options.some(o=>!o.text.trim()))return {error:'Q'+(i+1)+': Each option needs text.',questionIndex:i,field:'.tb-opt-text',optionIndex:q.options.findIndex(o=>!o.text.trim())};if(!q.correctOptionId)return {error:'Question '+(i+1)+': Please mark the correct answer before saving.',questionIndex:i,field:'input[type=radio]'};}
  }
  const questions=tbQuestions.map(q=>q.type==='blank'?{id:q.id,type:'blank',points:q.points??1,text:q.text,...(q.image?{image:q.image}:{}),acceptedAnswers:q.acceptedAnswers,caseSensitive:q.caseSensitive,...(q.evidence?{evidence:q.evidence}:{}),...(q.answerExplanation?{answerExplanation:q.answerExplanation}:{})}:{id:q.id,type:'mc',points:q.points??1,text:q.text,...(q.image?{image:q.image}:{}),options:q.options,correctOptionId:q.correctOptionId,...(q.evidence?{evidence:q.evidence}:{}),...(q.answerExplanation?{answerExplanation:q.answerExplanation}:{})});
  return {test:{title,folderId:$('tb-folder').value||null,questions}};
 }
-function showTbError(msg){els.tbError.textContent=msg;els.tbError.hidden=false;}
-function hideTbError(){els.tbError.hidden=true;}
+function updateAnswerWarning(card,q,index){
+ let warning=card.querySelector('.tb-answer-warning');
+ const missing=q.type==='blank'?!q.acceptedAnswers?.length:!q.correctOptionId;
+ if(!missing){warning?.remove();return;}
+ if(!warning){warning=document.createElement('p');warning.className='tb-answer-warning';card.querySelector('.tb-q-header').after(warning);}
+ warning.textContent='Question '+(index+1)+' needs a correct answer. '+(q.type==='blank'?'Enter it in Accepted answers below.':'Select the correct choice below.');
+}
+function showTbError(detail){
+ hideTbError();
+ const {error,questionIndex,field,optionIndex}=detail;
+ els.tbError.textContent=error;els.tbError.hidden=false;
+ const card=Number.isInteger(questionIndex)?els.tbQuestions.children[questionIndex]:null;
+ const target=card?(Number.isInteger(optionIndex)?card.querySelectorAll('.tb-opt-text')[optionIndex]:card.querySelector(field)):field?document.querySelector(field):els.tbError;
+ if(card){
+  card.classList.add('tb-q-invalid');
+  const message=document.createElement('p');message.className='tb-q-error error';message.id='tb-question-error';message.setAttribute('role','alert');message.textContent=error;
+  if(target){target.setAttribute('aria-invalid','true');target.setAttribute('aria-describedby',message.id);(target.closest('label,.tb-option-row')||target).after(message);}
+  if(!message.isConnected)card.append(message);
+ }
+ if(target){if(target===els.tbError)target.tabIndex=-1;target.focus({preventScroll:true});target.scrollIntoView({block:'center',behavior:'instant'});}
+}
+function hideTbError(){
+ els.tbError.hidden=true;
+ for(const card of els.tbQuestions.querySelectorAll('.tb-q-invalid'))card.classList.remove('tb-q-invalid');
+ for(const el of els.tbQuestions.querySelectorAll('[aria-describedby="tb-question-error"]')){el.removeAttribute('aria-invalid');el.removeAttribute('aria-describedby');}
+ for(const el of els.tbQuestions.querySelectorAll('.tb-q-error'))el.remove();
+}
