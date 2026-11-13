@@ -22,6 +22,7 @@ function createStore(pool) {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`);
       await pool.query(`CREATE INDEX IF NOT EXISTS onscreen_v2_sessions_owner ON onscreen_v2_sessions(owner_id)`);
+      await pool.query(`CREATE TABLE IF NOT EXISTS onscreen_v2_folder_order (owner_id TEXT PRIMARY KEY, ids JSONB NOT NULL)`);
       await pool.query(`CREATE TABLE IF NOT EXISTS onscreen_v2_folders (
         id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, name TEXT NOT NULL,
         UNIQUE(owner_id,name)
@@ -47,7 +48,17 @@ function createStore(pool) {
     async dismissOnboarding(ownerId){
       return (await pool.query(`UPDATE onscreen_v2_onboarding SET data=jsonb_set(data,'{tourDismissed}','true'::jsonb) WHERE owner_id=$1 RETURNING data`,[ownerId])).rows[0]?.data||null;
     },
-    async listFolders(ownerId) { return (await pool.query('SELECT id,name FROM onscreen_v2_folders WHERE owner_id=$1 ORDER BY name',[ownerId])).rows; },
+    async listFolders(ownerId) { return (await pool.query('SELECT f.id,f.name FROM onscreen_v2_folders f LEFT JOIN onscreen_v2_folder_order o ON o.owner_id=f.owner_id WHERE f.owner_id=$1 ORDER BY (SELECT position FROM jsonb_array_elements_text(o.ids) WITH ORDINALITY AS r(id,position) WHERE r.id=f.id) NULLS LAST, f.name',[ownerId])).rows; },
+    async orderFolders(ownerId,ids) {
+      if(!Array.isArray(ids)||ids.some(id=>typeof id!=='string')||new Set(ids).size!==ids.length)return false;
+      const client=await pool.connect();try{await client.query('BEGIN');
+        const {rows}=await client.query('SELECT id FROM onscreen_v2_folders WHERE owner_id=$1 FOR UPDATE',[ownerId]);
+        const existing=new Set(rows.map(row=>row.id));
+        if(existing.size!==ids.length||ids.some(id=>!existing.has(id))){await client.query('ROLLBACK');return false;}
+        await client.query('INSERT INTO onscreen_v2_folder_order(owner_id,ids) VALUES($1,$2) ON CONFLICT(owner_id) DO UPDATE SET ids=EXCLUDED.ids',[ownerId,JSON.stringify(ids)]);
+        await client.query('COMMIT');return true;
+      }catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}
+    },
     async getFolder(ownerId,id) { return (await pool.query('SELECT id,name FROM onscreen_v2_folders WHERE id=$1 AND owner_id=$2',[id,ownerId])).rows[0] || null; },
     async createFolder(ownerId,name) {
       const id=require('node:crypto').randomUUID();
@@ -149,7 +160,7 @@ function createStore(pool) {
       } finally { client.release(); }
     },
   };
-  for(const name of ['initializeOnboarding','dismissOnboarding','createFolder','renameFolder','deleteFolder','saveTest','deleteTest','changeTrash','orderTests','deleteTrashResults']){
+  for(const name of ['initializeOnboarding','dismissOnboarding','createFolder','renameFolder','deleteFolder','saveTest','deleteTest','changeTrash','orderTests','orderFolders','deleteTrashResults']){
     const operation=store[name];store[name]=(...args)=>accounts.withOwner(args[0],()=>operation(...args));
   }
   const createSession=store.createSession;store.createSession=s=>accounts.withOwner(s.ownerId,()=>createSession(s));

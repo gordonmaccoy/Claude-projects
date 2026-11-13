@@ -105,11 +105,26 @@ function sweep(s, now = Date.now()) {
   }
   return changed;
 }
+function pause(s,ownerId,now=Date.now()) {
+ if(s.ownerId!==ownerId)throw new Error('Session not found');
+ sweep(s,now);
+ if(s.mode!=='test'||s.phase!=='running')throw new Error('Test is not running');
+ s.remainingMs=s.deadlineAt==null?null:Math.max(0,s.deadlineAt-now);
+ s.deadlineAt=null;s.phase='paused';s.pausedAt=now;
+ for(const st of s.students)st.hiddenSince=null;
+}
+function resume(s,ownerId,now=Date.now()) {
+ if(s.ownerId!==ownerId)throw new Error('Session not found');
+ if(s.mode!=='test'||s.phase!=='paused')throw new Error('Test is not paused');
+ s.phase='running';s.deadlineAt=s.remainingMs==null?null:now+s.remainingMs;s.remainingMs=null;s.pausedAt=null;
+ for(const st of s.students)st.hiddenSince=st.visible||st.submission||isFailed(st)?null:now;
+}
+function remainingTime(s,now=Date.now()){return s.phase==='paused'?s.remainingMs??null:s.deadlineAt?Math.max(0,s.deadlineAt-now):null;}
 function extend(s,ownerId,minutes=1,now=Date.now()){
  if(s.ownerId!==ownerId)throw new Error('Session not found');
  sweep(s,now);
- if(s.mode!=='test'||s.phase!=='running'||!s.deadlineAt||!Number.isInteger(minutes)||minutes<1||minutes>60)throw new Error('Invalid timer extension; test ended or has no timer');
- s.deadlineAt+=minutes*60000;s.extensionVersion=(s.extensionVersion||0)+1;s.lastExtension={at:now,minutes,professorId:ownerId};
+ if(s.mode!=='test'||!['running','paused'].includes(s.phase)||(s.phase==='paused'?s.remainingMs==null:!s.deadlineAt)||!Number.isInteger(minutes)||minutes<1||minutes>60)throw new Error('Invalid timer extension; test ended or has no timer');
+ if(s.phase==='paused')s.remainingMs+=minutes*60000;else s.deadlineAt+=minutes*60000;s.extensionVersion=(s.extensionVersion||0)+1;s.lastExtension={at:now,minutes,professorId:ownerId};
 }
 function start(s, now = Date.now()) {
   if (s.phase !== 'waiting') throw new Error('Test is not waiting');
@@ -165,7 +180,7 @@ function detailedResults(s) {
       const key=q.options?.find(option=>option.id===q.correctOptionId);
       const order=st.optionOrder?.[q.id]||q.options?.map(option=>option.id);
       const answer=q.type==='blank'?(value?.trim()||''):choice?.text||'';
-      return {number:index+1,question:q.text,answer,letter:choice?String.fromCharCode(65+order.indexOf(choice.id)):null,
+      return {number:index+1,question:q.text,answer,optionId:choice?.id||null,letter:choice?String.fromCharCode(65+order.indexOf(choice.id)):null,
         correct:q.type==='blank'?q.acceptedAnswers.join(' / '):key?.text||'',
         status:answer?(correctAnswer(q,value)?'correct':'incorrect'):(st.submission?'incorrect':'pending')};
     });
@@ -226,12 +241,12 @@ function override(s, id, professorId, reason, now = Date.now()) {
 }
 function status(st, now) { if(st.completedAt)return 'completed'; if(st.submission) return isFailed(st)?'red':'green'; return isFailed(st) || !st.visible || now - st.lastSeen > 10000 ? 'red' : 'green'; }
 function publicView(s, now = Date.now()) {
-  return { title: s.resultTitle || s.test?.title || 'Classroom calculator', phase: s.phase,calculator:s.mode==='calculator'&&!s.resultTitle,deadlineAt:s.deadlineAt||null,
+  return { title: s.resultTitle || s.test?.title || 'Classroom calculator', phase: s.phase,remainingMs:remainingTime(s,now),calculator:s.mode==='calculator'&&!s.resultTitle,deadlineAt:s.deadlineAt||null,
     students: s.students.map(st => ({ name: st.name, status: isFailed(st)?'failed':st.completedAt?'completed':st.submission?'submitted':status(st,now) })) };
 }
 function privateView(s, now = Date.now()) {
   return { id: s.id, mode: s.mode, language:s.language??'en', title: s.resultTitle || s.test?.title || 'Classroom calculator', phase: s.phase,
-    durationMinutes:s.durationMinutes||0,deadlineAt:s.deadlineAt||null,showScores:s.showScores!==false,shuffleAnswers:!!s.shuffleAnswers,extensionVersion:s.extensionVersion||0,
+    remainingMs:remainingTime(s,now),durationMinutes:s.durationMinutes||0,deadlineAt:s.deadlineAt||null,showScores:s.showScores!==false,shuffleAnswers:!!s.shuffleAnswers,extensionVersion:s.extensionVersion||0,
     createdAt: s.createdAt, startedAt: s.startedAt, endedAt: s.endedAt, displayToken: s.displayToken,
     students: s.students.map(st => ({ id: st.id, number: st.number, name: st.name, status: status(st, now),
       failed: isFailed(st), completed:Boolean(st.completedAt), result: result(s, st), events: st.events,
@@ -241,12 +256,12 @@ function privateView(s, now = Date.now()) {
 }
 function studentView(s, st) {
   const internal=result(s,st);const final=internal?{score:internal.score,total:internal.total,percentage:internal.percentage,failed:internal.failed,submittedAt:internal.submittedAt}:null;
-  return { phase: s.phase, mode: s.mode, language:s.language??'en', name: st.name, failed: isFailed(st), completed:Boolean(st.completedAt),terminal:Boolean(st.completedAt||st.submission?.professorFinalized),deadlineAt:s.deadlineAt||null,extensionVersion:s.extensionVersion||0,lastExtension:s.lastExtension?{minutes:s.lastExtension.minutes}:null,
+  return { phase: s.phase, remainingMs:remainingTime(s), mode: s.mode, language:s.language??'en', name: st.name, failed: isFailed(st), completed:Boolean(st.completedAt),terminal:Boolean(st.completedAt||st.submission?.professorFinalized),deadlineAt:s.deadlineAt||null,extensionVersion:s.extensionVersion||0,lastExtension:s.lastExtension?{minutes:s.lastExtension.minutes}:null,
     test: s.test && s.phase === 'running' && !st.submission ? { title: s.resultTitle || s.test.title,
       questions: s.test.questions.map(q => ({ id: q.id, type:q.type || 'mc', points:q.points??1,text: q.text, ...(q.image?{image:q.image}:{}), ...(q.type === 'blank' ? {} : {options:st.optionOrder?.[q.id]?st.optionOrder[q.id].map(id=>q.options.find(o=>o.id===id)):q.options}) })) } : null,
     ...(final && !final.failed && s.showCorrections===true?{corrections:incorrectAnswers(s,st)}:{}),
     draft: st.submission ? {} : st.draft, result:final && s.showScores===false?{hidden:true,failed:final.failed,submittedAt:final.submittedAt}:final };
 }
 module.exports = { validateTest, newSession, join, student, start, sweep, visibility, submit, override,
-  launchOptions,detailedResults,completeCalculator,totalPoints,extend,finalizeFail, progress, scoreAnswers, validateAnswers, publicView, privateView, studentView, hash, isFailed };
+  pause,resume,launchOptions,detailedResults,completeCalculator,totalPoints,extend,finalizeFail, progress, scoreAnswers, validateAnswers, publicView, privateView, studentView, hash, isFailed };
 

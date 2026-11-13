@@ -1,0 +1,11 @@
+const {test}=require('node:test');const assert=require('node:assert/strict');const {chromium}=require('playwright');const fs=require('fs');const path=require('path');
+test('paused student view locks questions, closes submit dialog and resumes local answers',async()=>{
+ const browser=await chromium.launch({headless:true,...(fs.existsSync(chromium.executablePath())?{}:{channel:'msedge'})});try{const page=await browser.newPage();await page.route('**/*',route=>{const url=new URL(route.request().url());const name=url.pathname.split('/').pop();if(['student.html','student.js','language.js','ko.js','student.css'].includes(name)){return route.fulfill({path:path.join(__dirname,'../public',name)});}if(url.pathname==='/socket.io/socket.io.js')return route.fulfill({body:'window.io=()=>({on(){},connect(){},disconnect(){}});'});return route.fulfill({body:'{}',contentType:'application/json'});});
+ await page.goto('http://exam.test/student.html?session=ABC');await page.waitForFunction(()=>typeof showView==='function');
+ const view={phase:'running',mode:'test',name:'Kim',draft:{q:'a'},test:{title:'Quiz',questions:[{id:'q',type:'mc',text:'Question',options:[{id:'a',text:'Answer'},{id:'b',text:'Other'}]}]}};
+ await page.evaluate(v=>showView(v),view);await page.locator('#test-submit-btn').click();assert.equal(await page.locator('#submit-dialog').evaluate(el=>el.open),true);
+ await page.evaluate(v=>showView({...v,phase:'paused',test:null,remainingMs:30000}),view);assert.equal(await page.locator('#submit-dialog').evaluate(el=>el.open),false);await page.locator('#pause-lock').waitFor({state:'visible'});assert.equal(await page.locator('#pause-lock').textContent(),'Test Paused. Please wait a moment.');assert.equal(await page.locator('#test-section').evaluate(el=>el.inert),true);
+ await page.evaluate(v=>showView(v),view);assert.equal(await page.locator('#pause-lock').isVisible(),false);assert.equal(await page.locator('input[value="a"]').isChecked(),true);
+ await page.evaluate(v=>{renderedTest=false;showView({...v,phase:'paused',test:null});},view);await page.evaluate(v=>showView(v),view);assert.equal(await page.locator('.tq-card').count(),1);
+ }finally{await browser.close();}
+});

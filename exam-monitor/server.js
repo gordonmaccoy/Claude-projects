@@ -88,6 +88,11 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
     catch(e){res.status(400).json({error:e.message||'Unable to process this material.'});}finally{state.busy=false;if(req.file)req.file.buffer.fill(0);}
   }));
   api.post('/answer-key',wrap(async(req,res)=>{if(!aiConfigured)return res.status(503).json({error:'AI needs Development OPENAI_API_KEY and OPENAI_MODEL configuration.'});const state=beginWork(req,res,true);if(!state)return;try{res.json(await completeAnswers(req.body.test));}catch(e){res.status(400).json({error:e.message||'Unable to determine answer keys.'});}finally{state.busy=false;}}));
+  api.put('/folder-order',wrap(async(req,res)=>{
+    if(!validIdList(req.body.ids,1000))return res.status(400).json({error:'Invalid folder order.'});
+    if(!await store.orderFolders(req.user.id,req.body.ids))return res.status(409).json({error:'The folders changed. Refresh and try again.'});
+    res.json({ok:true});
+  }));
   api.get('/folders',wrap(async(req,res)=>res.json(await store.listFolders(req.user.id))));
   api.post('/folders',wrap(async(req,res)=>{
     const name=typeof req.body.name === 'string' ? req.body.name.trim() : '';
@@ -172,11 +177,13 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
     res.json({ ok: true });
   }));
   api.post('/sessions/:id/extend',wrap(async(req,res)=>{await owned(req.params.id,req.user);const {session,result}=await store.mutate(req.params.id,s=>{try{exam.extend(s,req.user.id,1);return null;}catch(e){return {error:e.message};}});await broadcast(session);if(result?.error)return res.status(409).json({error:result.error});res.json(await decorate(session,req));}));
-  for (const action of ['start', 'end', 'override','finalize-fail']) api.post(`/sessions/:id/${action}`, wrap(async (req, res) => {
+  for (const action of ['start', 'pause', 'resume', 'end', 'override','finalize-fail']) api.post(`/sessions/:id/${action}`, wrap(async (req, res) => {
     await owned(req.params.id, req.user);
     const { session } = await store.mutate(req.params.id, s => {
       if (s.ownerId !== req.user.id) throw new Error('Session not found');
       if (action === 'start') exam.start(s);
+      if (action === 'pause') exam.pause(s,req.user.id);
+      if (action === 'resume') exam.resume(s,req.user.id);
       if (action === 'end') { exam.sweep(s); s.phase = 'ended'; s.endedAt = Date.now(); }
       if(action==='finalize-fail')exam.finalizeFail(s,req.body.studentId,req.user.id,req.body.reason);
       if (action === 'override') exam.override(s, req.body.studentId, req.user.id, req.body.reason);
@@ -187,7 +194,7 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
     }
     res.json(await decorate(session, req));
   }));
-  api.get('/sessions/:id/details',wrap(async(req,res)=>{const session=await owned(req.params.id,req.user);if(session.mode!=='test')return res.status(400).json({error:'Only tests have detailed results.'});res.set('Cache-Control','private, no-store');res.json(req.query.live==='1'?{phase:session.phase,questions:session.test.questions.map(q=>q.text),students:exam.detailedResults(session)}:exam.detailedResults(session));}));
+  api.get('/sessions/:id/details',wrap(async(req,res)=>{const session=await owned(req.params.id,req.user);if(session.mode!=='test')return res.status(400).json({error:'Only tests have detailed results.'});res.set('Cache-Control','private, no-store');res.json(req.query.live==='1'?{phase:session.phase,questions:session.test.questions.map(q=>q.text),questionDetails:session.test.questions,summaryStudents:exam.privateView(session).students,students:exam.detailedResults(session)}:exam.detailedResults(session));}));
   api.get('/sessions/:id/export', wrap(async (req, res) => {
     const original = await owned(req.params.id, req.user);
     if (original.mode !== 'test') return res.status(400).json({ error: 'Calculator sessions have no test scores to export.' });

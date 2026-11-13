@@ -13,6 +13,7 @@ let accountGeneration = 0,creationVersion=0,professorTimerSnapshot=null;
 let lastWorkspaceTab = 'launch';
 let popupSessionId = null, openingDisplay = false, launching = false;
 function clearPrivateWorkspace() {
+  $('workspace-tabs').hidden=true;finishFolderDrag();if($('question-detail-dialog').open)$('question-detail-dialog').close();questionData=null;
   settings.reset();tour.reset();$('launch-show-names').checked=false;$('launch-show-scores-live').checked=false;$('result-detail-rows').replaceChildren();lastWorkspaceTab='launch';accountGeneration++;creationVersion++;professorTimerSnapshot=null;if($('answer-ai-dialog').open)$('answer-ai-dialog').close();$('answer-ai-status').textContent='';closeEntry();launchTest=null;$('new-title').value='';for(const id of ['tb-folder','new-folder-choice'])$(id).replaceChildren();$('launch-test-title').textContent='';if($('launch-dialog').open)$('launch-dialog').close();$('creation-choice').hidden=true;
   trashVersion++;pendingTrashDelete=null;if($('trash-confirm').open)$('trash-confirm').close();$('trash-confirm-message').textContent='';$('trash-items').replaceChildren();
   current=null; historySession=null; library=[]; folders=[]; sessionList=[]; $('import-source').value='';$('import-file').value='';$('import-panel').hidden=true;$('draft-review').textContent=''; editingId=null; tbQuestions=[];
@@ -118,6 +119,19 @@ $('trash-confirm').onclose=action(async()=>{
   if(version===tabVersion&&!$('trash').hidden)notice(deleted?t('Permanently deleted.'):'The selected results were already removed.');
 });
 let draggedTest=null;
+let draggedFolder=null;
+function finishFolderDrag(){if(!draggedFolder)return;draggedFolder.placeholder.remove();draggedFolder.row.classList.remove('folder-dragging');draggedFolder=null;}
+function folderHandle(folder,row){
+ const handle=document.createElement('button');handle.type='button';handle.className='drag-handle folder-drag-handle';handle.textContent='↕';handle.draggable=true;handle.title=t('Drag to reorder folders');handle.setAttribute('aria-label',t('Move folder')+' '+folder.name);handle.onclick=e=>e.preventDefault();
+ handle.ondragstart=event=>{event.stopPropagation();const placeholder=document.createElement('div');placeholder.className='folder-drop-preview';placeholder.textContent=folder.name;placeholder.style.height=row.getBoundingClientRect().height+'px';placeholder.dataset.folderId=folder.id;draggedFolder={row,placeholder,id:folder.id};event.dataTransfer.setData('text/plain','folder:'+folder.id);event.dataTransfer.effectAllowed='move';event.dataTransfer.setDragImage(row,30,20);requestAnimationFrame(()=>{if(draggedFolder?.row===row){row.after(placeholder);row.classList.add('folder-dragging');}});};
+ handle.ondragend=finishFolderDrag;
+ handle.onkeydown=action(async event=>{if(!['ArrowUp','ArrowDown'].includes(event.key))return;event.preventDefault();const ids=folders.map(f=>f.id),index=ids.indexOf(folder.id),next=index+(event.key==='ArrowUp'?-1:1);if(next<0||next>=ids.length)return;[ids[index],ids[next]]=[ids[next],ids[index]];await api('/folder-order','PUT',{ids});await refresh();});
+ return handle;
+}
+function setupFolderDrop(){const root=$('library-tests');root.addEventListener('dragover',event=>{
+ if(!draggedFolder?.placeholder.parentElement)return;event.preventDefault();const {row,placeholder}=draggedFolder;const rows=[...root.children].filter(el=>el!==row&&el!==placeholder&&el.dataset.folderId!==undefined&&el.dataset.folderId!=='');const before=rows.find(el=>{const rect=el.getBoundingClientRect();return event.clientY<rect.top+rect.height/2;})||[...root.children].find(el=>el.dataset.folderId==='')||null;if(before===placeholder||placeholder.nextElementSibling===before)return;const positions=rows.map(el=>el.getBoundingClientRect().top);root.insertBefore(placeholder,before);if(!matchMedia('(prefers-reduced-motion: reduce)').matches)rows.forEach((el,i)=>{const delta=positions[i]-el.getBoundingClientRect().top;if(delta)el.animate([{transform:'translateY('+delta+'px)'},{transform:'translateY(0)'}],{duration:150});});
+ });root.addEventListener('drop',action(async event=>{if(!draggedFolder)return;event.preventDefault();const {row}=draggedFolder;const ids=[...root.children].filter(el=>el!==row&&el.dataset.folderId).map(el=>el.dataset.folderId);finishFolderDrag();try{await api('/folder-order','PUT',{ids});}finally{await refresh();}}));}
+setupFolderDrop();
 function previewQuizMove(list,before) {
   const row=draggedTest.placeholder;
   if(before===row||(row.parentElement===list&&row.nextElementSibling===before))return;
@@ -161,7 +175,7 @@ function setupQuizDrop(folder,list) {
 async function refresh() {
   [library, sessionList, folders] = await Promise.all([api('/tests'), api('/sessions'),api('/folders')]);
   const expanded=new Set([...document.querySelectorAll('#launch-tests details[open],#library-tests details[open]')].map(folder=>folder.dataset.folderKey));
-  if(draggedTest)return;
+  if(draggedTest||draggedFolder)return;
   renderFolderOptions();
   for (const id of ['launch-tests', 'library-tests', 'active-sessions', 'result-sessions']) $(id).replaceChildren();
   if (!library.length) {
@@ -172,8 +186,8 @@ async function refresh() {
   for(const root of ['launch-tests','library-tests']) for(const folder of [...folders,{id:'',name:t('Uncategorized Test')}]) {
     const count=library.filter(t=>(t.folderId||'')===folder.id).length;
     if(!count && !folders.some(f=>f.id===folder.id) && root!=='library-tests')continue;
-    const detail=document.createElement('details');detail.className='folder';detail.dataset.folderKey=root+':'+folder.id;detail.open=expanded.has(detail.dataset.folderKey);
-    const summary=document.createElement('summary');summary.textContent=`${folder.name} (${count})`;if(root==='library-tests'&&folder.id)summary.append(folderActions(folder));detail.append(summary);
+    const detail=document.createElement('details');detail.className='folder';detail.dataset.folderId=folder.id;detail.dataset.folderKey=root+':'+folder.id;detail.open=expanded.has(detail.dataset.folderKey);
+    const summary=document.createElement('summary');summary.textContent=`${folder.name} (${count})`;if(root==='library-tests'&&folder.id)summary.append(folderActions(folder),folderHandle(folder,detail));detail.append(summary);
     const list=document.createElement('div');list.className=root==='library-tests'?'library-rows':'cards';list.dataset.folderId=folder.id;if(root==='library-tests')setupQuizDrop(detail,list);detail.append(list);$(root).append(detail);groups[root+folder.id]=list;
   }
   for (const test of library) {
@@ -219,7 +233,6 @@ async function refresh() {
     if (s.mode === 'test') {
       const c = card(s.title, `${new Date(s.createdAt).toLocaleString()} · ${s.phase} · ${s.students.length} joined`);
       c.append(button(t('View results'), async () => { const version=++resultViewVersion; const session=await api(`/sessions/${s.id}`); if(version!==resultViewVersion)return; historySession=session; showResultSummary();renderResults(); }));
-      if(s.phase === 'ended') c.append(button('Rename results',()=>renameResults(s)),button('Delete results', () => deleteResults(s), 'danger'));
       $('result-sessions').append(c);
     }
     if (s.phase !== 'ended') $('active-sessions').append(button(`${s.title} · ${t(s.phase)}`, () => openSession(s.id)));
@@ -316,9 +329,10 @@ function renderDashboard() {
   if (!current || current.phase==='ended') {professorTimerSnapshot=null;current=null;$('dashboard').hidden=true;$('live-students').replaceChildren();$('calculator-card').hidden=false;return;}
   $('dashboard').hidden = false; $('session-title').textContent = current.title;
   $('calculator-card').hidden = current.mode === 'calculator' && current.phase !== 'ended';
-  $('session-phase').textContent = current.phase === 'waiting' ? t('Waiting room open · Questions appear when you start the test.') : current.phase === 'running' ? 'Session in progress' : t('Session ended · Results saved');
+  $('session-phase').textContent = current.phase === 'waiting' ? t('Waiting room open · Questions appear when you start the test.') : current.phase === 'paused'?t('Test paused'):current.phase === 'running' ? t('Session in progress') : t('Session ended · Results saved');
   $('test-start').hidden = current.phase !== 'waiting'; $('session-end').hidden = current.phase === 'ended';
-  $('extend-time').hidden=current.phase!=='running'||!current.deadlineAt;
+  $('test-pause').hidden=current.mode!=='test'||!['running','paused'].includes(current.phase);$('test-pause').textContent=current.phase==='paused'?t('Resume test'):t('Pause test');
+  $('extend-time').hidden=!['running','paused'].includes(current.phase)||(!current.deadlineAt&&current.remainingMs==null);
   if(current.deadlineAt && (!professorTimerSnapshot||professorTimerSnapshot.id!==current.id||professorTimerSnapshot.serverNow!==current.serverNow||professorTimerSnapshot.deadlineAt!==current.deadlineAt))professorTimerSnapshot={id:current.id,serverNow:current.serverNow||Date.now(),deadlineAt:current.deadlineAt,receivedAt:performance.now()};renderProfessorTimer();
   $('session-rename').hidden=current.mode!=='test';
   $('launch-score-switch').hidden=current.mode!=='test';
@@ -328,6 +342,7 @@ function renderDashboard() {
   renderTable($('live-students'), current);
 }
 function renderProfessorTimer(){
+ if(current?.phase==='paused'){$('session-timer').textContent=t('Test paused')+(current.remainingMs==null?'':' · '+Math.ceil(current.remainingMs/60000)+' '+t('minutes remaining'));return;}
  if(!current?.deadlineAt||current.phase!=='running'||!professorTimerSnapshot){$('session-timer').textContent='';return;}
  const seconds=Math.max(0,Math.ceil((professorTimerSnapshot.deadlineAt-(professorTimerSnapshot.serverNow+performance.now()-professorTimerSnapshot.receivedAt))/1000));
  $('session-timer').textContent='Time remaining: '+Math.floor(seconds/60)+' min '+String(seconds%60).padStart(2,'0')+' sec · Ends '+new Date(professorTimerSnapshot.deadlineAt).toLocaleTimeString();
@@ -360,12 +375,13 @@ function renderTable(container, session) {
     const review=document.createElement('td');
     if(s.failed && !s.finalized && (s.result || session.phase==='running')) review.append(button(s.result?t('Override FAIL'):t('Unlock & continue'),()=>unlockStudent(session,s)));
     if(s.failed && !s.result)review.append(button(t('Submit Fail score'),()=>submitFail(session,s),'danger'));
-    const details=document.createElement('details'); const summary=document.createElement('summary'); summary.textContent=t('{count} monitoring events',{count:s.events.length}); details.append(summary);
+    const details=document.createElement('details'); const summary=document.createElement('summary'); summary.textContent=t('{count} monitoring events',{count:s.events.length});if(s.events.length>5)summary.className='monitoring-alert'; details.append(summary);
     const list=document.createElement('ul'); for (const e of s.events) { const li=document.createElement('li'); li.textContent=`${new Date(e.at).toLocaleTimeString()} · ${e.type}${e.reason ? ` · ${e.reason}` : ''}`; list.append(li); } details.append(list); review.append(details); tr.append(review); tbody.append(tr);
   }
   table.append(tbody); container.replaceChildren(table);
 }
 function closeResults() {
+  if($('question-detail-dialog').open)$('question-detail-dialog').close();questionData=null;
   $('result-details').hidden=true;$('result-detail-rows').replaceChildren();
   resultViewVersion++;
   historySession=null;
@@ -373,7 +389,8 @@ function closeResults() {
   $('result-students').replaceChildren();
 }
 $('result-close').onclick=()=>{closeResults();$('results-refresh').focus();};
-function renderResults() { $('result-detail').hidden=false; $('result-title').textContent=historySession.title; $('result-delete').hidden=historySession.phase !== 'ended'; $('result-rename').hidden=historySession.phase !== 'ended'; renderTable($('result-students'),historySession); }
+function renderResultStatistics(students){const stats=window.examioResultAnalysis.statistics(students),root=$('result-stats');root.replaceChildren();for(const [label,value] of [[t('Students'),stats.students],[t('Completion'),stats.completion+'%'],[t('Class average'),stats.average==null?'—':stats.average+'%']]){const cell=document.createElement('div'),title=document.createElement('span'),number=document.createElement('strong');title.textContent=label;number.textContent=value;cell.append(title,number);root.append(cell);}}
+function renderResults() { $('result-detail').hidden=false; $('result-title').textContent=historySession.title; $('result-delete').hidden=historySession.phase !== 'ended'; $('result-rename').hidden=historySession.phase !== 'ended';renderResultStatistics(historySession.students); renderTable($('result-students'),historySession); }
 async function deleteResults(session) {
   if(!confirm(`Move the saved results for “${session.title}” to Trash for 30 days?`)) return;
   await api(`/sessions/${session.id}`, 'DELETE');
@@ -400,18 +417,20 @@ function showResultSummary(){
   $('result-summary-tab').setAttribute('aria-pressed','true');$('result-details-tab').setAttribute('aria-pressed','false');
 }
 $('result-summary-tab').onclick=showResultSummary;
-let detailsRequest=null,detailsSnapshot='',detailsPhase;
+let detailsRequest=null,detailsSnapshot='',detailsPhase,questionData=null,questionIndex=0,questionResultsVisible=false;
 function detailsVisible(){return historySession&&!$('results').hidden&&!$('result-details').hidden&&!document.hidden;}
 function renderAnswerGrid(data){
+  questionData=data;if(data.summaryStudents)renderResultStatistics(data.summaryStudents);if($('question-detail-dialog').open)renderQuestionDetail();
   const root=$('result-detail-rows');
   const table=document.createElement('table');table.className='answer-grid';
   const header=table.createTHead().insertRow();
   for(const [index,label] of ['Student number','Name','State',...data.questions].entries()){
     const th=document.createElement('th');th.scope='col';
-    th.textContent=index<3?label:'Q'+(index-2);
-    if(index>=3){th.title=label;th.setAttribute('aria-label','Question '+(index-2)+': '+label);}
+    if(index<3)th.textContent=t(label);
+    else{const control=button('Q'+(index-2),()=>{questionIndex=index-3;questionResultsVisible=false;renderQuestionDetail();$('question-detail-dialog').showModal();});control.title=label;control.setAttribute('aria-label',t('Question')+' '+(index-2)+': '+label);th.append(control);}
     header.append(th);
   }
+  const averages=table.createTFoot().insertRow();averages.className='question-average-row';const averageLabel=document.createElement('th');averageLabel.colSpan=3;averageLabel.scope='row';averageLabel.textContent=t('Class average');averages.append(averageLabel);for(let index=0;index<data.questions.length;index++){const value=window.examioResultAnalysis.questionStatistics(data.students,index).average;averages.insertCell().textContent=value==null?'—':value+'%';}
   const body=table.createTBody();
   for(const student of data.students){
     const row=body.insertRow();
@@ -427,6 +446,19 @@ function renderAnswerGrid(data){
   root.replaceChildren();
   if(data.students.length)root.append(table);else root.textContent=t('No students joined.');
 }
+function renderQuestionDetail(){
+ if(!questionData)return;const q=questionData.questionDetails?.[questionIndex],text=q?.text||questionData.questions[questionIndex],stats=window.examioResultAnalysis.questionStatistics(questionData.students,questionIndex);
+ $('question-detail-title').textContent=(questionIndex+1)+'. '+text;$('question-detail-position').textContent=(questionIndex+1)+' / '+questionData.questions.length;$('question-detail-previous').disabled=questionIndex===0;$('question-detail-next').disabled=questionIndex===questionData.questions.length-1;$('question-detail-toggle').textContent=questionResultsVisible?t('Hide results'):t('Show results');
+ const root=$('question-detail-content');root.replaceChildren();const count=document.createElement('p');count.textContent=t('{answered}/{total} students answered',{answered:stats.answered,total:questionData.students.length});root.append(count);
+ if(q?.image){const image=document.createElement('img');image.src=q.image;image.alt=t('Question image');image.className='tb-image';root.append(image);}
+ const options=q?.type==='blank'?null:q?.options;
+ if(options)for(const [index,option] of options.entries()){const line=document.createElement('div');line.className='question-answer-row';const label=document.createElement('span');label.textContent=String.fromCharCode(65+index)+'. '+option.text;line.append(label);if(option.image){const image=document.createElement('img');image.src=option.image;image.alt=option.text;image.className='tb-image';line.append(image);}if(questionResultsVisible){line.classList.add(option.id===q.correctOptionId?'question-answer-correct':'question-answer-incorrect');const percentage=document.createElement('strong');percentage.className='question-result-percentage';percentage.textContent=(stats.answered?Math.round((stats.options[option.id]||0)/stats.answered*10000)/100:0)+'%';line.append(percentage);}root.append(line);}
+ else if(questionResultsVisible){const key=document.createElement('p');key.className='question-answer-correct';key.textContent=t('Correct answer')+': '+(q?.acceptedAnswers||[]).join(' / ');root.append(key);for(const [answer,count] of Object.entries(stats.blanks)){const row=document.createElement('p');row.textContent=answer+' · '+count;root.append(row);}}
+ if(questionResultsVisible){const average=document.createElement('p');average.textContent=t('Class average')+': '+(stats.average==null?'—':stats.average+'%');root.append(average);}
+}
+$('question-detail-close').onclick=()=> $('question-detail-dialog').close();
+$('question-detail-toggle').onclick=()=>{questionResultsVisible=!questionResultsVisible;renderQuestionDetail();};
+for(const [id,delta] of [['question-detail-previous',-1],['question-detail-next',1]])$(id).onclick=()=>{questionIndex+=delta;renderQuestionDetail();};
 async function refreshAnswerGrid(){
   if(!detailsVisible())return;
   const id=historySession.id,version=resultViewVersion;
@@ -452,8 +484,7 @@ $('result-details-tab').onclick=action(async()=>{
   await refreshAnswerGrid();
 });
 setInterval(()=>{if(detailsPhase!=='ended')void refreshAnswerGrid();},2000);
-$('result-detail-export').onclick=action(()=>download(historySession,true));
-$('result-export').onclick=action(()=>download(historySession)); $('results-refresh').onclick=action(refresh);
+$('result-export').onclick=action(()=>download(historySession,!$('result-details').hidden)); $('results-refresh').onclick=action(refresh);
 socket.on('connect',()=> { if (account) { if($('notice').textContent.startsWith('Live connection lost'))notice(''); watch().catch(e=>notice(e.message)); } });
 socket.on('disconnect',()=> { if (account) notice('Live connection lost. Sessions remain saved; reconnecting…'); });
 socket.on('professor:update',view=> { const listed=sessionList.find(s=>s.id===view.id);if(view.phase==='ended'||(listed&&(listed.title!==view.title||listed.phase!==view.phase)))refresh().catch(e=>notice(e.message));if (current?.id === view.id) { current={...current,...view}; renderDashboard(); } if (historySession?.id===view.id) { historySession={...historySession,...view}; renderResults(); } });
@@ -472,7 +503,7 @@ async function loadSignedInWorkspace() {
     if(recoveringPassword)return;
     const authSession=(await auth.auth.getSession()).data.session;
     if(registration&&await registration.resume(authSession))return;
-    settings.setAccount(verified);$('account-name').textContent=account.email;$('login').hidden=true;$('workspace').hidden=false;$('signout').hidden=false;
+    settings.setAccount(verified);$('account-name').textContent=account.email;$('login').hidden=true;$('workspace').hidden=false;$('workspace-tabs').hidden=false;$('signout').hidden=false;
     socket.connect();
     try {
       const onboarding=await api('/onboarding','POST',{language:window.examioLanguage.current});
@@ -529,6 +560,7 @@ function openLaunch(test){launchTest=test;$('launch-test-title').textContent=tes
 $('launch-cancel').onclick=()=> $('launch-dialog').close();
 $('launch-form').onsubmit=async e=>{e.preventDefault();$('launch-confirm').disabled=true;try{await launchSession({testId:launchTest.id,language:window.examioLanguage.current,durationMinutes:Number($('launch-duration').value),showScores:$('launch-show-scores').checked,shuffleAnswers:$('launch-shuffle').checked,showCorrections:$('launch-corrections').checked});$('launch-dialog').close();}catch(e){$('launch-error').textContent=e.message;}finally{$('launch-confirm').disabled=false;}};
 $('extend-time').onclick=action(async()=>{const updated=await api('/sessions/'+current.id+'/extend','POST',{});updateSession(updated);notice('Added 1 minute (60 seconds). New end time: '+new Date(updated.deadlineAt).toLocaleTimeString());});
+$('test-pause').onclick=action(async()=>{if(!current||!['running','paused'].includes(current.phase))return;const id=current.id,verb=current.phase==='paused'?'resume':'pause';$('test-pause').disabled=true;try{updateSession(await api('/sessions/'+id+'/'+verb,'POST',{}));}finally{$('test-pause').disabled=false;}});
 let entryAction=null;
 function closeEntry(){entryAction=null;if($('entry-dialog').open)$('entry-dialog').close();}
 function openEntry({title,label='Name',value='',max=120,help='',save='Save'},fn){

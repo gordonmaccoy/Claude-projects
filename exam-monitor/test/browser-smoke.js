@@ -158,6 +158,7 @@ async function main() {
     await store.mutate(timed.id,s=>s.deadlineAt=Date.now()+9500);await runtime.tick();await timedStudent.locator('#test-timer.critical').waitFor();await timedStudent.waitForTimeout(3200);assert.match(await timedStudent.locator('#time-left').textContent(),/^[0-9]+(?::[0-9]{2})?$/);await timedStudent.screenshot({path:path.join(out,'student-countdown.png'),fullPage:true});await timedStudent.locator('#test-done').waitFor({state:'visible',timeout:15000});assert.match(await timedStudent.locator('#done-score').textContent(),/professor will share/);assert.equal((await timedStudent.locator('#done-score').textContent()).includes('%'),false);assert.equal((await store.getSession(timed.id)).students[0].submission.originalScore,2);await timedStudent.reload();await timedStudent.locator('#test-done').waitFor({state:'visible'});await timedContext.close();
     await page.getByRole('button',{name:'Results',exact:true}).click();await page.getByRole('button',{name:'View results',exact:true}).click();await page.locator('#result-delete').click();await page.getByRole('button',{name:'Launch',exact:true}).click();
     assert.equal(await page.getByRole('button',{name:'Launch calculator',exact:true}).count(),0);
+    await page.locator('#calculator-card > summary').click();
     await page.locator('#calculator-launch').click();
     await page.locator('#dashboard').waitFor({state:'visible'});
     await display.getByRole('heading',{name:'Classroom calculator',exact:true}).waitFor({state:'visible',timeout:5000});

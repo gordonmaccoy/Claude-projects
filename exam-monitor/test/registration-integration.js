@@ -30,8 +30,9 @@ const {chromium}=require('playwright'),{PGlite}=require('@electric-sql/pglite'),
  assert.equal(await page.evaluate(()=>localStorage.getItem('exam-monitor-theme')),'dark');
  await page.evaluate(()=>{window.open=()=>({focus(){},location:{replace(){}}});window.examioLanguage.apply('ko');});
  const calculatorRequest=page.waitForRequest(r=>r.method()==='POST'&&new URL(r.url()).pathname==='/api/sessions');
+ await page.locator('#calculator-card > summary').click();
  await page.locator('#calculator-launch').click();assert.equal((await calculatorRequest).postDataJSON().language,'ko');
- await page.locator('#calculator-launch').waitFor({state:'visible'});await page.waitForFunction(()=>!launching);
+ await page.waitForFunction(()=>!launching);
  await page.evaluate(()=>openLaunch(library[0]));
  const testRequest=page.waitForRequest(r=>r.method()==='POST'&&new URL(r.url()).pathname==='/api/sessions');
  const testResponse=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname==='/api/sessions');

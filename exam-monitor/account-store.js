@@ -55,7 +55,7 @@ function createAccountStore(rawPool){
   async completeDeletion(ownerId,removeIdentity){return withOwner(ownerId,async account=>{
    if(account.state==='deleted')return {state:'deleted'};if(account.state!=='deleting')throw problem('Account deletion has not been requested.');
    await removeIdentity(ownerId);
-   for(const table of ['contacts','folders','tests','sessions','onboarding'])await pool.query('DELETE FROM onscreen_v2_'+table+' WHERE owner_id=$1',[ownerId]);
+   for(const table of ['contacts','folder_order','folders','tests','sessions','onboarding'])await pool.query('DELETE FROM onscreen_v2_'+table+' WHERE owner_id=$1',[ownerId]);
    await pool.query("UPDATE onscreen_v2_accounts SET state='deleted',profile='{}'::jsonb WHERE owner_id=$1",[ownerId]);return {state:'deleted'};
   },{allowInactive:true});},
   async delayDeletion(ownerId){await pool.query("UPDATE onscreen_v2_accounts SET retry_at=NOW()+INTERVAL '1 minute' WHERE owner_id=$1 AND state='deleting'",[ownerId]);}

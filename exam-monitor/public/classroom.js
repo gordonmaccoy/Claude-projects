@@ -23,15 +23,15 @@ let timer;
 function renderTimer() {
   $('class-timer').hidden=!timer;
   if(!timer)return;
-  const seconds=Math.max(0,Math.ceil((timer.deadline-timer.serverNow-performance.now()+timer.received)/1000));
+  const seconds=Math.max(0,Math.ceil(timer.remainingMs!=null?timer.remainingMs/1000:(timer.deadline-timer.serverNow-performance.now()+timer.received)/1000));
   $('class-time').textContent=Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0');
 }
 setInterval(renderTimer,250);
 function render(view) {
-  timer=view.phase==='running'&&view.deadlineAt?{deadline:view.deadlineAt,serverNow:view.serverNow,received:performance.now()}:null;
+  timer=view.phase==='paused'&&view.remainingMs!=null?{remainingMs:view.remainingMs}:view.phase==='running'&&view.deadlineAt?{deadline:view.deadlineAt,serverNow:view.serverNow,received:performance.now()}:null;
   renderTimer();
   $('title').textContent=view.calculator?t('Classroom calculator'):view.title;
-  $('phase').textContent=view.phase==='waiting'?t('Scan to join · Waiting for your professor to start'):view.phase==='ended'?t('Session ended'):t('Session in progress');
+  $('phase').textContent=view.phase==='paused'?t('Test paused'):view.phase==='waiting'?t('Scan to join · Waiting for your professor to start'):view.phase==='ended'?t('Session ended'):t('Session in progress');
   $('count').textContent=t('{joined} joined · {active} active · {completed} completed',{joined:view.students.length,active:view.students.filter(s=>s.status==='green').length,completed:view.students.filter(s=>s.status==='completed').length});
   $('students').replaceChildren(...view.students.map(s=> {const tile=document.createElement('div');tile.className=`student ${['submitted','completed'].includes(s.status)?'submitted':s.status==='failed'?'red failed':s.status==='red'?'red':''}`;const dot=document.createElement('span');dot.className='dot';const name=document.createElement('span');name.textContent=s.name;tile.append(dot,name);if(['failed','submitted','completed'].includes(s.status)){const status=document.createElement('small');status.textContent=s.status==='failed'?t('FAIL'):s.status==='completed'?t('Completed and closed'):t('Test Submitted');tile.append(status);}return tile;}));
 }

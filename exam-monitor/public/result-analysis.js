@@ -1,0 +1,6 @@
+(function(root){
+ const round=value=>Math.round(value*100)/100;
+ function statistics(students){const scores=students.filter(s=>s.result&&Number.isFinite(s.result.percentage)).map(s=>s.result.percentage);return {students:students.length,completion:students.length?round(scores.length/students.length*100):0,average:scores.length?round(scores.reduce((sum,value)=>sum+value,0)/scores.length):null};}
+ function questionStatistics(students,index){const finalized=students.filter(s=>s.submitted),correct=finalized.filter(s=>s.answers[index]?.status==='correct').length;const answered=students.map(s=>s.answers[index]).filter(answer=>answer?.answer);const options=new Map(),blanks=new Map();for(const answer of answered){if(answer.optionId)options.set(answer.optionId,(options.get(answer.optionId)||0)+1);blanks.set(answer.answer,(blanks.get(answer.answer)||0)+1);}return {submitted:finalized.length,correct,average:finalized.length?round(correct/finalized.length*100):null,answered:answered.length,options:Object.fromEntries(options),blanks:Object.fromEntries(blanks)};}
+ const api={statistics,questionStatistics};if(typeof module==='object'&&module.exports)module.exports=api;else root.examioResultAnalysis=api;
+})(typeof window==='object'?window:globalThis);

@@ -77,13 +77,16 @@ els.form.onsubmit=async e=> { e.preventDefault(); const b=els.form.querySelector
 function showView(view) {
   const previousExtension=currentView?.extensionVersion;currentView=view;
   if(previousExtension!==undefined && view.extensionVersion>previousExtension){extensionNoticeUntil=performance.now()+6000;$('time-notice').textContent=t('Your professor extended the time by {minutes} minute.', {minutes:view.lastExtension?.minutes||1});}
-  if((view.result||view.failed||view.phase==='ended')&&$('submit-dialog').open)$('submit-dialog').close();
+  if((view.result||view.failed||view.phase==='ended'||view.phase==='paused')&&$('submit-dialog').open)$('submit-dialog').close();
   timerSnapshot={deadlineAt:view.deadlineAt,serverNow:view.serverNow,receivedAt:performance.now()};
   if(view.terminal){clearTimeout(draftTimer);clearTimeout(reconnectTimer);connectionNotice.textContent='';if(!view.completed||!completingCalculator)socket.disconnect();}
   els.testQuestions.classList.toggle('test-copy-guard',view.mode==='test'&&view.phase==='running'&&!view.result);
+  const paused=view.phase==='paused'&&!view.result&&!view.completed;
+  $('pause-lock').hidden=!paused;
+  if(paused)clearTimeout(draftTimer);
   const locked=Boolean(view.failed && !view.result && view.phase==='running');
   $('activity-lock').hidden=!locked;
-  els.calcSection.inert=locked; els.testSection.inert=locked;
+  els.calcSection.inert=locked||paused; els.testSection.inert=locked||paused;
   if(!locked && $('student-notice').textContent.startsWith(t('FAIL'))) message('');
   els.joinSection.hidden=true; els.calcSection.hidden=true; els.testSection.hidden=true; $('waiting-section').hidden=true;
   if(view.completed) {
@@ -103,6 +106,7 @@ function showView(view) {
   }
   if(view.phase==='ended') { try{localStorage.removeItem(calculatorKey);}catch{} message(t('Your professor ended the session.')); els.joinSection.hidden=false; els.form.querySelector('button').disabled=true; return; }
   if(view.mode==='calculator') { els.calcSection.hidden=false; return; }
+  if(paused){els.testSection.hidden=false;els.testTitle.textContent=view.test?.title||t('Test');els.testActions.hidden=true;return;}
   if(view.phase==='waiting') { $('waiting-section').hidden=false; return; }
   els.testSection.hidden=false; els.testTitle.textContent=view.test?.title || t('Test'); els.testActions.hidden=false; els.testDone.hidden=true;
 
@@ -180,7 +184,7 @@ els.testSubmitBtn.onclick=()=> {
 };
 $('submit-review').onclick=()=> $('submit-dialog').close();
 $('submit-confirm').onclick=async()=>{
- if(submitting||currentView?.failed||currentView?.result)return;
+ if(submitting||currentView?.failed||currentView?.result||currentView?.phase!=='running')return;
  submitting=true;els.testSubmitBtn.disabled=true;$('submit-confirm').disabled=true;clearTimeout(draftTimer);
  const res=await emit('student:submit',{answers:testAnswers});
  submitting=false;els.testSubmitBtn.disabled=false;$('submit-confirm').disabled=false;
