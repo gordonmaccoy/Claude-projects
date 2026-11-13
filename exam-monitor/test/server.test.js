@@ -82,7 +82,7 @@ test('HTTP/socket exam flow enforces ownership, recovers after restart, sanitize
     const partial={title:'AI key draft',questions:[{...saved.body.questions[0],correctOptionId:''}]};
     for(let attempt=0;attempt<3;attempt++){const r=await request('/api/answer-key','POST',{test:partial});assert.equal(r.status,200);assert.equal(r.body.test.questions[0].correctOptionId,'a');}
     for(let attempt=0;attempt<2;attempt++)assert.equal((await request('/api/import-ai','POST',{source:'Quiz\n1. 2+2?\nA.4\nB.5'})).status,200);
-    assert.equal((await request('/api/generate','POST',{source:'Some source material',count:1})).status,429,'All AI routes share a budget');assert.equal((await request('/api/tests')).body.length,1,'AI never saves automatically');
+    assert.equal((await request('/api/answer-key','POST',{test:partial})).status,200,'A sixth successful AI request is allowed; no hourly quota');assert.equal((await request('/api/tests')).body.length,1,'AI never saves automatically');
     const reconnect = await socket();
     const resume = await emit(reconnect, 'student:join', { sessionId: sid, resumeToken: joined.resumeToken });
     assert.equal(resume.ok, true); assert.equal(resume.view.draft.q, 'a');
