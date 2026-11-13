@@ -1,4 +1,9 @@
 window.examioKorean = {
+  "Keep me logged in on this computer": "이 컴퓨터에서 로그인 유지",
+  "Please confirm": "확인해 주세요",
+  "Yes": "예",
+  "No": "아니요",
+  "Are you sure you want to sign out?": "로그아웃하시겠습니까?",
   "Examio · Student": "Examio · 학생",
   "TEST": "시험",
   "MONITOR": "감독",

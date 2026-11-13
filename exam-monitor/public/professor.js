@@ -1,21 +1,15 @@
+function applyProfessorTheme(value){const theme=value==='dark'?'dark':'light';document.documentElement.dataset.theme=theme;try{localStorage.setItem('exam-monitor-theme',theme);}catch{}document.getElementById('professor-theme-toggle').setAttribute('aria-pressed',String(theme==='dark'));}
+try{applyProfessorTheme(localStorage.getItem('exam-monitor-theme'));}catch{applyProfessorTheme('light');}
+document.getElementById('professor-theme-toggle').onclick=()=>applyProfessorTheme(document.documentElement.dataset.theme==='dark'?'light':'dark');
 const {t}=window.examioLanguage;
 const $ = id => document.getElementById(id);
-$('add-practice-test').onclick=action(async()=>{
-  const control=$('add-practice-test');
-  control.disabled=true;
-  try {
-    await api('/practice-test','POST',{language:window.examioLanguage.current});
-    await refresh();
-    notice('Practice test added.');
-  } finally { control.disabled=false; }
-});
 const els = { tbTitle: $('tb-title'), tbQuestions: $('tb-questions'), tbError: $('tb-error') };
 const socket = io();
 let resultViewVersion=0;
 let trashVersion=0, pendingTrashDelete=null;
 let auth, account, current, historySession, library = [], folders = [], aiConfigured=false, uploadMaxBytes=5*1024*1024, importMode="import", sessionList = [], editingId = null, tbQuestions = [], popup, recoveringPassword = false;
 let accountGeneration = 0,creationVersion=0,professorTimerSnapshot=null;
-$('calculator-language').value=window.examioLanguage.current;
+
 let lastWorkspaceTab = 'launch';
 let popupSessionId = null, openingDisplay = false, launching = false;
 function clearPrivateWorkspace() {
@@ -308,7 +302,7 @@ async function watch() {
 $('calculator-launch').onclick = action(async () => {
   const existing = sessionList.find(s => s.mode === 'calculator' && s.phase !== 'ended');
   if (existing) { await openSession(existing.id); await openClassroomDisplay(current); }
-  else await launchSession({ mode: 'calculator',language:$('calculator-language').value });
+  else await launchSession({ mode: 'calculator',language:window.examioLanguage.current });
 });
 $('display-open').onclick = action(() => current && openClassroomDisplay(current));
 $('test-start').onclick = action(async () => { if (!confirm('Start this test now? Hidden pages for more than 5 seconds will receive FAIL.')) return; current = await api(`/sessions/${current.id}/start`, 'POST', {}); renderDashboard(); });
@@ -491,7 +485,10 @@ async function initAuth() {
   const config=await (await fetch('/api/config')).json();
   if (!config.supabaseUrl || !config.supabaseKey) { $('auth-message').textContent='Professor sign-in needs Development authentication configuration. See V2_SETUP.md.'; $('login').querySelectorAll('input,button').forEach(el=>el.disabled=true); return; }
   aiConfigured=Boolean(config.aiConfigured);if(Number.isSafeInteger(config.uploadMaxBytes)&&config.uploadMaxBytes>0)uploadMaxBytes=config.uploadMaxBytes;
-  auth=window.createOnScreenAuth(config.supabaseUrl, config.supabaseKey, {auth:{flowType:'pkce',detectSessionInUrl:true}});
+  const preferences=window.createExamioSessionPreferences(config.supabaseUrl);
+  $('remember-login').checked=preferences.remember;
+  $('remember-login').onchange=()=>preferences.setRemember($('remember-login').checked);
+  auth=window.createOnScreenAuth(config.supabaseUrl, config.supabaseKey, {auth:{flowType:'pkce',detectSessionInUrl:true,persistSession:true,storage:preferences.storage}});
   registration=window.createExamioRegistration({auth,api,onComplete:()=>setTimeout(()=>{void signedIn();},0)});
   auth.auth.onAuthStateChange((event) => {
     if (event==='PASSWORD_RECOVERY') { recoveringPassword=true; $('login').hidden=false; $('workspace').hidden=true; $('login-form').hidden=true; $('google').hidden=true; $('new-password-form').hidden=false; }
@@ -501,7 +498,14 @@ async function initAuth() {
   });
   $('login-form').onsubmit=async e=> { e.preventDefault(); try{const {error}=await auth.auth.signInWithPassword({email:$('email').value,password:$('password').value}); $('auth-message').textContent=t(error?.message || '');}catch(error){$('auth-message').textContent=error.message;} };
   $('google').onclick=async()=> { const {error}=await auth.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+'/professor.html'}}); if(error) $('auth-message').textContent=error.message; };
-  $('signout').onclick=async()=> { await auth.auth.signOut(); };
+  $('signout').onclick=()=> { $('signout-error').textContent='';$('settings-menu').open=false;$('signout-dialog').showModal();$('signout-cancel').focus(); };
+  for(const id of ['signout-cancel','signout-close'])$(id).onclick=()=> $('signout-dialog').close();
+  $('signout-confirm').onclick=async()=>{
+    $('signout-confirm').disabled=true;
+    try{const {error}=await auth.auth.signOut();if(error)throw error;$('signout-dialog').close();}
+    catch(error){$('signout-error').textContent=error.message;}
+    finally{$('signout-confirm').disabled=false;}
+  };
   $('reset-password').onclick=async()=> { const {error}=await auth.auth.resetPasswordForEmail($('email').value,{redirectTo:location.origin+'/professor.html'}); $('auth-message').textContent=error?.message || t('Check your email for a password reset link.'); };
   $('new-password-form').onsubmit=async e=> { e.preventDefault(); const {error}=await auth.auth.updateUser({password:$('new-password').value}); $('auth-message').textContent=error?.message || t('Password updated.'); if(!error) { recoveringPassword=false; $('new-password-form').hidden=true; $('login-form').hidden=false; $('google').hidden=false; await signedIn(); } };
   if ((await auth.auth.getSession()).data.session) await signedIn();
@@ -521,9 +525,9 @@ function folderActions(folder) {
   return actions;
 }
 let launchTest=null;
-function openLaunch(test){$('launch-language').value=window.examioLanguage.current;launchTest=test;$('launch-test-title').textContent=test.title;$('launch-duration').value='0';$('launch-show-scores').checked=true;$('launch-shuffle').checked=false;$('launch-corrections').checked=false;$('launch-error').textContent='';$('launch-dialog').showModal();}
+function openLaunch(test){launchTest=test;$('launch-test-title').textContent=test.title;$('launch-duration').value='0';$('launch-show-scores').checked=true;$('launch-shuffle').checked=false;$('launch-corrections').checked=false;$('launch-error').textContent='';$('launch-dialog').showModal();}
 $('launch-cancel').onclick=()=> $('launch-dialog').close();
-$('launch-form').onsubmit=async e=>{e.preventDefault();$('launch-confirm').disabled=true;try{await launchSession({testId:launchTest.id,language:$('launch-language').value,durationMinutes:Number($('launch-duration').value),showScores:$('launch-show-scores').checked,shuffleAnswers:$('launch-shuffle').checked,showCorrections:$('launch-corrections').checked});$('launch-dialog').close();}catch(e){$('launch-error').textContent=e.message;}finally{$('launch-confirm').disabled=false;}};
+$('launch-form').onsubmit=async e=>{e.preventDefault();$('launch-confirm').disabled=true;try{await launchSession({testId:launchTest.id,language:window.examioLanguage.current,durationMinutes:Number($('launch-duration').value),showScores:$('launch-show-scores').checked,shuffleAnswers:$('launch-shuffle').checked,showCorrections:$('launch-corrections').checked});$('launch-dialog').close();}catch(e){$('launch-error').textContent=e.message;}finally{$('launch-confirm').disabled=false;}};
 $('extend-time').onclick=action(async()=>{const updated=await api('/sessions/'+current.id+'/extend','POST',{});updateSession(updated);notice('Added 1 minute (60 seconds). New end time: '+new Date(updated.deadlineAt).toLocaleTimeString());});
 let entryAction=null;
 function closeEntry(){entryAction=null;if($('entry-dialog').open)$('entry-dialog').close();}

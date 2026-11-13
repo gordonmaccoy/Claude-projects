@@ -8,10 +8,11 @@ const {chromium}=require('playwright'),{PGlite}=require('@electric-sql/pglite'),
  try{
  const page=await browser.newPage();const errors=[];page.on('pageerror',error=>errors.push(error.message));
  await page.route('**/auth-client.js',route=>route.fulfill({contentType:'text/javascript',body:`
- window.authEvents=[];window.authSession=null;window.registrationData=null;
+ window.authEvents=[];window.authSession=null;window.registrationData=null;window.signoutCount=0;
  window.createOnScreenAuth=()=>({auth:{
  onAuthStateChange(fn){authEvents.push(fn);return {data:{subscription:{unsubscribe(){}}}};},
  async getSession(){return {data:{session:authSession}};},
+ async signOut(){signoutCount++;authSession=null;authEvents.forEach(fn=>fn('SIGNED_OUT',null));return {error:null};},
  async signInWithPassword(){return {error:{message:'Invalid login credentials'}};},
  async signUp(input){registrationData=input.options.data.examio_registration;return {data:{session:null},error:null};},
  async verifyOtp(){authSession={access_token:'verified-test-token',user:{id:'new-professor',email:'new@example.com',user_metadata:{examio_registration:registrationData}}};authEvents.forEach(fn=>fn('SIGNED_IN',authSession));return {data:{session:authSession},error:null};}
@@ -23,6 +24,21 @@ const {chromium}=require('playwright'),{PGlite}=require('@electric-sql/pglite'),
  assert.equal(await page.evaluate(()=>registrationData),null);
  await page.locator('#reg-next').click();await page.locator('#reg-role').selectOption('it');await page.locator('#reg-terms').check();await page.locator('#reg-finish').click();await page.locator('#reg-code').fill('123456');await page.locator('#reg-verify-submit').click();await page.locator('#workspace:not([hidden])').waitFor();
  const saved=(await store.getAccount('new-professor')).profile;assert.equal(saved.role,'it');assert.equal(saved.registrationComplete,true);assert.ok(saved.termsAcceptedAt);assert.equal((await store.listTests('new-professor')).length,1);
+ await page.locator('#tour-dialog').evaluate(el=>{if(el.open)el.close();});
+ assert.equal(await page.locator('#add-practice-test,#calculator-language,#launch-language').count(),0);
+ await page.locator('#professor-theme-toggle').click();assert.equal(await page.locator('html').getAttribute('data-theme'),'dark');
+ assert.equal(await page.evaluate(()=>localStorage.getItem('exam-monitor-theme')),'dark');
+ await page.evaluate(()=>{window.open=()=>({focus(){},location:{replace(){}}});window.examioLanguage.apply('ko');});
+ const calculatorRequest=page.waitForRequest(r=>r.method()==='POST'&&new URL(r.url()).pathname==='/api/sessions');
+ await page.locator('#calculator-launch').click();assert.equal((await calculatorRequest).postDataJSON().language,'ko');
+ await page.locator('#calculator-launch').waitFor({state:'visible'});await page.waitForFunction(()=>!launching);
+ await page.evaluate(()=>openLaunch(library[0]));
+ const testRequest=page.waitForRequest(r=>r.method()==='POST'&&new URL(r.url()).pathname==='/api/sessions');
+ const testResponse=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname==='/api/sessions');
+ await page.locator('#launch-confirm').click();assert.equal((await testRequest).postDataJSON().language,'ko');const launchedResponse=await testResponse;assert.equal(launchedResponse.ok(),true,await launchedResponse.text());await page.locator('#launch-dialog').waitFor({state:'hidden'});
+ await page.locator('#settings-menu summary').click();await page.locator('#signout').click();await page.locator('#signout-dialog').waitFor({state:'visible'});assert.equal(await page.evaluate(()=>signoutCount),0);
+ await page.locator('#signout-cancel').click();assert.equal(await page.evaluate(()=>signoutCount),0);assert.equal(await page.locator('#workspace').isVisible(),true);
+ await page.locator('#settings-menu summary').click();await page.locator('#signout').click();await page.locator('#signout-confirm').click();await page.locator('#login').waitFor({state:'visible'});assert.equal(await page.evaluate(()=>signoutCount),1);
  assert.deepEqual(errors,[]);
  await page.goto(origin+'/professor.html');await page.waitForFunction(()=>document.querySelector('#login-form').onsubmit);await page.screenshot({path:'../.tmp/examio-login.png',fullPage:true});
  console.log('Registration integration passed: existing login errors, Enter navigation, OTP auth event, real API profile persistence and starter test.');
