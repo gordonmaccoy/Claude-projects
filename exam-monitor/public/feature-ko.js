@@ -130,3 +130,26 @@ Object.assign(window.examioKorean, {
   "Instant results": "즉시 확인하는 결과",
   "Grade submissions automatically and take your results with you as Excel or PDF.": "제출된 답안을 자동 채점하고 결과를 Excel 또는 PDF로 내보내세요."
 });
+
+Object.assign(window.examioKorean,{
+ "See activity. Set the rules. Stay in control.": "활동을 확인하고, 규칙을 정하고, 수업을 관리하세요.",
+ "See it happen.": "실시간으로 확인하세요.",
+ "See who is active, away, submitted or failed.": "접속, 이탈, 제출, 실격 상태를 한눈에 확인하세요.",
+ "Freeze the timer and student screens together.": "타이머와 학생 화면을 함께 일시정지하세요.",
+ "Unlock the attempt or submit the fail score.": "잠금을 해제하거나 실격 점수를 제출하세요.",
+ "Choose the deterrents that fit your class.": "수업에 맞는 부정행위 방지 옵션을 선택하세요.",
+ "Call Professor": "교수님께 문의",
+ "With the five-second rule on, a hidden page locks.": "5초 규칙을 켜면 페이지 이탈 시 화면이 잠깁니다.",
+ "Review the activity log.": "활동 기록을 확인하세요.",
+ "See what happened before you decide.": "기록을 확인한 후 결정하세요.",
+ "Example screens with sample student data.": "예시 학생 데이터를 사용한 화면입니다.",
+ "Enlarge screenshot": "스크린샷 확대",
+ "Close screenshot": "스크린샷 닫기",
+ "Screenshot preview": "스크린샷 미리보기",
+ "Class display showing green, red, submitted and failed student status": "학생의 접속, 이탈, 제출, 실격 상태를 색상으로 표시한 강의실 화면",
+ "Student screen showing Test is Paused and Wait a moment": "시험 일시정지 및 잠시 대기 메시지가 표시된 학생 화면",
+ "Professor controls to unlock a failed student or submit a fail score": "실격 학생의 잠금 해제 또는 실격 점수 제출을 위한 교수님 설정",
+ "Expanded monitoring and cheating deterrent settings with individual switches": "개별 스위치가 표시된 모니터링 및 부정행위 방지 설정",
+ "Failed student screen asking the student to call the professor": "교수님께 문의하라고 안내하는 실격 학생 화면",
+ "Example monitoring log with page visibility, focus and fullscreen events": "페이지 표시 상태, 포커스, 전체 화면 이벤트가 표시된 모니터링 기록 예시"
+});

@@ -24,4 +24,11 @@
   function respectMotion(){if(reduced.matches){if(image.complete&&image.naturalWidth)pause(true);else image.addEventListener('load',()=>pause(true),{once:true});}}
   respectMotion();reduced.addEventListener('change',respectMotion);
  }
+ const screenshots=document.querySelectorAll('[data-screenshot]');
+ if(screenshots.length){
+  const dialog=document.createElement('dialog'),image=document.createElement('img'),close=document.createElement('button');let trigger;
+  dialog.className='fp-lightbox';dialog.setAttribute('aria-label',t('Screenshot preview'));close.type='button';close.textContent='×';close.setAttribute('aria-label',t('Close screenshot'));dialog.append(close,image);document.body.append(dialog);
+  for(const button of screenshots){button.setAttribute('aria-label',t('Enlarge screenshot')+': '+button.querySelector('img').alt);button.addEventListener('click',()=>{const source=button.querySelector('img');trigger=button;image.src=source.src;image.alt=source.alt;dialog.showModal();});}
+  close.addEventListener('click',()=>dialog.close());dialog.addEventListener('close',()=>trigger?.focus());dialog.addEventListener('click',event=>{if(event.target===dialog){const box=dialog.getBoundingClientRect();if(event.clientX<box.left||event.clientX>box.right||event.clientY<box.top||event.clientY>box.bottom)dialog.close();}});
+ }
 })();
