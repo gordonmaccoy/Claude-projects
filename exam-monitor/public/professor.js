@@ -13,6 +13,7 @@ let accountGeneration = 0,creationVersion=0,professorTimerSnapshot=null;
 let lastWorkspaceTab = 'launch';
 let popupSessionId = null, openingDisplay = false, launching = false;
 function clearPrivateWorkspace() {
+  quizSharing.reset();
   closeCreation();exportsController.close();
   $('workspace-tabs').hidden=true;finishFolderDrag();if($('question-detail-dialog').open)$('question-detail-dialog').close();questionData=null;
   settings.reset();tour.reset();$('launch-show-names').checked=false;$('launch-show-scores-live').checked=false;$('result-detail-rows').replaceChildren();lastWorkspaceTab='launch';accountGeneration++;creationVersion++;professorTimerSnapshot=null;if($('answer-ai-dialog').open)$('answer-ai-dialog').close();$('answer-ai-status').textContent='';closeEntry();launchTest=null;$('new-title').value='';for(const id of ['tb-folder','new-folder-choice'])$(id).replaceChildren();$('launch-test-title').textContent='';if($('launch-dialog').open)$('launch-dialog').close();$('creation-choice').hidden=true;
@@ -173,6 +174,63 @@ function setupQuizDrop(folder,list) {
     await refresh();
   });
 }
+function createQuizSharingUI({api,getFolders,isSignedIn,notify,onImported}) {
+  const el=id=>document.getElementById(id);
+  let generation=0,requestVersion=0,loading=false,timer=null,share=null,busy=false;
+  const make=(tag,text,className)=>{const node=document.createElement(tag);if(text!==undefined)node.textContent=text;if(className)node.className=className;return node;};
+  const status=message=>{el('shares-status').textContent=message;};
+  function setBusy(value){busy=value;for(const id of ['share-submit','share-email','share-cancel'])el(id).disabled=value;}
+  function reset(){generation++;requestVersion++;loading=false;share=null;setBusy(false);clearInterval(timer);timer=null;for(const id of ['share-dialog','shares-dialog'])if(el(id).open)el(id).close();for(const id of ['shares-incoming','shares-outgoing'])el(id).replaceChildren();el('shares-open').hidden=true;el('shares-open').textContent='Shared with me';el('share-email').value='';el('share-quiz-title').textContent='';el('share-error').textContent='';if(el('shares-dialog').dataset)delete el('shares-dialog').dataset.signature;status('');}
+  function openShare(test){if(busy)return;share={id:test.id,requestId:crypto.randomUUID(),email:null};el('share-quiz-title').textContent=test.title;el('share-email').value='';el('share-error').textContent='';setBusy(false);el('share-dialog').showModal();el('share-email').focus();}
+  el('share-dialog').oncancel=event=>{if(busy)event.preventDefault();};
+  el('share-dialog').onclose=()=>{share=null;};
+  el('share-cancel').onclick=()=>{if(!busy)el('share-dialog').close();};
+  el('share-form').onsubmit=async event=>{
+    event.preventDefault();if(busy||!share||!el('share-email').reportValidity())return;
+    const email=el('share-email').value.trim();
+    if(share.email!==null&&share.email!==email)share.requestId=crypto.randomUUID();
+    share.email=email;const attempt={...share},version=generation;
+    setBusy(true);el('share-error').textContent='';
+    try{const result=await api('/tests/'+encodeURIComponent(attempt.id)+'/share','POST',{email,requestId:attempt.requestId});if(version!==generation)return;el('share-dialog').close();notify(result.message||'If this account can receive quizzes, a request has been sent.');await refresh();}
+    catch(error){if(version===generation)el('share-error').textContent=error.message;}
+    finally{if(version===generation)setBusy(false);}
+  };
+  function requestCard(item,incoming){
+    const entry=make('article',undefined,'share-request');entry.append(make('h3',item.title));
+    entry.append(make('p',incoming?'From '+item.senderEmail+' · '+item.questionCount+' questions':'To '+item.recipientEmail+' · '+item.status));
+    let select;
+    if(incoming){const label=make('label','Import into class folder');select=make('select');const options=[{id:'',name:'Uncategorized Test'},...getFolders()];for(const folder of options){const option=make('option',folder.name);option.value=folder.id;select.append(option);}label.append(select);entry.append(label);}
+    const actions=make('div',undefined,'actions'),error=make('p','', 'error');error.setAttribute('role','alert');
+    const perform=async(method)=>{const version=generation;const controls=[...actions.children,...(select?[select]:[])];if(controls.some(control=>control.disabled))return;controls.forEach(control=>control.disabled=true);error.textContent='';
+      try{await api('/shares/'+encodeURIComponent(item.id)+'/'+method,'POST',method==='accept'?{folderId:select.value||null}:undefined);if(version!==generation)return;entry.remove?.();if(method==='accept'){await onImported();if(version!==generation)return;notify('Quiz imported into your library.');}await refresh();}
+      catch(e){if(version===generation)error.textContent=e.message;}finally{if(version===generation)controls.forEach(control=>control.disabled=false);}
+    };
+    if(incoming){const accept=make('button','Accept & Import','primary');accept.type='button';accept.onclick=()=>perform('accept');const decline=make('button','Decline');decline.type='button';decline.onclick=()=>perform('decline');actions.append(accept,decline);}
+    else if(item.status==='pending'){const cancel=make('button','Cancel request');cancel.type='button';cancel.onclick=()=>perform('cancel');actions.append(cancel);}
+    entry.append(actions,error);return entry;
+  }
+  async function refresh(){
+    if(!isSignedIn()||document.hidden||loading)return;loading=true;const version=generation,request=++requestVersion;
+    try{const data=await api('/shares');if(version!==generation||request!==requestVersion)return;const incoming=Array.isArray(data.incoming)?data.incoming:[],outgoing=Array.isArray(data.outgoing)?data.outgoing:[];
+      el('shares-open').hidden=false;el('shares-open').textContent='Shared with me'+(incoming.length?' ('+incoming.length+')':'');
+      // Leave choices/focus intact during periodic checks while the inbox is open.
+      const signature=JSON.stringify(data);if(el('shares-dialog').open&&el('shares-dialog').dataset?.signature===signature)return;
+      if(el('shares-dialog').dataset)el('shares-dialog').dataset.signature=signature;
+      el('shares-incoming').replaceChildren(...incoming.map(item=>requestCard(item,true)));el('shares-outgoing').replaceChildren(...outgoing.map(item=>requestCard(item,false)));
+      if(!incoming.length)el('shares-incoming').append(make('p','No pending quizzes.'));if(!outgoing.length)el('shares-outgoing').append(make('p','No sent requests.'));status('');
+    }catch(error){if(version===generation&&el('shares-dialog').open)status(error.message);}
+    finally{if(version===generation&&request===requestVersion)loading=false;}
+  }
+  el('shares-open').onclick=()=>{el('shares-dialog').showModal();refresh();};
+  el('shares-close').onclick=()=>el('shares-dialog').close();
+  el('shares-refresh').onclick=()=>refresh();
+  function start(){el('shares-open').hidden=false;if(!timer)timer=setInterval(()=>{if(isSignedIn()&&!document.hidden)refresh();},30000);refresh();}
+  return {openShare,refresh,start,reset};
+}
+// End quiz sharing controller
+
+const quizSharing=createQuizSharingUI({api,getFolders:()=>folders,isSignedIn:()=>!!account,notify:notice,onImported:async()=>{await refresh();}});
+document.addEventListener("visibilitychange",()=>{if(!document.hidden&&account)quizSharing.refresh();});
 async function refresh() {
   [library, sessionList, folders] = await Promise.all([api('/tests'), api('/sessions'),api('/folders')]);
   const expanded=new Set([...document.querySelectorAll('#launch-tests details[open],#library-tests details[open]')].map(folder=>folder.dataset.folderKey));
@@ -228,6 +286,7 @@ async function refresh() {
       if (!confirm(`Move “${test.title}” to Trash for 30 days? Existing sessions keep their copy.`)) return;
       await api(`/tests/${test.id}`, 'DELETE'); await refresh();
     }));
+    actions.append(button('Share',()=>quizSharing.openShare(test)));
     actions.append(button(t('Download PDF'),()=>downloadFile('/api/tests/'+encodeURIComponent(test.id)+'/pdf',test.title+'.pdf')),handle);saved.append(actions); (groups['library-tests'+(test.folderId||'')]||$('library-tests')).append(saved);
   }
   for (const s of sessionList) {
@@ -240,6 +299,7 @@ async function refresh() {
   }
   if (!sessionList.some(s => s.mode === 'test')) $('result-sessions').append(card('No test results yet', 'Results from tests will be saved here. Calculator sessions do not create results.'));
   if(current && !sessionList.some(s=>s.id===current.id && s.phase!=='ended')){current=null;renderDashboard();}
+  quizSharing.start();
 }
 function openBuilder(test) {
   closeCreation();creationVersion++;els.tbQuestions.inert=false;$('tb-start-btn').disabled=false;$('tb-add-q-btn').disabled=false;$('tb-answer-ai').disabled=!aiConfigured;$('answer-ai-status').textContent='';tab('library');$('creation-choice').hidden=true;$('import-panel').hidden=true; editingId = test?.id || null;

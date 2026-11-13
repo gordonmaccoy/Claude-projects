@@ -161,3 +161,9 @@ select,textarea{font:inherit;background:#fff;color:#223c31;border:1px solid #c5c
 .tb-q-error { margin: 8px 0; font-weight: 600; }
 .tb-answer-warning { color: #8a3800; background: #fff4e5; padding: 8px 12px; border-radius: 6px; }
 .tb-q-card [aria-invalid="true"] { outline: 2px solid #b42318; outline-offset: 2px; }
+
+/* In-app quiz sharing: keep confirmation and folder selection readable on phones. */
+.quiz-sharing-dialog{width:min(680px,calc(100vw - 32px));max-height:88dvh;overflow:auto;box-sizing:border-box}
+.quiz-sharing-dialog p,.quiz-sharing-dialog h3{overflow-wrap:anywhere}.quiz-sharing-dialog input,.quiz-sharing-dialog select{box-sizing:border-box;max-width:100%}
+.quiz-sharing-dialog .share-request{border:1px solid var(--examio-line,#cbd6df);border-radius:12px;padding:16px;margin:12px 0}.quiz-sharing-dialog .share-request h3{margin-top:0}.quiz-sharing-dialog .sharing-note{font-size:.9rem;line-height:1.5}.quiz-sharing-dialog .actions{flex-wrap:wrap}#shares-open{white-space:normal}
+@media(max-width:600px){.quiz-sharing-dialog{padding:18px}.quiz-sharing-dialog .actions button{flex:1 1 140px}.quiz-sharing-dialog .section-heading{gap:12px;flex-wrap:wrap}#shares-open{font-size:13px;padding:8px}}
