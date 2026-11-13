@@ -1,4 +1,6 @@
 window.examioKorean = {
+ "Student activity displayed in real time":"학생 활동을 실시간으로 표시",
+ "Student results recorded in real time":"학생 결과를 실시간으로 기록",
  "Leave off for a silly random name.":"끄면 재미있는 이름이 무작위로 생성됩니다.",
  "Enter the room name to join your test.":"강의실 이름을 입력하여 시험에 참여하세요.",
  "Finding your room…":"강의실을 찾는 중…",

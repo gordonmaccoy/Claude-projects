@@ -4,7 +4,7 @@ const {createStore}=require('../store'),{createApp}=require('../server'),exam=re
 test('room names normalize safely, generate silly names and survive active-session reservation',async()=>{
  const rooms=require('../rooms');assert.equal(rooms.roomName('  Orange   SOCKS ').key,'orange socks');assert.equal(rooms.roomName('강의실 １').key,'강의실 1');
  for(const input of ['', 'x'.repeat(51),'<script>',{},'bad\nroom'])assert.throws(()=>rooms.roomName(input));
- const random=rooms.generateRoomName();assert.match(random.name,/^[A-Za-z]+ [A-Za-z]+ \d{4}$/);
+ const random=rooms.generateRoomName();assert.match(random.name,/^[A-Za-z]+ [A-Za-z]+$/);
  const db=new PGlite(),pool={query:(...a)=>db.query(...a),connect:async()=>({query:(...a)=>db.query(...a),release(){}})},store=createStore(pool);await store.init();let runtime;
  try{
  const s=exam.newSession('teacher',null,Date.now(),{roomName:'Orange Socks'});await store.createSession(s);assert.equal((await store.findRoom('orange socks')).id,s.id);
@@ -17,6 +17,6 @@ test('room names normalize safely, generate silly names and survive active-sessi
  const collision=await fetch(base+'/api/sessions',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer teacher'},body:JSON.stringify({mode:'calculator',roomName:'Orange Socks'})});assert.equal(collision.status,409);
  await store.mutate(s.id,session=>{session.phase='ended';});assert.equal((await lookup('Orange Socks')).status,404);
  const next=exam.newSession('other',null,Date.now(),{roomName:'Orange Socks'});await store.createSession(next);assert.equal((await lookup('Orange Socks')).body.joinUrl,'/student.html?session='+next.id);
- const auto=await fetch(base+'/api/sessions',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer teacher'},body:JSON.stringify({mode:'calculator'})});assert.equal(auto.status,200);assert.match((await auto.json()).roomName,/\d{4}$/);
+ const auto=await fetch(base+'/api/sessions',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer teacher'},body:JSON.stringify({mode:'calculator'})});assert.equal(auto.status,200);const generated=(await auto.json()).roomName;assert.match(generated,/^[A-Za-z]+ [A-Za-z]+$/);assert.ok(generated.length<=16);
  }finally{if(runtime)await runtime.close();await db.close();}
 });

@@ -160,7 +160,7 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
   api.post('/sessions', wrap(async (req, res) => {
     const test = req.body.mode === 'calculator' ? null : await store.getTest(req.user.id, req.body.testId);
     if (!test && req.body.mode !== 'calculator') return res.status(404).json({ error: 'Saved test not found' });
-    for(let attempt=0;attempt<8;attempt++){
+    for(let attempt=0;attempt<32;attempt++){
       let s;try{s=exam.newSession(req.user.id,test,Date.now(),req.body);}catch(e){return res.status(400).json({error:e.message});}
       try{await store.createSession(s);return res.json(await decorate(s,req));}
       catch(e){if(e.code!=='23505'||e.constraint!=='onscreen_v2_active_room')throw e;if(req.body.roomName!==undefined)return res.status(409).json({error:'That room name is already in use. Choose another name.'});}
