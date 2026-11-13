@@ -9,3 +9,5 @@ Download opens Summary/Detailed columns with Excel, PDF and email actions. Email
 PDF exports bundle licensed Noto Sans KR for reliable Korean text and pin the canvas renderer dependency explicitly. Visual render checks cover Korean and multi-page output. A reproduced Windows native access violation in PDF import led to subprocess isolation, keeping size/text/time/heap limits, safe errors and one retry for abnormal native exits. Actual PDF/DOCX extraction and crash containment have regression tests.
 
 New creation/export modals close and clear private state when authentication changes. Classroom receives language from the session and has an independent remembered theme, with no language picker. Public release only; legacy production configuration remains unchanged.
+
+Follow-up: user selected signed-in-email-only delivery. Recipient is read-only and server derives it from the verified user, rejecting a supplied different address. User approved creating a separate sending-only key scoped to examio.io because the previous secret was no longer retained. RESEND_API_KEY and EXPORT_FROM are configured only in Railway Public; no credentials are stored in source.

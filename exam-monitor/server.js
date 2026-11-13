@@ -212,8 +212,9 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
   api.post('/sessions/:id/email-export',wrap(async(req,res)=>{
     const original=await owned(req.params.id,req.user);
     if(original.mode!=='test')return res.status(400).json({error:'Calculator sessions have no test scores to export.'});
+    if(req.body.email!==undefined&&(typeof req.body.email!=='string'||req.body.email.trim().toLowerCase()!==req.user.email?.toLowerCase()))return res.status(400).json({error:'Grades can only be emailed to your signed-in email address.'});
     const {session}=await store.mutate(req.params.id,s=>exam.sweep(s));
-    try{res.json(await exportMailer.send({session,user:req.user,email:req.body.email,detail:req.body.detail,requestId:req.body.requestId}));}
+    try{res.json(await exportMailer.send({session,user:req.user,email:req.user.email,detail:req.body.detail,requestId:req.body.requestId}));}
     catch(error){res.status(error.status||502).json({error:error.message});}
   }));
   app.use('/api', api);
