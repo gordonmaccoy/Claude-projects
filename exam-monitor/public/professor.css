@@ -155,3 +155,9 @@ select,textarea{font:inherit;background:#fff;color:#223c31;border:1px solid #c5c
 #launch-deterrents{width:100%;max-width:none}#launch-dialog .privacy-switch{line-height:1.5}#launch-dialog{scroll-padding-top:20px}
 
 #launch-security-controls{border:0;padding:0;margin:0;min-width:0}#launch-security-controls:disabled{opacity:.5}#launch-security-controls:disabled .privacy-switch{cursor:not-allowed}
+
+/* Keep validation next to the question, even when saving a long imported quiz. */
+.tb-q-card.tb-q-invalid { border: 2px solid #b42318; }
+.tb-q-error { margin: 8px 0; font-weight: 600; }
+.tb-answer-warning { color: #8a3800; background: #fff4e5; padding: 8px 12px; border-radius: 6px; }
+.tb-q-card [aria-invalid="true"] { outline: 2px solid #b42318; outline-offset: 2px; }
