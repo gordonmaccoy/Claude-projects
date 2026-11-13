@@ -192,3 +192,5 @@ Object.assign(window.examioKorean,{
  "Detailed results grid showing correct and incorrect student answers": "학생 정답과 오답이 표시된 상세 결과 표",
  "Download dialog offering summary and detailed Excel PDF and email exports": "요약 및 상세 결과의 Excel, PDF, 이메일 내보내기 대화 상자"
 });
+
+Object.assign(window.examioKorean,{"No apps to install.":"앱 설치 없이.","Instant QR code access!":"QR 코드로 바로 참여하세요!"});
