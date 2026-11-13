@@ -123,3 +123,13 @@ select,textarea{font:inherit;background:#fff;color:#223c31;border:1px solid #c5c
 [data-theme=dark] .switch-track{border:1px solid #859ab1}
 [data-theme=dark] .switch-track::after{top:2px;left:2px}
 @media(max-width:600px){.result-stats{gap:5px}.result-stats>div{padding:12px 6px;font-size:12px}.result-stats strong{font-size:18px}}
+/* White controls and test surfaces in both palettes. */
+#launch-tests .folder,#library-tests .folder{background:#fff;color:#102b42;border-color:#d1deeb}
+.folder>summary{position:relative;padding-right:52px}.folder-drag-handle{position:absolute;right:0;top:50%;transform:translateY(-50%)}.folder-inline-actions{margin-right:6px}
+[data-theme=dark] button:not(.primary){background:#fff;color:#102b42;border-color:#c2d2e2}[data-theme=dark] button:not(.primary):hover{background:#edf5ff;color:#102b42}[data-theme=dark] button.danger{color:#b42318}
+#session-main-controls{display:flex;align-items:center;gap:14px;width:100%;margin:20px 0}#session-main-controls #session-end{margin-left:auto}#test-start,#test-pause,#session-end{font-size:24px;min-height:75px;padding:20px 38px}
+#creation-dialog{width:min(760px,calc(100vw - 28px));max-height:90dvh;overflow:auto;border-radius:14px;border:1px solid #cbd9e8;padding:28px;background:white;color:#102b42}#creation-dialog::backdrop{background:#082d5b99}.creation-methods{display:grid;gap:12px}.creation-methods button{padding:18px;text-align:left;border:1px solid #d1deeb;background:white;color:#102b42}.creation-methods button:hover{background:#edf5ff}#creation-dialog .card{margin:0;padding:0;border:0;box-shadow:none;background:white;color:#102b42}[data-theme=dark] #creation-dialog :is(p,label,h2,h3){color:#102b42}
+@media(max-width:600px){#test-start,#test-pause,#session-end{font-size:18px;padding:16px 20px;min-height:64px}#session-main-controls{gap:8px;flex-wrap:wrap}#creation-dialog{padding:20px}}
+[data-theme=dark] :is(#workspace,#professor-navigation,dialog) button{background:#fff;color:#102b42;border-color:#c2d2e2}[data-theme=dark] :is(#workspace,#professor-navigation,dialog) button:hover{background:#edf5ff;color:#102b42}[data-theme=dark] #result-detail .result-toolbar [aria-pressed=true]{background:#fff;color:#0758cb;border-color:#0758cb;box-shadow:inset 0 -2px #0758cb}[data-theme=dark] :is(#workspace,dialog) button.danger{color:#b42318}
+#creation-dialog,.examio-export-dialog{--examio-ink:#102b42;--examio-muted:#617383;--examio-paper:#fff;--examio-line:#d1deeb;color-scheme:light}
+[data-theme=dark] :is(#creation-dialog,.examio-export-dialog) :is(input,select,textarea){background:#fff;color:#102b42;border-color:#c2d2e2}

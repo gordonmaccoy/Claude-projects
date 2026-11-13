@@ -7,12 +7,13 @@ const els = { tbTitle: $('tb-title'), tbQuestions: $('tb-questions'), tbError: $
 const socket = io();
 let resultViewVersion=0;
 let trashVersion=0, pendingTrashDelete=null;
-let auth, account, current, historySession, library = [], folders = [], aiConfigured=false, uploadMaxBytes=5*1024*1024, importMode="import", sessionList = [], editingId = null, tbQuestions = [], popup, recoveringPassword = false;
+let auth, account, current, historySession, library = [], folders = [], aiConfigured=false, exportEmailConfigured=false, uploadMaxBytes=5*1024*1024, importMode="import", sessionList = [], editingId = null, tbQuestions = [], popup, recoveringPassword = false;
 let accountGeneration = 0,creationVersion=0,professorTimerSnapshot=null;
 
 let lastWorkspaceTab = 'launch';
 let popupSessionId = null, openingDisplay = false, launching = false;
 function clearPrivateWorkspace() {
+  closeCreation();exportsController.close();
   $('workspace-tabs').hidden=true;finishFolderDrag();if($('question-detail-dialog').open)$('question-detail-dialog').close();questionData=null;
   settings.reset();tour.reset();$('launch-show-names').checked=false;$('launch-show-scores-live').checked=false;$('result-detail-rows').replaceChildren();lastWorkspaceTab='launch';accountGeneration++;creationVersion++;professorTimerSnapshot=null;if($('answer-ai-dialog').open)$('answer-ai-dialog').close();$('answer-ai-status').textContent='';closeEntry();launchTest=null;$('new-title').value='';for(const id of ['tb-folder','new-folder-choice'])$(id).replaceChildren();$('launch-test-title').textContent='';if($('launch-dialog').open)$('launch-dialog').close();$('creation-choice').hidden=true;
   trashVersion++;pendingTrashDelete=null;if($('trash-confirm').open)$('trash-confirm').close();$('trash-confirm-message').textContent='';$('trash-items').replaceChildren();
@@ -241,15 +242,15 @@ async function refresh() {
   if(current && !sessionList.some(s=>s.id===current.id && s.phase!=='ended')){current=null;renderDashboard();}
 }
 function openBuilder(test) {
-  creationVersion++;els.tbQuestions.inert=false;$('tb-start-btn').disabled=false;$('tb-add-q-btn').disabled=false;$('tb-answer-ai').disabled=!aiConfigured;$('answer-ai-status').textContent='';tab('library');$('creation-choice').hidden=true;$('import-panel').hidden=true; editingId = test?.id || null;
+  closeCreation();creationVersion++;els.tbQuestions.inert=false;$('tb-start-btn').disabled=false;$('tb-add-q-btn').disabled=false;$('tb-answer-ai').disabled=!aiConfigured;$('answer-ai-status').textContent='';tab('library');$('creation-choice').hidden=true;$('import-panel').hidden=true; editingId = test?.id || null;
   $('test-builder').hidden = false; $('builder-heading').textContent = test?.id ? t('Edit test') : 'Create a test';
   els.tbTitle.value = test?.title || ''; renderFolderOptions(test?.folderId||''); $('draft-review').textContent=''; tbQuestions = structuredClone(test?.questions || []); hideTbError();
   if (!tbQuestions.length) addQuestion(); else renderTestBuilder();
   $('test-builder').scrollIntoView({ behavior: 'smooth' });
 }
-$('new-test').onclick = () => {creationVersion++;tab('library');$('test-builder').hidden=true;$('import-panel').hidden=true;$('creation-choice').hidden=false;$('new-title').value='';$('new-folder-choice').value='';$('import-source').value='';$('import-file').value='';$('ai-consent').checked=false;};
+$('new-test').onclick = () => {closeCreation();creationVersion++;tab('library');$('test-builder').hidden=true;$('import-panel').hidden=true;$('creation-choice').hidden=false;$('new-title').value='';$('new-folder-choice').value='';resetImport();document.querySelector('.creation-methods').hidden=false;$('creation-dialog').showModal();};
 $('create-manual').onclick=()=>openBuilder({title:$('new-title').value.trim(),folderId:$('new-folder-choice').value});
-$('creation-cancel').onclick=()=>{creationVersion++;$('creation-choice').hidden=true;};
+$('creation-cancel').onclick=closeCreation;
 $('tb-add-q-btn').onclick = () => { if (tbQuestions.length < 100) addQuestion(); };
 $('tb-cancel-btn').onclick = () =>{creationVersion++;$('test-builder').hidden=true;};
 $('tb-start-btn').onclick = action(async () => {
@@ -484,7 +485,7 @@ $('result-details-tab').onclick=action(async()=>{
   await refreshAnswerGrid();
 });
 setInterval(()=>{if(detailsPhase!=='ended')void refreshAnswerGrid();},2000);
-$('result-export').onclick=action(()=>download(historySession,!$('result-details').hidden)); $('results-refresh').onclick=action(refresh);
+const exportsController=window.createExamioExports({getSession:()=>historySession,getEmail:()=>account?.email,getEmailConfigured:()=>exportEmailConfigured,downloadFile,api,notify:notice}); $('results-refresh').onclick=action(refresh);
 socket.on('connect',()=> { if (account) { if($('notice').textContent.startsWith('Live connection lost'))notice(''); watch().catch(e=>notice(e.message)); } });
 socket.on('disconnect',()=> { if (account) notice('Live connection lost. Sessions remain saved; reconnecting…'); });
 socket.on('professor:update',view=> { const listed=sessionList.find(s=>s.id===view.id);if(view.phase==='ended'||(listed&&(listed.title!==view.title||listed.phase!==view.phase)))refresh().catch(e=>notice(e.message));if (current?.id === view.id) { current={...current,...view}; renderDashboard(); } if (historySession?.id===view.id) { historySession={...historySession,...view}; renderResults(); } });
@@ -515,7 +516,7 @@ async function loadSignedInWorkspace() {
 async function initAuth() {
   const config=await (await fetch('/api/config')).json();
   if (!config.supabaseUrl || !config.supabaseKey) { $('auth-message').textContent='Professor sign-in needs Development authentication configuration. See V2_SETUP.md.'; $('login').querySelectorAll('input,button').forEach(el=>el.disabled=true); return; }
-  aiConfigured=Boolean(config.aiConfigured);if(Number.isSafeInteger(config.uploadMaxBytes)&&config.uploadMaxBytes>0)uploadMaxBytes=config.uploadMaxBytes;
+  aiConfigured=Boolean(config.aiConfigured);exportEmailConfigured=Boolean(config.exportEmailConfigured);if(Number.isSafeInteger(config.uploadMaxBytes)&&config.uploadMaxBytes>0)uploadMaxBytes=config.uploadMaxBytes;
   const preferences=window.createExamioSessionPreferences(config.supabaseUrl);
   $('remember-login').checked=preferences.remember;
   $('remember-login').onchange=()=>preferences.setRemember($('remember-login').checked);
@@ -576,29 +577,36 @@ function unlockStudent(session,student){openEntry({title:student.result?t('Overr
 function submitFail(session,student){openEntry({title:t('Submit Fail score'),label:'Reason',value:'Confirmed by professor',max:500,help:'Finalize '+student.name+' at 0%. This closes their attempt and stops their connection. Their saved answers and original score remain in the private record.',save:t('Submit Fail score')},async reason=>updateSession(await api('/sessions/'+session.id+'/finalize-fail','POST',{studentId:student.id,reason})));}
 function renameResults(session){openEntry({title:session.phase==='ended'?'Rename results':'Rename session',value:session.title,help:'This name will be used for this session, its results and Excel filename. The Library test stays unchanged.'},async title=>{updateSession(await api('/sessions/'+session.id,'PATCH',{title}));await refresh();});}
 $('result-rename').onclick=()=>renameResults(historySession);$('session-rename').onclick=()=>renameResults(current);
+let importRequest=null;
+function closeCreation(){creationVersion++;importRequest?.abort();importRequest=null;$('creation-dialog').close();}
+function resetImport(){ $('import-source').value='';$('import-file').value='';$('generation-prompt').value='';$('ai-consent').checked=false;$('import-use-ai').checked=true;$('ai-count').value='10';$('ai-types').value='mixed';$('ai-difficulty').value='medium';$('import-status').textContent='';}
+function updateImportMode(){const useAI=importMode==='generate'||$('import-use-ai').checked;$('ai-options').hidden=!useAI;$('import-submit').disabled=Boolean(importRequest)||(useAI&&!aiConfigured);$('import-submit').textContent=importMode==='generate'?'Generate questions':useAI?'Prepare questions with AI':'Import questions';}
 function openImport(mode){
- creationVersion++;importMode=mode;$('import-panel').hidden=false;$('ai-options').hidden=false;$('generation-settings').hidden=mode!=='generate';$('import-local').hidden=mode!=='import';$('import-heading').textContent=mode==='generate'?'Create with AI':t('Upload a test · AI assisted');
- $('import-help').textContent=mode==='generate'?t('Create new questions from source material. AI proposes answer keys for your review.'):t('Upload or paste an existing test. AI organizes the questions and determines missing correct answers, preserving recognized wording, choices, points and supplied keys. Only uncertain answers need extra attention.');
- $('ai-consent-text').textContent=mode==='generate'?'Send this source to OpenAI to generate questions and answers. API usage charges apply.':'Send this test material to OpenAI to organize questions and determine answers. API usage charges apply.';
- $('ai-config-note').textContent=aiConfigured?'':t('AI setup is required in Development. You can still import an existing test without AI.');$('import-status').textContent='';$('import-submit').textContent=mode==='import'?t('Prepare with AI'):'Prepare draft';$('import-submit').disabled=!aiConfigured;$('import-panel').scrollIntoView({behavior:'smooth'});
+ importRequest?.abort();importRequest=null;creationVersion++;importMode=mode;resetImport();document.querySelector('.creation-methods').hidden=true;$('creation-choice').hidden=false;$('import-panel').hidden=false;
+ $('generation-settings').hidden=mode!=='generate';$('generation-prompt-label').hidden=mode!=='generate';$('import-ai-toggle').hidden=mode==='generate';$('import-format-help').hidden=mode==='generate';$('import-file-label').hidden=mode==='paste';$('import-source-label').hidden=mode!=='paste';
+ $('import-heading').textContent=mode==='generate'?'Generate Questions':mode==='paste'?'Copy-Paste Questions':'Extract Questions from Document';
+ $('import-help').textContent=mode==='generate'?'Describe a topic, attach a PDF or DOCX, or use both. Review all generated questions and answers before saving.':'Import existing questions, preserving their wording and supplied answers. Review the prepared draft before saving.';
+ $('ai-consent-text').textContent='Send this content to OpenAI to prepare questions and answers. API usage charges apply.';$('ai-config-note').textContent=aiConfigured?'':'AI is not configured. Existing formatted questions can still be imported with Use AI turned off.';updateImportMode();
 }
-$('import-source').oninput=()=>{if($('import-source').value.trim())$('import-file').value='';};$('import-file').onchange=()=>{if($('import-file').files.length)$('import-source').value='';};
-$('upload-test').onclick=()=>openImport('import');$('create-ai').onclick=()=>openImport('generate');$('import-cancel').onclick=()=>{creationVersion++;$('import-panel').hidden=true;};
-async function prepareImport(useAI){
- const mode=importMode,version=creationVersion,generation=accountGeneration;
+$('import-use-ai').onchange=updateImportMode;
+$('upload-test').onclick=()=>openImport('extract');$('create-paste').onclick=()=>openImport('paste');$('create-ai').onclick=()=>openImport('generate');$('import-cancel').onclick=closeCreation;
+$('creation-dialog').addEventListener('cancel',closeCreation);
+async function prepareImport(){
+ if(importRequest)return;const mode=importMode,useAI=mode==='generate'||$('import-use-ai').checked,version=creationVersion,generation=accountGeneration;
+ if(useAI&&!aiConfigured)return;
  if(useAI&&!$('ai-consent').checked){$('import-status').textContent=t('Confirm that this material may be sent to OpenAI.');return;}
- const data=new FormData(),file=$('import-file').files[0],source=$('import-source').value;
- if(file&&file.size>uploadMaxBytes){const mb=Math.ceil(file.size/1024/1024*100)/100;$('import-status').textContent='File “'+file.name+'” is too large for the '+(uploadMaxBytes/1024/1024)+' MB limit ('+mb+' MB). Choose a smaller file or paste its text.';return;}
- if(!file&&!source.trim()){$('import-status').textContent=t('Choose a PDF or DOCX file, or paste source text.');return;}
- if(file)data.append('file',file);else data.append('source',source);
- if(mode==='generate')for(const key of ['count','types','difficulty'])data.append(key,$('ai-'+key).value);
- const route=mode==='generate'?'generate':useAI?'import-ai':'import';$('import-submit').disabled=true;$('import-local').disabled=true;$('import-status').textContent=mode==='generate'?t('AI is preparing questions and answers from your material…'):useAI?t('AI is organizing questions and determining answers…'):t('Reading your test…');
- try{const response=await fetch('/api/'+route,{method:'POST',headers:{Authorization:'Bearer '+await token()},body:data});const result=await response.json();if(generation!==accountGeneration||version!==creationVersion)return;if(!response.ok)throw new Error(result.error||'Could not prepare draft.');if(!result.test?.questions?.length)throw new Error('No questions were recognized. Check the format and try again.');
-  const title=$('new-title').value.trim(),folderId=$('new-folder-choice').value;openBuilder({...result.test,title:title||result.test.title,folderId});editingId=null;$('draft-review').textContent=[result.test.questions.length+' questions prepared. Review the proposed answers before saving.',...(result.warnings||[])].join(' ');$('import-panel').hidden=true;$('import-source').value='';$('import-file').value='';
- }catch(e){if(generation===accountGeneration&&version===creationVersion)$('import-status').textContent=e.message;}
- finally{if(generation===accountGeneration){$('import-local').disabled=false;if(version===creationVersion)$('import-submit').disabled=!aiConfigured;}}
+ const data=new FormData(),file=$('import-file').files[0],source=$('import-source').value,prompt=$('generation-prompt').value.trim();
+ if(file&&file.size>uploadMaxBytes){$('import-status').textContent='Choose a PDF or DOCX up to '+(uploadMaxBytes/1024/1024)+' MB.';return;}
+ if(mode==='generate'?!file&&!prompt:mode==='paste'?!source.trim():!file){$('import-status').textContent=mode==='generate'?'Enter a topic or attach a PDF or DOCX.':mode==='paste'?'Paste your questions.':'Choose a PDF or DOCX file.';return;}
+ if(file)data.append('file',file);if(source.trim())data.append('source',source);
+ if(mode==='generate'){data.append('prompt',prompt);for(const key of ['count','types','difficulty'])data.append(key,$('ai-'+key).value);}
+ const route=mode==='generate'?'generate':useAI?'import-ai':'import',controller=new AbortController();importRequest=controller;updateImportMode();$('import-status').textContent='Preparing questions…';
+ try{const response=await fetch('/api/'+route,{method:'POST',headers:{Authorization:'Bearer '+await token()},body:data,signal:controller.signal});const result=await response.json();if(generation!==accountGeneration||version!==creationVersion)return;if(!response.ok)throw new Error(result.error||'Could not prepare draft.');if(!result.test?.questions?.length)throw new Error('No questions were recognized. Check the format and try again.');
+ const title=$('new-title').value.trim(),folderId=$('new-folder-choice').value;openBuilder({...result.test,title:title||result.test.title,folderId});editingId=null;$('draft-review').textContent=[result.test.questions.length+' questions prepared. Review the answers before saving.',...(result.warnings||[])].join(' ');
+ }catch(e){if(e.name!=='AbortError'&&generation===accountGeneration&&version===creationVersion)$('import-status').textContent=e.message;}
+ finally{if(importRequest===controller){importRequest=null;if(version===creationVersion)updateImportMode();}}
 }
-$('import-form').onsubmit=action(async e=>{e.preventDefault();await prepareImport(true);});$('import-local').onclick=action(()=>prepareImport(false));
+$('import-form').onsubmit=action(async e=>{e.preventDefault();await prepareImport();});
 $('tb-answer-ai').onclick=()=>{if(aiConfigured)$('answer-ai-dialog').showModal();else $('answer-ai-status').textContent=t('AI setup is required in Development.');};$('answer-ai-cancel').onclick=()=> $('answer-ai-dialog').close();
 $('answer-ai-confirm').onclick=async()=>{
  $('answer-ai-dialog').close();const version=creationVersion,generation=accountGeneration;$('answer-ai-status').textContent=t('AI is determining missing answers…');els.tbQuestions.inert=true;for(const id of ['tb-start-btn','tb-add-q-btn','tb-answer-ai'])$(id).disabled=true;

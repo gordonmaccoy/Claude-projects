@@ -241,7 +241,7 @@ function override(s, id, professorId, reason, now = Date.now()) {
 }
 function status(st, now) { if(st.completedAt)return 'completed'; if(st.submission) return isFailed(st)?'red':'green'; return isFailed(st) || !st.visible || now - st.lastSeen > 10000 ? 'red' : 'green'; }
 function publicView(s, now = Date.now()) {
-  return { title: s.resultTitle || s.test?.title || 'Classroom calculator', phase: s.phase,remainingMs:remainingTime(s,now),calculator:s.mode==='calculator'&&!s.resultTitle,deadlineAt:s.deadlineAt||null,
+  return { title: s.resultTitle || s.test?.title || 'Classroom calculator', language:s.language??'en', phase: s.phase,remainingMs:remainingTime(s,now),calculator:s.mode==='calculator'&&!s.resultTitle,deadlineAt:s.deadlineAt||null,
     students: s.students.map(st => ({ name: st.name, status: isFailed(st)?'failed':st.completedAt?'completed':st.submission?'submitted':status(st,now) })) };
 }
 function privateView(s, now = Date.now()) {

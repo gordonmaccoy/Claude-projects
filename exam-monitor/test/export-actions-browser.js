@@ -1,0 +1,11 @@
+const assert=require('node:assert/strict'),path=require('node:path'),{chromium}=require('playwright');
+(async()=>{const browser=await chromium.launch({headless:true,executablePath:process.env.CHROME_BIN||(process.platform==='win32'?'C:/Program Files/Google/Chrome/Application/chrome.exe':undefined)});try{
+ const page=await browser.newPage();await page.route('https://export.test/**',route=>route.fulfill({body:'<button id="result-export">Download</button>',contentType:'text/html'}));await page.goto('https://export.test/');await page.addScriptTag({path:path.join(__dirname,'../public/export-actions.js')});
+ await page.evaluate(()=>{window.downloads=[];window.deliveries=[];window.selected={id:'session-a',mode:'test'};window.controller=createExamioExports({getSession:()=>selected,getEmail:()=> 'teacher@example.com',getEmailConfigured:()=>true,downloadFile:async(...args)=>downloads.push(args),api:async(...args)=>deliveries.push(args)});});
+ await page.locator('#result-export').click();assert.equal(await page.locator('.export-columns .export-column').count(),2);assert.equal(await page.locator('.export-column button').count(),6);
+ await page.locator('.export-column').first().locator('[data-format="pdf"]').click();assert.match(await page.evaluate(()=>downloads[0][0]),/format=pdf/);
+ await page.locator('.export-column').last().locator('[data-format="xlsx"]').click();assert.match(await page.evaluate(()=>downloads[1][0]),/detail=1/);
+ await page.locator('.export-column').last().locator('[data-format="email"]').click();assert.equal(await page.locator('#export-recipient').inputValue(),'teacher@example.com');await page.locator('#export-recipient').fill('recipient@example.com');await page.locator('.export-send').click();assert.equal(await page.evaluate(()=>deliveries[0][2].detail),true);assert.equal(await page.evaluate(()=>deliveries[0][2].email),'recipient@example.com');
+ await page.screenshot({path:'../.tmp/export-options.png'});await page.evaluate(()=>controller.close());assert.equal(await page.locator('dialog').evaluate(el=>el.open),false);assert.equal(await page.locator('#export-recipient').inputValue(),'');
+ console.log('Export dialog checks passed: two columns, six choices, summary PDF, detailed Excel, explicit email, recipient and cleanup.');
+ }finally{await browser.close();}})().catch(error=>{console.error(error);process.exitCode=1;});

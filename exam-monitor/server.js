@@ -8,13 +8,16 @@ const { createStore } = require('./store');
 const { authConfig, createVerifier } = require('./auth');
 const exam = require('./exam');
 const { workbook,exportFilename } = require('./export');
+const {resultsPdf}=require('./results-pdf');
+const {createExportMailer}=require('./results-email');
 const multer=require('multer');
 const {extractDocument,parseTest,MAX_BYTES,MAX_TEXT}=require('./documents');
 const {createGenerator}=require('./generation');
 const {createAIImporter,createAnswerCompleter}=require('./answer-key');
 
-function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweepInterval = 1000, generate=createGenerator(), completeAnswers=createAnswerCompleter(),importWithAI=createAIImporter(), aiConfigured=Boolean(process.env.OPENAI_API_KEY && process.env.OPENAI_MODEL) }) {
+function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweepInterval = 1000, generate=createGenerator(), completeAnswers=createAnswerCompleter(),importWithAI=createAIImporter(), aiConfigured=Boolean(process.env.OPENAI_API_KEY && process.env.OPENAI_MODEL), exportEmailOptions={} }) {
   const settingsController=require('./settings-routes').createSettingsController({store,config,...settingsOptions});
+  const exportMailer=createExportMailer(exportEmailOptions);
   const app = express();
   const server = http.createServer(app);
   const io = new Server(server, { maxHttpBufferSize: 128 * 1024, cors: { origin: config.origin || false } });
@@ -28,7 +31,7 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
   app.use(express.json({ limit: '1mb' }));
   const wrap = fn => (req, res, next) => Promise.resolve(fn(req, res)).catch(next);
   app.get('/health', wrap(async (req, res) => { await store.activeSessions(); res.json({ ok: true }); }));
-  app.get('/api/config', (req, res) => res.json({ supabaseUrl: config.url || '', supabaseKey: config.key || '',uploadMaxBytes:MAX_BYTES,aiConfigured }));
+  app.get('/api/config', (req, res) => res.json({ supabaseUrl: config.url || '', supabaseKey: config.key || '',uploadMaxBytes:MAX_BYTES,aiConfigured,exportEmailConfigured:exportMailer.configured }));
   app.use('/api', (req, res, next) => Promise.resolve().then(async () => {
     const token = /^Bearer (.+)$/.exec(req.headers.authorization || '')?.[1];
     req.user = await verifyUser(token);
@@ -84,7 +87,7 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
   for(const mode of ['import','generate','import-ai'])api.post('/'+mode,upload,wrap(async(req,res)=>{
     const isAI=mode!=='import';if(isAI&&!aiConfigured){if(req.file)req.file.buffer.fill(0);return res.status(503).json({error:'AI needs Development OPENAI_API_KEY and OPENAI_MODEL configuration.'});}
     const state=beginWork(req,res,isAI);if(!state){if(req.file)req.file.buffer.fill(0);return;}
-    try{const source=req.file?await extractDocument(req.file):(req.body.source||req.body.text);const result=mode==='import'?parseTest(source,req.file?.originalname):mode==='import-ai'?await importWithAI({source,filename:req.file?.originalname}):await generate({source,count:req.body.count,types:req.body.types,difficulty:req.body.difficulty});res.json(result);}
+    try{const source=req.file?await extractDocument(req.file):(req.body.source||req.body.text);const result=mode==='import'?parseTest(source,req.file?.originalname):mode==='import-ai'?await importWithAI({source,filename:req.file?.originalname}):await generate({source,prompt:req.body.prompt,count:req.body.count,types:req.body.types,difficulty:req.body.difficulty});res.json(result);}
     catch(e){res.status(400).json({error:e.message||'Unable to process this material.'});}finally{state.busy=false;if(req.file)req.file.buffer.fill(0);}
   }));
   api.post('/answer-key',wrap(async(req,res)=>{if(!aiConfigured)return res.status(503).json({error:'AI needs Development OPENAI_API_KEY and OPENAI_MODEL configuration.'});const state=beginWork(req,res,true);if(!state)return;try{res.json(await completeAnswers(req.body.test));}catch(e){res.status(400).json({error:e.message||'Unable to determine answer keys.'});}finally{state.busy=false;}}));
@@ -199,9 +202,19 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
     const original = await owned(req.params.id, req.user);
     if (original.mode !== 'test') return res.status(400).json({ error: 'Calculator sessions have no test scores to export.' });
     const { session } = await store.mutate(req.params.id, s => exam.sweep(s));
-    res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.set('Content-Disposition', `attachment; filename="onscreen-${session.id}.xlsx"; filename*=UTF-8''${encodeURIComponent(exportFilename(session,req.query.detail==='1')).replace(/['()*]/g,c=>"%"+c.charCodeAt(0).toString(16).toUpperCase())}`);
-    res.send(workbook(session,req.query.detail==='1'));
+    const detail=req.query.detail==='1',pdf=req.query.format==='pdf';
+    if(req.query.format && !['pdf','xlsx'].includes(req.query.format))return res.status(400).json({error:'Choose Excel or PDF.'});
+    const filename=exportFilename(session,detail).replace(/\.xlsx$/,pdf?'.pdf':'.xlsx');
+    res.set('Content-Type',pdf?'application/pdf':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.set('Content-Disposition', 'attachment; filename="examio-'+session.id+'.'+(pdf?'pdf':'xlsx')+'"; filename*=UTF-8\'\''+encodeURIComponent(filename).replace(/['()*]/g,c=>'%'+c.charCodeAt(0).toString(16).toUpperCase()));
+    res.send(pdf?await resultsPdf(session,detail):workbook(session,detail));
+  }));
+  api.post('/sessions/:id/email-export',wrap(async(req,res)=>{
+    const original=await owned(req.params.id,req.user);
+    if(original.mode!=='test')return res.status(400).json({error:'Calculator sessions have no test scores to export.'});
+    const {session}=await store.mutate(req.params.id,s=>exam.sweep(s));
+    try{res.json(await exportMailer.send({session,user:req.user,email:req.body.email,detail:req.body.detail,requestId:req.body.requestId}));}
+    catch(error){res.status(error.status||502).json({error:error.message});}
   }));
   app.use('/api', api);
   app.get('/session-language/:id',wrap(async(req,res)=>{

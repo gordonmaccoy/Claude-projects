@@ -1,6 +1,8 @@
-window.examioLanguage.setup();
 const {t}=window.examioLanguage;
 const socket=io();const $=id=>document.getElementById(id);
+function applyClassTheme(value){const theme=value==='dark'?'dark':'light';document.documentElement.dataset.theme=theme;try{localStorage.setItem('exam-monitor-theme',theme);}catch{}$('class-theme-toggle').setAttribute('aria-pressed',String(theme==='dark'));}
+try{applyClassTheme(localStorage.getItem('exam-monitor-theme'));}catch{applyClassTheme('light');}
+$('class-theme-toggle').onclick=()=>applyClassTheme(document.documentElement.dataset.theme==='dark'?'light':'dark');
 const [sessionId,token,windowGroup]=location.hash.slice(1).split('/');
 // Reusing a window can change only its fragment, which does not reload scripts.
 // Reconnect with the new session capability instead of keeping the old socket.
@@ -19,7 +21,7 @@ try {
     }
   };
 } catch {}
-let timer;
+let timer,displayLanguage=null;
 function renderTimer() {
   $('class-timer').hidden=!timer;
   if(!timer)return;
@@ -28,6 +30,7 @@ function renderTimer() {
 }
 setInterval(renderTimer,250);
 function render(view) {
+  if(['en','ko'].includes(view.language)&&displayLanguage!==view.language){window.examioLanguage.apply(view.language);displayLanguage=view.language;}
   timer=view.phase==='paused'&&view.remainingMs!=null?{remainingMs:view.remainingMs}:view.phase==='running'&&view.deadlineAt?{deadline:view.deadlineAt,serverNow:view.serverNow,received:performance.now()}:null;
   renderTimer();
   $('title').textContent=view.calculator?t('Classroom calculator'):view.title;

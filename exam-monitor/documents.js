@@ -1,4 +1,4 @@
-const {Worker,isMainThread,parentPort,workerData}=require('node:worker_threads');
+const {fork}=require('node:child_process');
 const {randomUUID}=require('node:crypto');
 const MAX_BYTES=5*1024*1024,MAX_TEXT=60000;
 async function extractDocument(file) {
@@ -9,16 +9,26 @@ async function extractDocument(file) {
   if(ext==='pdf' && file.buffer.subarray(0,5).toString()!=='%PDF-') throw new Error('This is not a valid PDF file.');
   if(ext==='docx' && file.buffer.subarray(0,2).toString()!=='PK') throw new Error('This is not a valid DOCX file.');
   return new Promise((resolve,reject)=>{
-    const worker=new Worker(__filename,{workerData:{buffer:file.buffer,ext},resourceLimits:{maxOldGenerationSizeMb:128}});
-    let done=false;
-    const finish=(error,text)=>{if(done)return;done=true;clearTimeout(timer);worker.terminate();error?reject(error):resolve(text);};
+    let child,done=false,retried=false;
+    const finish=(error,text)=>{if(done)return;done=true;clearTimeout(timer);child?.kill();error?reject(error):resolve(text);};
     const timer=setTimeout(()=>finish(new Error('Document processing took too long. Try a smaller, text-based file.')),15000);
-    worker.on('message',r=>r.error?finish(new Error(r.error)):finish(null,r.text));
-    worker.on('error',()=>finish(new Error('The document could not be processed. Try a smaller PDF or DOCX.')));
-    worker.on('exit',code=>{if(!done)finish(new Error('The document could not be processed.'));});
+    function start(){
+      // Native PDF failures must be isolated from the server process.
+      child=fork(__filename,['--extract-document'],{execArgv:['--max-old-space-size=128'],serialization:'advanced',stdio:['ignore','ignore','ignore','ipc']});
+      const current=child;
+      current.on('message',r=>{if(r?.error)finish(new Error(r.error));else if(typeof r?.text==='string'&&r.text.length<=MAX_TEXT)finish(null,r.text);else finish(new Error('The document could not be processed.'));});
+      current.on('error',()=>finish(new Error('The document could not be processed. Try a smaller PDF or DOCX.')));
+      current.on('exit',(code,signal)=>{
+        if(done)return;
+        if(!retried&&(signal||code===3221225477||code<0)){retried=true;start();}
+        else finish(new Error('The document could not be processed. Try a smaller PDF or DOCX.'));
+      });
+      current.send({buffer:file.buffer,ext},error=>{if(error&&current===child)finish(new Error('The document could not be processed.'));});
+    }
+    start();
   });
 }
-if(!isMainThread) (async()=>{
+if(process.argv[2]==='--extract-document'&&process.send) process.once('message',workerData=>(async()=>{
   const buffer=Buffer.from(workerData.buffer);let text;
   if(workerData.ext==='pdf') {
     const {PDFParse}=require('pdf-parse');const parser=new PDFParse({data:buffer});
@@ -31,8 +41,8 @@ if(!isMainThread) (async()=>{
   }
   if(!text?.trim())throw new Error('No readable text was found. Scanned/image-only files need OCR before upload.');
   if(text.length>MAX_TEXT)throw new Error('Use source material under 60,000 characters. Split longer documents into sections.');
-  parentPort.postMessage({text:text.trim()});
-})().catch(e=>parentPort.postMessage({error:e.message || 'Unable to read this document.'}));
+  process.send({text:text.trim()},()=>process.disconnect());
+})().catch(e=>process.send({error:e.message || 'Unable to read this document.'},()=>process.disconnect())));
 function parseTest(text,filename='Uploaded test') {
  if(typeof text!=='string'||!text.trim()||text.length>MAX_TEXT)throw new Error('Provide readable test text under 60,000 characters.');
  const template=parseSentenceBlocks(text,filename);if(template)return template;
