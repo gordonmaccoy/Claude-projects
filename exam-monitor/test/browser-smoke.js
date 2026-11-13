@@ -1,0 +1,206 @@
+const assert = require('node:assert/strict');
+const { once } = require('node:events');
+const fs = require('node:fs');
+const path = require('node:path');
+const { chromium } = require('playwright');
+const { PGlite } = require('@electric-sql/pglite');
+const { createStore } = require('../store');
+const { createApp } = require('../server');
+
+async function main() {
+  const db = new PGlite(); let queue = Promise.resolve();
+  async function lease() { const before = queue; let release; queue = new Promise(r => release=r); await before; return { query:(...a)=>db.query(...a), release }; }
+  const pool={connect:lease,query:async(...a)=>{const c=await lease();try{return await c.query(...a);}finally{c.release();}}};
+  const store=createStore(pool);await store.init();
+  const jwt=`${Buffer.from('{"alg":"HS256","typ":"JWT"}').toString('base64url')}.${Buffer.from(JSON.stringify({sub:'alice',exp:Math.floor(Date.now()/1000)+3600})).toString('base64url')}.signature`;
+  const config={url:'http://127.0.0.1:1',key:'development-test-public-key'};
+  const bobJwt=`${Buffer.from('{"alg":"HS256","typ":"JWT"}').toString('base64url')}.${Buffer.from(JSON.stringify({sub:'bob',exp:Math.floor(Date.now()/1000)+3600})).toString('base64url')}.signature`;
+  const aiOptions={key:'test-private',model:'test-model',fetch:async(url,opts)=>{const body=JSON.parse(opts.body),input=JSON.parse(body.input);const value=body.text.format.name==='test_answer_key'?{answers:input.questions.map(q=>({questionId:q.id,correctOptionId:q.type==='blank'?null:q.options[/stereo on|vacation last|surfboard/.test(q.text)?1:0].id,acceptedAnswers:q.type==='blank'?['answer']:[],uncertain:false,explanation:'AI rationale for professor review.'}))}:{isTest:false,title:'Not a test',questions:[]};return {ok:true,json:async()=>({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(value)}]}]})};}};
+  const runtime=createApp({store,config,settingsOptions:{sendMail:null,removeAccount:null,supportAdminEmail:'professor@example.com',helpConfigured:true,helpAssistant:async()=>({answer:'Choose Launch, then Start test when everyone has joined.',topics:[]})},completeAnswers:require('../answer-key').createAnswerCompleter(aiOptions),importWithAI:require('../answer-key').createAIImporter(aiOptions),aiConfigured:true,generate:async ({source,count})=>({test:{title:'AI review draft',questions:[{id:'ai_q',type:'blank',text:'The capital is ____',acceptedAnswers:['Paris'],caseSensitive:false,evidence:source}]},warnings:['Review this AI draft.']}),verifyUser:async token=>token===jwt?{id:'alice',email:'professor@example.com'}:token===bobJwt?{id:'bob',email:'bob@example.com'}:null,sweepInterval:500});
+  runtime.server.listen(0,'127.0.0.1');await once(runtime.server,'listening');const base=`http://127.0.0.1:${runtime.server.address().port}`;config.origin=base;config.url=base;
+  const executablePath=process.env.CHROME_BIN || (process.platform==='win32'?'C:/Program Files/Google/Chrome/Application/chrome.exe':undefined);
+  const browser=await chromium.launch({headless:true,executablePath});
+  const context=await browser.newContext({viewport:{width:1440,height:1000}});
+  const errors=[];context.on('page',p=>p.on('pageerror',e=>errors.push(e.message)));
+  const page=await context.newPage();
+  await context.addInitScript(({jwt})=>localStorage.setItem('sb-127-auth-token',JSON.stringify({access_token:jwt,refresh_token:'test-refresh',expires_at:Math.floor(Date.now()/1000)+3600,expires_in:3600,token_type:'bearer',user:{id:'alice',email:'professor@example.com',email_confirmed_at:new Date().toISOString(),app_metadata:{provider:'email'},user_metadata:{}}})),{jwt});
+  // Embedded browsers may ignore named targets. Reuse must still work without them.
+  await context.addInitScript(()=> { const open=window.open.bind(window); window.open=(url,name,features)=>open(url,'_blank',features); });
+  await context.addInitScript(()=>{window.prompt=()=>{throw new Error('prompt() is not supported');};});
+  page.on('dialog',d=>d.accept());
+  async function enterForm(value){await page.locator('#entry-value').fill(value);await page.locator('#entry-save').click();await page.locator('#entry-dialog').waitFor({state:'hidden'});}
+  const out=path.join(__dirname,'../../.tmp/onscreen-v2');fs.mkdirSync(out,{recursive:true});
+  try {
+    if(process.env.EXAMIO_UI_LANGUAGE_ONLY==='1'){
+      const exam=require('../exam');
+      const test=require('../onboarding').createStarterTest('ko');
+      for(const [language,locale,joinLabel,submitLabel] of [
+        ['en','ko-KR','Join','Submit test'],
+        ['ko','en-US','참여하기','시험 제출']
+      ]){
+        const session=exam.newSession('alice',test,Date.now(),{language});
+        await store.createSession(session);
+        const studentContext=await browser.newContext({locale});
+        const student=await studentContext.newPage();
+        await student.goto(base+'/student.html?session='+session.id+'&language='+locale);
+        await student.locator('#number-input').fill('001');
+        await student.locator('#name-input').fill('Student');
+        assert.equal(await student.locator('html').getAttribute('lang'),language);
+        assert.equal(await student.locator('[data-language-switch]').count(),0);
+        await student.getByRole('button',{name:joinLabel,exact:true}).click();
+        await student.locator('#waiting-section').waitFor({state:'visible'});
+        await store.mutate(session.id,s=>exam.start(s));
+        await student.reload();
+        await student.locator('.tq-option').first().waitFor();
+        assert.match(await student.locator('.tq-text').first().textContent(),/대한민국의 수도는 어디인가요/);
+        await student.locator('.tq-option').first().click();
+        await student.getByRole('button',{name:submitLabel,exact:true}).click();
+        await student.locator('#submit-confirm').click();
+        await student.locator('#test-done').waitFor({state:'visible'});
+        assert.match(await student.locator('#done-score').textContent(),language==='ko'?/점수:/:/Your score:/);
+        await studentContext.close();
+      }
+      const koreanContext=await browser.newContext({locale:'ko-KR'});
+      const landing=await koreanContext.newPage();
+      await landing.goto(base);
+      assert.equal(await landing.locator('html').getAttribute('lang'),'ko');
+      await landing.locator('[data-language-switch]').selectOption('en');
+      await landing.waitForFunction(()=>document.documentElement.lang==='en');
+      await koreanContext.close();
+      console.log('English and Korean student sessions and landing language choice verified.');
+      return;
+    }
+    await page.goto(base+'/professor.html');await page.locator('#workspace').waitFor({state:'visible'});
+    await page.locator('#tour-dialog').waitFor({state:'visible',timeout:4000});
+    await page.locator('#tour-target').waitFor({state:'visible',timeout:2000});assert.match(await page.locator('#tour-heading').textContent(),/Launch a practice test/);
+    const starter=(await store.listTests('alice'))[0];assert.equal(starter.title,'Practice Test');assert.equal(starter.questions.length,2);
+    let failedDismiss=false;await context.route(base+'/api/onboarding/dismiss',async route=>{if(!failedDismiss){failedDismiss=true;await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'Please try saving again.'})});}else await route.continue();});
+    await page.locator('#tour-skip').click();await page.locator('#tour-error').getByText('Please try saving again.',{exact:true}).waitFor();assert.equal(await page.locator('#tour-dialog').isVisible(),true);
+    await page.keyboard.press('Escape');await page.locator('#tour-dialog').waitFor({state:'hidden'});await page.reload();await page.locator('#workspace').waitFor({state:'visible'});await page.locator('#launch-tests').getByText('Practice Test',{exact:true}).waitFor();assert.equal(await page.locator('#tour-dialog').isVisible(),false);
+    await page.setViewportSize({width:390,height:700});await page.locator('#take-tour').click();await page.locator('#tour-dialog').waitFor({state:'visible'});assert.equal(await page.locator('#tour-dialog').evaluate(el=>el.getBoundingClientRect().right<=innerWidth),true);
+    assert.equal(await page.locator('#tour-next').isVisible(),false,'Guided steps require the named action');
+    await page.locator('#tour-target').click();await page.locator('#tour-heading').getByText('Choose your settings',{exact:true}).waitFor();
+    await page.locator('#tour-action').click();await page.locator('#tour-heading').getByText('Put this window on the projector',{exact:true}).waitFor();await page.locator('#tour-target').click();assert.match(await page.locator('#tour-image').getAttribute('src'),/classroom-expanded/);await page.locator('#tour-next').click();
+    await page.locator('#tour-target').click();await page.locator('#tour-heading').getByText('Keep this screen on your laptop',{exact:true}).waitFor();await page.locator('#tour-action').click();await page.locator('#tour-target').click();assert.match(await page.locator('#tour-image').getAttribute('src'),/student-submit/);await page.locator('#tour-action').click();assert.match(await page.locator('#tour-image').getAttribute('src'),/student-confirm/);await page.locator('#tour-target').click();await page.locator('#tour-heading').getByText('Students see a submission receipt',{exact:true}).waitFor();
+    await page.screenshot({path:path.join(out,'onboarding-mobile.png'),fullPage:true});await page.locator('#tour-next').click();await page.locator('#tour-back').click();await page.locator('#tour-heading').getByText('Students see a submission receipt',{exact:true}).waitFor();await page.locator('#tour-next').click();await page.locator('#tour-target').click();assert.match(await page.locator('#tour-image').getAttribute('src'),/results/);await page.locator('#tour-action').click();await page.locator('#tour-next').click();await page.locator('#tour-dialog').waitFor({state:'hidden'});
+    assert.equal(context.pages().length,1,'The tour opens no real classroom or student windows');assert.equal(await page.locator('#take-tour').evaluate(el=>el===document.activeElement),true);assert.equal((await store.listSessions('alice')).length,0);assert.equal((await store.listTests('alice')).length,1);await page.setViewportSize({width:1440,height:1000});
+    if(process.env.ONSCREEN_UI_TOUR_ONLY==='1'){assert.deepEqual(errors,[]);console.log('Interactive tour checks passed: screenshots, click targets, student answer/submit, privacy, mobile, keyboard and no real session.');return;}
+    // Remove only the fixture starter; repeat initialization must not recreate it.
+    await store.deleteTest('alice',starter.id);await page.reload();await page.locator('#workspace').waitFor({state:'visible'});await page.getByText('A fresh start',{exact:true}).waitFor();
+    await page.locator('#settings-menu summary').click();await page.locator('#settings-menu [data-settings-section=profile]').click();await page.locator('#settings-first-name').fill('Alice');await page.locator('#settings-last-name').fill('Professor');await page.locator('#settings-profile-save').click();await page.locator('#settings-status').getByText('Profile saved.',{exact:true}).waitFor();assert.equal((await store.getAccount('alice')).profile.firstName,'Alice');
+    await page.locator('#settings [data-settings-section=contact]').click();await page.locator('#settings-subject').fill('Fixture feature');await page.locator('#settings-message').fill('A test-only feature request.');await page.locator('#settings-contact-send').click();await page.locator('#settings-contact-status').getByText(/queued for support/).waitFor();assert.equal((await store.listContacts('alice')).length,1);
+    await page.locator('#settings [data-settings-section=help]').click();await page.locator('#settings-help-consent').check();await page.locator('#settings-question').fill('How do I start a test?');await page.locator('#settings-help-send').click();await page.locator('#settings-conversation').getByText(/OnScreen: Choose Launch/).waitFor();await page.locator('#settings [data-settings-section=account]').click();assert.equal(await page.locator('#settings-delete-open').isDisabled(),true);await page.locator('#settings-close').click();
+    if(process.env.ONSCREEN_UI_UPLOAD_ONLY==='1'){await page.getByRole('button',{name:'Library',exact:true}).click();await page.locator('#new-test').click();await page.locator('#create-ai').click();await page.locator('#ai-consent').check();await page.locator('#import-file').setInputFiles({name:'oversized.pdf',mimeType:'application/pdf',buffer:Buffer.alloc(5*1024*1024+1)});await page.locator('#import-submit').click();await page.locator('#import-status').getByText(/oversized.pdf.*5 MB/).waitFor({timeout:1000});assert.deepEqual(errors,[]);console.log('Upload validation browser check passed.');return;}
+    await page.getByRole('button',{name:'Library',exact:true}).click();await page.getByRole('button',{name:'Create new test',exact:true}).click();await page.screenshot({path:path.join(out,'creation-choices.png'),fullPage:true});await page.locator('#create-manual').click();
+    await page.locator('#new-folder').click();await enterForm('Approved interruption');await page.locator('#tb-folder').selectOption({label:'Approved interruption'});
+    await page.locator('#tb-title').fill('Economics · Week 3');await page.locator('#settings-menu summary').click();await page.locator('#settings-menu [data-settings-section=profile]').click();assert.equal(await page.locator('#settings-first-name').inputValue(),'Alice');await page.locator('#settings-close').click();assert.equal(await page.locator('#tb-title').inputValue(),'Economics · Week 3','Settings preserves unsaved test draft');await page.locator('#take-tour').click();await page.locator('#tour-skip').click();await page.locator('#tour-dialog').waitFor({state:'hidden'});assert.equal(await page.locator('#tb-title').inputValue(),'Economics · Week 3','Replaying the guide preserves the draft');await page.locator('.tb-q-text').fill('What is 2 + 2?');await page.locator('.tb-points').fill('2');
+    await page.locator('.tb-opt-text').nth(0).fill('4');await page.locator('.tb-opt-text').nth(1).fill('5');await page.locator('#tb-questions input[type=radio]').first().check();
+    await page.locator('#tb-add-q-btn').click();await page.locator('.tb-q-type').nth(1).selectOption('blank');await page.locator('.tb-q-text').nth(1).fill('The capital of France is ____');await page.locator('.tb-accepted').fill('Paris\nCity of Paris');
+    await page.getByRole('button',{name:'Move question 2 up',exact:true}).click();assert.match(await page.locator('.tb-q-text').first().inputValue(),/capital/);
+    await page.locator('.drag-handle').first().dragTo(page.locator('.tb-q-card').nth(1));assert.equal(await page.locator('.tb-q-text').first().inputValue(),'What is 2 + 2?');
+    await page.getByRole('button',{name:'Save to library'}).click();await page.locator('#test-builder').waitFor({state:'hidden'});
+    await page.getByRole('button',{name:'Launch',exact:true}).click();
+    const popupPromise=context.waitForEvent('page');await page.getByRole('button',{name:'Launch test ↗'}).click();await page.locator('#launch-duration').fill('1');await page.locator('#launch-confirm').click();const display=await popupPromise;
+    await display.locator('#qr-toggle').waitFor({state:'visible'});
+    await page.locator('#display-open').click();
+    await page.waitForFunction(()=>!document.getElementById('display-open').disabled);
+    assert.equal(context.pages().length,2,'Open classroom display must reuse the window created by Launch');
+    await page.locator('#display-open').click();
+    await page.waitForFunction(()=>!document.getElementById('display-open').disabled);
+    assert.equal(context.pages().length,2,'Repeated display requests must not create extra windows');
+    await display.locator('#qr-toggle').waitFor({state:'visible'});
+    await page.reload(); await page.locator('#workspace').waitFor({state:'visible'});
+    await page.locator('#active-sessions').getByRole('button').first().click();
+    await page.locator('#display-open').click();
+    await page.waitForFunction(()=>!document.getElementById('display-open').disabled);
+    assert.equal(context.pages().length,2,'Existing classroom must also be reused after professor reload');
+    await display.locator('#qr-toggle').click();assert.equal(await display.locator('#qr-toggle').getAttribute('aria-expanded'),'true');await display.locator('#qr-toggle').click();
+    await page.locator('#session-rename').click();await enterForm('Economics Section B');await page.locator('#session-title').getByText('Economics Section B',{exact:true}).waitFor();
+    const session=(await store.listSessions('alice'))[0];
+    const studentContext=await browser.newContext({viewport:{width:390,height:280}});const student=await studentContext.newPage();student.on('pageerror',e=>errors.push(e.message));student.on('dialog',d=>d.accept());
+    await student.goto(base+`/student.html?session=${session.id}`);await student.locator('#number-input').fill('Wrong Name');assert.equal(await student.locator('#number-input').evaluate(el=>el.checkValidity()),false);await student.locator('#number-input').fill('001234');await student.locator('#name-input').fill('Kim Minjun');await student.getByRole('button',{name:'Join',exact:true}).click();await student.locator('#waiting-section').waitFor({state:'visible'});
+    await page.bringToFront();await page.getByRole('button',{name:'Start test',exact:true}).click();
+    await student.bringToFront();await student.locator('.tq-option').first().waitFor({state:'visible'});assert.match(await page.locator('#live-students').textContent(),/Not started/);await student.locator('.blank-answer').evaluate(el=>el.scrollIntoView({block:'start'}));await student.waitForTimeout(300);assert.match(await page.locator('#live-students').textContent(),/Not started/);await student.locator('.tq-option').first().click();await student.locator('#test-timer').waitFor({state:'visible'});await student.getByRole('button',{name:'Submit test',exact:true}).click();await student.getByText(/1 unanswered question/).waitFor();await student.locator('#submit-review').click();await student.locator('.blank-answer').fill(' paris ');await page.locator('#live-students').getByText('Question 2 of 2 · 2/2 answered',{exact:true}).waitFor({timeout:3000});
+    await student.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:true});document.dispatchEvent(new Event('visibilitychange'));});
+    await student.locator('#activity-lock').waitFor({state:'visible',timeout:10000});await display.locator('.student.failed').getByText('FAIL',{exact:true}).waitFor();
+    assert.equal(await student.locator('#test-section').evaluate(el=>el.inert),true);await page.locator('#live-students').getByText('FAILED',{exact:true}).waitFor();
+    await student.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:false});document.dispatchEvent(new Event('visibilitychange'));});
+    await page.locator('#live-students').getByRole('button',{name:'Unlock & continue',exact:true}).click();await enterForm('Approved interruption');await student.locator('#activity-lock').waitFor({state:'hidden'});assert.equal(await student.locator('.blank-answer').inputValue(),' paris ');
+    await student.getByRole('button',{name:'Submit test',exact:true}).click();await student.locator('#submit-confirm').click();await student.locator('#test-done').waitFor({state:'visible'});
+    assert.match(await student.locator('#done-score').textContent(),/3 \/ 3 · 100%/);
+    await student.reload();await student.locator('#test-done').waitFor({state:'visible'});assert.match(await student.locator('#done-score').textContent(),/100%/);
+    await display.bringToFront();await display.getByText('Kim Minjun',{exact:true}).waitFor();assert.equal((await display.locator('body').textContent()).includes('001234'),false);
+    await display.locator('.student.submitted').getByText('Test Submitted',{exact:true}).waitFor();
+    await student.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:true});document.dispatchEvent(new Event('visibilitychange'));});
+    const submittedBefore=(await store.getSession(session.id)).students[0].events.length;
+    await display.screenshot({path:path.join(out,'classroom.png'),fullPage:true});
+    await student.screenshot({path:path.join(out,'student-result.png'),fullPage:true});
+    const failedContext=await browser.newContext();const rejected=await failedContext.newPage();await rejected.goto(base+'/student.html?session='+session.id);await rejected.locator('#number-input').fill('0099');await rejected.locator('#name-input').fill('Failed student');await rejected.getByRole('button',{name:'Join',exact:true}).click();await rejected.locator('.tq-option').first().waitFor();await rejected.locator('.tq-option').first().click();await rejected.waitForTimeout(600);await store.mutate(session.id,s=>{const st=s.students.find(st=>st.number==='0099');st.visible=false;st.hiddenSince=Date.now()-6000;});await runtime.tick();await rejected.locator('#activity-lock').waitFor({state:'visible'});await page.locator('#live-students').getByRole('button',{name:'Submit Fail score',exact:true}).click();await enterForm('Confirmed misconduct');await rejected.locator('#done-score').getByText(/0 \/ 3 · 0%/).waitFor();assert.equal(await rejected.evaluate(()=>document.querySelector('#activity-lock').hidden),true);await rejected.reload();await rejected.locator('#done-score').getByText(/0 \/ 3 · 0%/).waitFor();await failedContext.close();
+    await page.locator('#live-summary').getByText(/0 active/).waitFor({timeout:1000});
+    await page.bringToFront();await page.locator('#live-students').getByText('3 / 3 · 100%',{exact:true}).waitFor();await page.screenshot({path:path.join(out,'professor.png'),fullPage:true});
+    await page.getByRole('button',{name:'Results',exact:true}).click();await page.getByRole('button',{name:'View results',exact:true}).click();await page.locator('#result-detail').waitFor({state:'visible'});
+    const downloadPromise=page.waitForEvent('download');await page.locator('#result-export').click();const download=await downloadPromise;assert.equal(download.suggestedFilename(),'Economics Section B.xlsx');
+    assert.equal(await page.locator('#result-delete').isVisible(),false,'Running test results cannot be deleted');
+    await page.getByRole('button',{name:'Launch',exact:true}).click();
+    await (await fetch(base+'/api/sessions/'+session.id+'/end',{method:'POST',headers:{Authorization:'Bearer '+jwt,'Content-Type':'application/json'},body:'{}'})).json();await page.waitForFunction(()=>document.getElementById('dashboard').hidden && document.getElementById('active-sessions').textContent==='');
+    await page.getByRole('button',{name:'Results',exact:true}).click();
+    await page.getByRole('button',{name:'View results',exact:true}).click();
+    await page.locator('#result-rename').click();await enterForm('Approved interruption');await page.locator('#result-title').getByText('Approved interruption',{exact:true}).waitFor();assert.equal((await store.getSession(session.id)).test.title,'Economics · Week 3');
+    assert.equal((await store.getSession(session.id)).students[0].events.length,submittedBefore,'Submitted students stop monitoring');
+    await page.locator('#result-delete').click();
+    await page.getByText('No test results yet',{exact:true}).waitFor();
+    assert.equal(await page.locator('#result-detail').isVisible(),false);
+    await page.getByRole('button',{name:'Launch',exact:true}).click();
+    // Separate timed launch: stable answer IDs with shuffle, score hidden, extension, expiry.
+    await page.getByRole('button',{name:'Launch test ↗',exact:true}).click();await page.locator('#launch-duration').fill('1');await page.locator('#launch-show-scores').uncheck();await page.locator('#launch-shuffle').check();await page.locator('#launch-confirm').click();await page.locator('#dashboard').waitFor({state:'visible'});
+    const timed=(await store.listSessions('alice')).find(s=>s.mode==='test'&&s.phase==='waiting');const timedContext=await browser.newContext({viewport:{width:390,height:700}});const timedStudent=await timedContext.newPage();await timedStudent.goto(base+'/student.html?session='+timed.id);await timedStudent.locator('#number-input').fill('0050');await timedStudent.locator('#name-input').fill('Timed student');await timedStudent.getByRole('button',{name:'Join',exact:true}).click();await page.locator('#test-start').click();await timedStudent.locator('.tq-option').filter({hasText:'4'}).click();await page.locator('#live-students').getByText('Question 1 of 2 · 1/2 answered',{exact:true}).waitFor();
+    await page.locator('#extend-time').click();await page.locator('#notice').getByText(/Added 1 minute \(60 seconds\)/).waitFor({timeout:1500});assert.match(await page.locator('#session-timer').textContent(),/Time remaining:.*min.*sec.*Ends/);await timedStudent.getByText('Your professor extended the time by 1 minute.',{exact:true}).waitFor();assert.ok((await store.getSession(timed.id)).deadlineAt-(await store.getSession(timed.id)).startedAt>=120000);
+    await store.mutate(timed.id,s=>s.deadlineAt=Date.now()+9500);await runtime.tick();await timedStudent.locator('#test-timer.critical').waitFor();await timedStudent.waitForTimeout(3200);assert.match(await timedStudent.locator('#time-left').textContent(),/^[0-9]+(?::[0-9]{2})?$/);await timedStudent.screenshot({path:path.join(out,'student-countdown.png'),fullPage:true});await timedStudent.locator('#test-done').waitFor({state:'visible',timeout:15000});assert.match(await timedStudent.locator('#done-score').textContent(),/professor will share/);assert.equal((await timedStudent.locator('#done-score').textContent()).includes('%'),false);assert.equal((await store.getSession(timed.id)).students[0].submission.originalScore,2);await timedStudent.reload();await timedStudent.locator('#test-done').waitFor({state:'visible'});await timedContext.close();
+    await page.getByRole('button',{name:'Results',exact:true}).click();await page.getByRole('button',{name:'View results',exact:true}).click();await page.locator('#result-delete').click();await page.getByRole('button',{name:'Launch',exact:true}).click();
+    assert.equal(await page.getByRole('button',{name:'Launch calculator',exact:true}).count(),0);
+    await page.locator('#calculator-launch').click();
+    await page.locator('#dashboard').waitFor({state:'visible'});
+    await display.getByRole('heading',{name:'Classroom calculator',exact:true}).waitFor({state:'visible',timeout:5000});
+    assert.equal(context.pages().length,2,'Launching calculator after a test must reuse the same classroom window');
+    assert.equal(await page.locator('#calculator-card').isVisible(),false,'Only one calculator open-display control is shown');
+    assert.equal(await page.locator('#live-export').isVisible(),false);
+    assert.equal((await page.locator('#live-students').textContent()).includes('Score'),false);
+    assert.equal((await page.locator('#live-summary').textContent()).includes('submitted'),false);
+    const calc=(await store.listSessions('alice')).find(s=>s.mode==='calculator'&&s.phase==='running');const calcStudent=await studentContext.newPage();await calcStudent.goto(base+'/student.html?session='+calc.id);await calcStudent.locator('#number-input').fill('0055');await calcStudent.locator('#name-input').fill('Calculator student');await calcStudent.getByRole('button',{name:'Join',exact:true}).click();await calcStudent.locator('#calculator-section').waitFor({state:'visible'});await calcStudent.locator('[data-action=num][data-value="7"]').click();
+    await calcStudent.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:true});document.dispatchEvent(new Event('visibilitychange'));});await calcStudent.locator('#activity-lock').waitFor({state:'visible',timeout:10000});await calcStudent.keyboard.press('8');assert.equal(await calcStudent.locator('#expression').textContent(),'7');await calcStudent.reload();await calcStudent.locator('#activity-lock').waitFor({state:'visible'});assert.equal(await calcStudent.locator('#expression').textContent(),'7','Calculator work survives reload while locked');
+    await calcStudent.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:false});document.dispatchEvent(new Event('visibilitychange'));});await page.locator('#live-students').getByRole('button',{name:'Unlock & continue',exact:true}).click();await enterForm('Approved interruption');await calcStudent.locator('#activity-lock').waitFor({state:'hidden'});assert.equal(await calcStudent.locator('#expression').textContent(),'7');await calcStudent.close();
+    await page.screenshot({path:path.join(out,'calculator-controls.png'),fullPage:true});
+    await display.close();
+    const replacementPromise=context.waitForEvent('page'); await page.locator('#display-open').click();
+    const replacement=await replacementPromise; await replacement.locator('#qr-toggle').waitFor({state:'visible'});
+    assert.equal(context.pages().length,2,'A closed display can be reopened without extra windows');
+    await page.locator('#session-end').click();
+    await page.getByRole('button',{name:'Results',exact:true}).click();
+    await page.getByText('No test results yet',{exact:true}).waitFor();
+    await context.route(base+'/auth/v1/**',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(route.request().url().includes('/token')?{access_token:bobJwt,refresh_token:'bob-refresh',expires_in:3600,token_type:'bearer',user:{id:'bob',email:'bob@example.com',email_confirmed_at:new Date().toISOString(),app_metadata:{provider:'email'},user_metadata:{}}}:{})}));
+    await page.getByRole('button',{name:'Library',exact:true}).click();await page.locator('#new-test').click();await page.locator('#upload-test').click();
+    const {PDFDocument,StandardFonts}=require('pdf-lib');const pdf=await PDFDocument.create();const font=await pdf.embedFont(StandardFonts.Helvetica);pdf.addPage().drawText('Imported exam\n1. A capital is ____\nAnswer: Paris',{font,size:14,x:40,y:700,lineHeight:20});await page.locator('#import-file').setInputFiles({name:'test.pdf',mimeType:'application/pdf',buffer:Buffer.from(await pdf.save())});await page.locator('#import-local').click();await page.locator('#test-builder').waitFor({state:'visible'});assert.equal(await page.locator('.tb-accepted').inputValue(),'Paris');assert.equal((await store.listTests('alice')).length,1,'Import remains a preview');await page.locator('#tb-cancel-btn').click();
+    await page.locator('#new-test').click();await page.locator('#new-title').fill('Auxiliary verbs');await page.locator('#upload-test').click();await page.locator('#import-source').fill('Plain lecture notes with no test questions.');await page.locator('#import-local').click();await page.locator('#import-status').getByText(/No test questions were recognized/).waitFor();assert.equal(await page.locator('#test-builder').isVisible(),false);
+    await page.locator('#import-source').fill(fs.readFileSync(path.join(__dirname,'fixtures/auxiliary-test.txt'),'utf8'));await page.locator('#import-local').click();await page.locator('#test-builder').waitFor({state:'visible'});assert.equal(await page.locator('.tb-q-card').count(),10);assert.equal(await page.locator('.tb-accepted').count(),4);assert.equal(await page.locator('.tb-title').count(),0);assert.equal(await page.locator('#tb-title').inputValue(),'Auxiliary verbs');assert.equal(await page.locator('.tb-opt-text').count(),18);await page.locator('.tb-points').nth(4).fill('3');await page.locator('#tb-answer-ai').click();await page.locator('#answer-ai-confirm').click();await page.locator('#tb-questions input[type=radio]:checked').nth(5).waitFor();assert.equal(await page.locator('#tb-title').inputValue(),'Auxiliary verbs');assert.equal(await page.locator('.tb-points').nth(4).inputValue(),'3');await page.locator('#tb-title').fill('AI rationale saved test');await page.locator('#tb-start-btn').click();await page.locator('#test-builder').waitFor({state:'hidden'});await page.locator('#library-tests article').filter({hasText:'AI rationale saved test'}).getByRole('button',{name:'Edit',exact:true}).click();assert.equal(await page.locator('.answer-rationale').count(),6,'MC answer rationales survive save/reopen');await page.locator('#tb-cancel-btn').click();await page.locator('#library-tests article').filter({hasText:'AI rationale saved test'}).getByRole('button',{name:'Delete',exact:true}).click();
+    await page.locator('#new-test').click();await page.locator('#upload-test').click();await page.locator('#import-source').fill(fs.readFileSync(path.join(__dirname,'fixtures/auxiliary-test.txt'),'utf8'));await page.locator('#ai-consent').check();await page.locator('#import-submit').click();await page.locator('#test-builder').waitFor({state:'visible'});assert.equal(await page.locator('.tb-q-card').count(),10);assert.equal(await page.locator('#tb-questions input[type=radio]:checked').count(),6);assert.equal((await store.listTests('alice')).length,1);await page.locator('#tb-cancel-btn').click();
+    await page.locator('#new-test').click();await page.locator('#create-ai').click();await page.locator('#import-source').fill('Paris is the capital of France.');await page.locator('#ai-count').fill('1');await page.locator('#ai-consent').check();await page.locator('#import-file').setInputFiles({name:'oversized.pdf',mimeType:'application/pdf',buffer:Buffer.alloc(5*1024*1024+1)});await page.locator('#import-submit').click();await page.locator('#import-status').getByText(/oversized.pdf.*5 MB/).waitFor({timeout:1000});await page.locator('#import-source').fill('Paris is the capital of France.');await page.locator('#import-submit').click();await page.locator('#test-builder').waitFor({state:'visible'});await page.getByText('Source excerpt: Paris is the capital of France.',{exact:true}).waitFor();assert.equal((await store.listTests('alice')).length,1,'AI remains a preview');await page.screenshot({path:path.join(out,'authoring.png'),fullPage:true});await page.locator('#tb-cancel-btn').click();
+    await page.getByRole('button',{name:'Create copy',exact:true}).click();await enterForm('Independent copy');await page.locator('#test-builder').waitFor({state:'visible'});assert.equal((await store.listTests('alice')).length,2);await page.locator('#tb-cancel-btn').click();await page.locator('#library-tests article').filter({hasText:'Independent copy'}).getByRole('button',{name:'Delete',exact:true}).click();await page.locator('#folder-menu summary').click();await page.locator('#folder-list').getByRole('button',{name:'Rename',exact:true}).click();await enterForm('Section folders');await page.locator('#folder-list').getByText('Section folders',{exact:true}).waitFor();await page.locator('#folder-list').getByRole('button',{name:'Delete folder',exact:true}).click();await page.locator('#library-tests summary').getByText('Uncategorized Test (1)',{exact:true}).waitFor();assert.equal((await store.listTests('alice')).length,1);
+    await page.getByRole('button',{name:'Edit',exact:true}).click();
+    await page.locator('#new-folder').click();await enterForm('Private account folder');await page.locator('#settings-menu summary').click();await page.getByRole('button',{name:'Sign out',exact:true}).click();await page.locator('#login').waitFor({state:'visible'});assert.equal((await page.locator('#folder-list').textContent()).includes('Private account folder'),false);assert.equal((await page.locator('#tb-folder').textContent()).includes('Private account folder'),false);
+    await page.locator('#email').fill('bob@example.com');await page.locator('#password').fill('test-password-only');await page.getByRole('button',{name:'Sign in',exact:true}).click();await page.locator('#workspace').waitFor({state:'visible'});
+    await page.locator('#tour-dialog').waitFor({state:'visible'});assert.equal((await store.listTests('bob')).length,1);assert.notEqual((await store.listTests('bob'))[0].id,starter.id);await page.locator('#tour-skip').click();await page.locator('#tour-dialog').waitFor({state:'hidden'});
+    assert.equal(await page.locator('#test-builder').isVisible(),false,'Previous professor test editor must be cleared');
+    await page.getByRole('button',{name:'Launch',exact:true}).click();assert.equal(await page.locator('#dashboard').isVisible(),false,'Previous professor student records must be cleared');
+    await page.getByRole('button',{name:'Results',exact:true}).click();assert.equal(await page.locator('#result-detail').isVisible(),false,'Previous professor results must be cleared');
+    assert.deepEqual(errors,[]);console.log('Browser smoke passed: classroom reuse with ignored window names and professor reload; test lifecycle, privacy, Excel, result deletion, calculator without grades/results.');
+    console.log('Screenshots:',out);
+    await studentContext.close();
+  } catch(error) {
+    console.error('Browser diagnostics:', JSON.stringify({ privateStudents:(await store.listSessions('alice')).flatMap(s=>s.students.map(st=>({draft:st.draft,question:st.progressQuestionId}))),studentPages:await Promise.all(browser.contexts().flatMap(c=>c.pages()).filter(p=>p.url().includes('/student.html')).map(p=>p.evaluate(()=>({active:document.activeElement?.tagName,cards:[...document.querySelectorAll('.tq-card')].map(el=>({id:el.dataset.questionId,top:el.getBoundingClientRect().top,bottom:el.getBoundingClientRect().bottom}))})))),errors, notice:await page.locator('#notice').textContent(),
+      sessions:(await store.listSessions('alice')).map(s=>({mode:s.mode,phase:s.phase,title:s.test?.title})),
+      dashboard:await page.locator('#session-title').textContent(),
+      pages:await Promise.all(context.pages().map(async p=>({ title:await p.title(), url:p.url().split('#')[0], phase:await p.evaluate(()=>document.getElementById('phase')?.textContent || null) }))) }));
+    throw error;
+  } finally { await browser.close();await runtime.close();await db.close(); }
+}
+main().catch(e=>{console.error(e);process.exitCode=1;});

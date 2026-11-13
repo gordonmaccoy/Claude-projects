@@ -1,0 +1,143 @@
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const { once } = require('node:events');
+const { PGlite } = require('@electric-sql/pglite');
+const { io } = require('socket.io-client');
+const { unzipSync, strFromU8 } = require('fflate');
+const { createStore } = require('../store');
+const { createApp } = require('../server');
+
+test('HTTP/socket exam flow enforces ownership, recovers after restart, sanitizes display and exports text IDs', async () => {
+  const db = new PGlite(); let queue = Promise.resolve();
+  async function lease() { const previous = queue; let release; queue = new Promise(r => release = r); await previous; return { query: (...a) => db.query(...a), release }; }
+  const pool = { connect: lease, query: async (...a) => { const c = await lease(); try { return await c.query(...a); } finally { c.release(); } } };
+  const store = createStore(pool); await store.init();
+  const verifyUser = async token => token === 'alice' || token === 'bob' ? { id: token, email: `${token}@example.com` } : null;
+  let running,aiEnabled=false; const sockets = [];
+  const mockComplete=async input=>{const test=require('../answer-key').validateDraft(input);for(const q of test.questions)if(q.type==='blank'&&!q.acceptedAnswers.length)q.acceptedAnswers=['answer'];else if(q.type!=='blank'&&!q.correctOptionId)q.correctOptionId=q.options[0].id;return {test,warnings:['AI draft review']};};
+  async function boot() { running = createApp({ store, verifyUser, sweepInterval: 0,aiConfigured:aiEnabled,completeAnswers:mockComplete,importWithAI:async({source})=>mockComplete(require('../documents').parseTest(source).test) }); running.server.listen(0, '127.0.0.1'); await once(running.server, 'listening'); return `http://127.0.0.1:${running.server.address().port}`; }
+  let base = await boot();
+  const request = async (route, method = 'GET', body, who = 'alice') => {
+    const r = await fetch(base + route, { method, headers: { Authorization: `Bearer ${who}`, 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+    return { status: r.status, body: r.headers.get('content-type')?.includes('json') ? await r.json() : await r.arrayBuffer() };
+  };
+  async function socket() { const s = io(base, { transports: ['websocket'], forceNew: true }); sockets.push(s); await once(s, 'connect'); return s; }
+  const emit = (s, name, data) => new Promise((resolve, reject) => s.timeout(3000).emit(name, data, (err, res) => err ? reject(err) : resolve(res)));
+  try {
+    assert.equal((await request('/api/tests', 'GET', undefined, 'invalid')).status, 401);
+    assert.equal((await request('/api/import','POST',{text:'Quiz\n1. Capital?\nAnswer: Seoul'},'invalid')).status,401);
+    const oversized=new FormData();oversized.append('file',new Blob([Buffer.alloc(5*1024*1024+1)]),'oversized.pdf');const uploadError=await fetch(base+'/api/generate',{method:'POST',headers:{Authorization:'Bearer alice'},body:oversized});assert.equal(uploadError.status,413);assert.match((await uploadError.json()).error,/too large.*5 MB/i);
+    const unicodeSource=new FormData();unicodeSource.append('source','가'.repeat(30000));const unicodeReply=await fetch(base+'/api/generate',{method:'POST',headers:{Authorization:'Bearer alice'},body:unicodeSource});assert.equal(unicodeReply.status,503,'A valid source under60,000 characters must pass multipart parsing');await unicodeReply.json();
+    assert.equal((await request('/api/answer-key','POST',{test:{}},'invalid')).status,401);assert.equal((await request('/api/answer-key','POST',{test:{}})).status,503);
+    const imported=await request('/api/import','POST',{text:'Quiz\n1. Capital?\nAnswer: Seoul'});
+    assert.equal(imported.body.test.questions[0].type,'blank');
+    assert.equal((await request('/api/tests')).body.length,0,'Import must be review-only, never save automatically');
+    assert.equal((await request('/api/generate','POST',{source:'Source material about Seoul',count:1,types:'blank',difficulty:'easy'})).status,503);
+    const large=await request('/api/tests','POST',{title:'Full-length valid draft',questions:Array.from({length:100},(_,i)=>({id:'long'+i,text:'Q'.repeat(1000),options:[{id:'a',text:'A'.repeat(500)},{id:'b',text:'B'.repeat(500)}],correctOptionId:'a'}))});
+    assert.equal(large.status,200,'A valid 100-question draft must fit the API body limit');await request('/api/tests/'+large.body.id,'DELETE');
+    const saved = await request('/api/tests', 'POST', { title: 'Quiz', questions: [{ id: 'q', text: '2+2?', options: [{ id: 'a', text: '4' }, { id: 'b', text: '5' }], correctOptionId: 'a' }] });
+    assert.equal(saved.status, 200);
+    const folder=await request('/api/folders','POST',{name:'Economics 101'});
+    assert.equal(folder.status,200);
+    assert.equal((await request('/api/folders')).body[0].name,'Economics 101');
+    assert.equal((await request('/api/folders','GET',undefined,'bob')).body.length,0);
+    assert.equal((await request('/api/tests','POST',{...saved.body,folderId:folder.body.id})).body.folderId,folder.body.id);
+    assert.equal((await request('/api/tests','POST',{...saved.body,id:undefined,folderId:folder.body.id},'bob')).status,404);
+    const copy=await request('/api/tests/'+saved.body.id+'/copy','POST',{title:'Independent copy'});assert.equal(copy.status,200);assert.notEqual(copy.body.id,saved.body.id);assert.equal((await request('/api/tests/'+saved.body.id+'/copy','POST',{},'bob')).status,404);await request('/api/tests/'+copy.body.id,'DELETE');
+    assert.equal((await request('/api/folders/'+folder.body.id,'PATCH',{name:'Economics sections'})).body.name,'Economics sections');assert.equal((await request('/api/folders/'+folder.body.id,'DELETE',undefined,'bob')).status,404);
+    const timed=await request('/api/sessions','POST',{testId:saved.body.id,durationMinutes:1,showScores:false,shuffleAnswers:true});assert.equal(timed.body.durationMinutes,1);const timedSocket=await socket();const timedJoin=await emit(timedSocket,'student:join',{sessionId:timed.body.id,name:'Timed',number:'123'});await request('/api/sessions/'+timed.body.id+'/start','POST',{});await emit(timedSocket,'student:draft',{answers:{q:'a'},questionId:'q'});const before=(await store.getSession(timed.body.id)).deadlineAt;assert.equal((await request('/api/sessions/'+timed.body.id+'/extend','POST',{})).body.deadlineAt,before+60000);await store.mutate(timed.body.id,s=>s.deadlineAt=Date.now()-1);await running.tick();const timedResume=await emit(timedSocket,'student:join',{sessionId:timed.body.id,resumeToken:timedJoin.resumeToken});assert.equal(timedResume.view.result.hidden,true);assert.equal(timedResume.view.result.score,undefined);assert.equal((await request('/api/sessions/'+timed.body.id)).body.students[0].result.percentage,100);assert.equal((await request('/api/sessions/'+timed.body.id+'/extend','POST',{})).status,409);await request('/api/sessions/'+timed.body.id,'DELETE');
+    const calc = await request('/api/sessions', 'POST', { mode: 'calculator' });
+    assert.equal((await request(`/api/sessions/${calc.body.id}/export`)).status, 400);
+    await request(`/api/sessions/${calc.body.id}/end`, 'POST', {});
+    assert.equal((await request('/api/sessions')).body.some(s => s.id === calc.body.id), false);
+    const launched = await request('/api/sessions', 'POST', { testId: saved.body.id });
+    const sid = launched.body.id;
+    assert.equal((await request(`/api/sessions/${sid}`, 'DELETE')).status, 409);
+    assert.equal((await request(`/api/sessions/${sid}`,'PATCH',{title:'Section A'})).body.title,'Section A');assert.equal((await store.getSession(sid)).test.title,'Quiz');
+    assert.equal((await request(`/api/sessions/${sid}`, 'GET', undefined, 'bob')).status, 404);
+    assert.equal((await request('/api/tests', 'GET', undefined, 'bob')).body.length, 0);
+    assert.equal((await request(`/api/tests/${saved.body.id}`, 'DELETE', undefined, 'bob')).status, 404);
+    const publicSocket = await socket();
+    const publicAck = await emit(publicSocket, 'display:watch', { sessionId: sid, token: launched.body.displayToken });
+    assert.equal(publicAck.ok, true);
+    assert.equal((await emit(publicSocket, 'professor:watch', { sessionId: sid, token: 'invalid' })).ok, false);
+    const a = await socket();
+    const joined = await emit(a, 'student:join', { sessionId: sid, name: '=Kim & Lee', number: '0010' });
+    assert.equal(joined.ok, true); assert.equal(joined.view.test, null);
+    assert.equal((await emit(a, 'student:join', { sessionId: sid, name: 'Kim', number: '0010' })).ok, false);
+    const b = await socket();
+    const joinedB = await emit(b, 'student:join', { sessionId: sid, name: 'Park', number: '0002' });
+    assert.equal(joinedB.ok, true);
+    const updated = once(publicSocket, 'display:update');
+    await request(`/api/sessions/${sid}/start`, 'POST', {});
+    const [pub] = await updated;
+    assert.deepEqual(Object.keys(pub.students[0]).sort(), ['name', 'status']);
+    assert.equal(JSON.stringify(pub).includes('0010'), false);
+    const resumedView = (await emit(a, 'student:join', { sessionId: sid, resumeToken: joined.resumeToken })).view;
+    assert.equal(resumedView.test.questions[0].correctOptionId, undefined);
+    await emit(a, 'student:draft', { answers: { q: 'a' } });assert.equal((await emit(a,'student:progress',{questionId:'q'})).ok,true);assert.equal((await emit(a,'student:progress',{questionId:'invalid'})).ok,false);assert.equal((await request(`/api/sessions/${sid}`)).body.students.find(st=>st.id===joined.studentId).progress.answered,1);
+    const unrelated=[];const listener=view=>unrelated.push(view);a.on('student:update',listener);await new Promise(r=>setTimeout(r,15));const ownHeartbeat=await emit(b,'student:visibility',{visible:true});assert.equal(Number.isFinite(ownHeartbeat.view.serverNow),true,'Own heartbeat must include a clock sample');a.off('student:update',listener);assert.equal(unrelated.length,0,'Another student heartbeat must not resend this student’s questions just to update the clock');
+    sockets.forEach(s => s.disconnect()); await running.close();
+    aiEnabled=true;base = await boot();
+    const partial={title:'AI key draft',questions:[{...saved.body.questions[0],correctOptionId:''}]};
+    for(let attempt=0;attempt<3;attempt++){const r=await request('/api/answer-key','POST',{test:partial});assert.equal(r.status,200);assert.equal(r.body.test.questions[0].correctOptionId,'a');}
+    for(let attempt=0;attempt<2;attempt++)assert.equal((await request('/api/import-ai','POST',{source:'Quiz\n1. 2+2?\nA.4\nB.5'})).status,200);
+    assert.equal((await request('/api/generate','POST',{source:'Some source material',count:1})).status,429,'All AI routes share a budget');assert.equal((await request('/api/tests')).body.length,1,'AI never saves automatically');
+    const reconnect = await socket();
+    const resume = await emit(reconnect, 'student:join', { sessionId: sid, resumeToken: joined.resumeToken });
+    assert.equal(resume.ok, true); assert.equal(resume.view.draft.q, 'a');
+    // Force the exact boundary between the outer guard and inner submission.
+    // One mutation must use one decision time, rather than rolling back a late FAIL.
+    const exam=require('../exam'),sweep=exam.sweep,submit=exam.submit;let guardTime;
+    exam.sweep=(s,now=Date.now())=>{guardTime=now;s.students.find(st=>st.id===joined.studentId).hiddenSince=now-5000;return sweep(s,now);};
+    exam.submit=(s,id,answers,now)=>submit(s,id,answers,now??guardTime+1);
+    let responses;
+    try {responses=await Promise.all([emit(reconnect,'student:submit',{answers:{q:'a'}}),emit(reconnect,'student:submit',{answers:{q:'a'}})]);}
+    finally {exam.sweep=sweep;exam.submit=submit;}
+    assert.equal(responses.filter(r => r.ok).length, 1);
+    assert.equal(responses.find(r => r.ok).view.result.percentage, 100);
+    const reconnectB = await socket();
+    await emit(reconnectB, 'student:join', { sessionId: sid, resumeToken: joinedB.resumeToken });
+    await emit(reconnectB, 'student:visibility', { visible: false });
+    await store.mutate(sid, s => { s.students.find(st => st.id === joinedB.studentId).hiddenSince = Date.now() - 6000; });
+    await running.tick();
+    const failedResult = await emit(reconnectB, 'student:submit', { answers: { q: 'a' } });
+    assert.equal(failedResult.ok, false);
+    assert.equal(failedResult.view.failed, true);
+    assert.match(failedResult.error,/Call professor/);
+    assert.equal((await emit(reconnectB,'student:draft',{answers:{q:'a'}})).ok,false);
+    const overridden = await request(`/api/sessions/${sid}/override`, 'POST', { studentId: joinedB.studentId, reason: 'Verified OS interruption' });
+    const restoredStudent = overridden.body.students.find(st => st.id === joinedB.studentId);
+    assert.equal(restoredStudent.failed,false);
+    assert.equal((await emit(reconnectB,'student:submit',{answers:{q:'a'}})).view.result.score,1);
+    assert.equal(restoredStudent.events.at(-1).reason, 'Verified OS interruption');
+    const failed = await request(`/api/sessions/${sid}/override`, 'POST', { studentId: joined.studentId, reason: 'invalid' }, 'bob');
+    assert.equal(failed.status, 404);
+    const download = await fetch(`${base}/api/sessions/${sid}/export`, { headers: { Authorization: 'Bearer alice' } });
+    assert.equal(download.status, 200);
+    const files = unzipSync(new Uint8Array(await download.arrayBuffer()));
+    const sheet = strFromU8(files['xl/worksheets/sheet1.xml']);
+    assert.ok(sheet.indexOf('0002') < sheet.indexOf('0010'));
+    assert.ok(sheet.includes('t="inlineStr"><is><t xml:space="preserve">0010'));
+    assert.ok(sheet.includes('=Kim &amp; Lee')); assert.equal(sheet.includes('<f>'), false);
+    assert.ok(sheet.includes('student number')); assert.ok(sheet.includes('percentage'));
+    const rejected=await socket();const rejectedJoin=await emit(rejected,'student:join',{sessionId:sid,name:'Failed student',number:'0099'});await emit(rejected,'student:draft',{answers:{q:'a'}});await store.mutate(sid,s=>{const st=s.students.find(st=>st.id===rejectedJoin.studentId);st.hiddenSince=Date.now()-6000;});await running.tick();
+    assert.equal((await request(`/api/sessions/${sid}/finalize-fail`,'POST',{studentId:rejectedJoin.studentId,reason:'Confirmed'},'bob')).status,404);
+    const disconnected=once(rejected,'disconnect');const final=await request(`/api/sessions/${sid}/finalize-fail`,'POST',{studentId:rejectedJoin.studentId,reason:'Confirmed'});assert.equal(final.status,200);await disconnected;
+    const finalStudent=final.body.students.find(st=>st.id===rejectedJoin.studentId);assert.equal(finalStudent.result.percentage,0);assert.equal(finalStudent.result.originalScore,1);assert.equal(finalStudent.finalized,true);
+    const lastSocket=await socket();const terminal=await emit(lastSocket,'student:join',{sessionId:sid,resumeToken:rejectedJoin.resumeToken});assert.equal(terminal.view.terminal,true);assert.equal(terminal.view.result.percentage,0);assert.equal((await emit(lastSocket,'student:draft',{answers:{q:'b'}})).ok,false);
+    await request(`/api/sessions/${sid}/end`, 'POST', {});
+    assert.equal((await request(`/api/sessions/${sid}`,'PATCH',{title:'Economics — Section B'})).body.title,'Economics — Section B');
+    assert.equal((await store.getSession(sid)).test.title,'Quiz');
+    const namedExport=await fetch(base+`/api/sessions/${sid}/export`,{headers:{Authorization:'Bearer alice'}});assert.match(decodeURIComponent(namedExport.headers.get('content-disposition')),/Economics — Section B.xlsx/);
+    assert.equal((await request(`/api/sessions/${sid}`,'PATCH',{title:'Other'},'bob')).status,404);
+    assert.equal((await request(`/api/sessions/${sid}`)).body.phase, 'ended');
+    assert.equal((await emit(reconnect, 'student:join', { sessionId: sid, resumeToken: joined.resumeToken })).view.result.score, 1);
+    assert.equal((await request(`/api/sessions/${sid}`, 'DELETE', undefined, 'bob')).status, 404);
+    assert.equal((await request(`/api/sessions/${sid}`, 'DELETE')).status, 200);
+    assert.equal((await request(`/api/sessions/${sid}`)).status, 404);
+    assert.equal((await request(`/api/sessions/${sid}/export`)).status, 404);
+    assert.equal((await request('/api/sessions')).body.some(s => s.id === sid), false);
+    assert.equal((await request('/api/tests')).body.length, 1, 'Deleting results must preserve the library test');assert.equal((await request('/api/folders/'+folder.body.id,'DELETE')).status,200);assert.equal((await request('/api/tests')).body[0].folderId,null);
+  } finally { sockets.forEach(s => s.disconnect()); await running.close(); await db.close(); }
+});

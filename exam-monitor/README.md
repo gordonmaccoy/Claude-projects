@@ -1,80 +1,51 @@
-# Exam Monitor (MVP)
+# OnScreen V2 — Development
 
-A minimal classroom tool with two parts:
+Private professor workspace with Google/email sign-in, a saved test library, live classroom sessions and persistent results. Students join by QR with a student number and name; the separate public display receives names/status only.
 
-1. A **student calculator** page (mobile-first, opened via QR code).
-2. A **professor dashboard** that shows, in real time, whether each student's
-   calculator page is currently visible.
+See [V2_SETUP.md](V2_SETUP.md) for Railway Development and authentication configuration, verification and limitations. Do not deploy this branch to production.
 
-Students show as **GREEN** when the calculator tab is visible and sending a
-heartbeat, and **RED** when the tab is hidden, backgrounded, closed, or
-disconnected.
+## Local development
 
-## Run locally
+Use Node 22 or later. Configure `DATABASE_URL` for a disposable PostgreSQL database and the auth variables described in the setup guide, then:
 
-```bash
-cd exam-monitor
-npm install
+```sh
+npm ci
+npm run build
+npm test
+npm run check
 npm start
 ```
 
-Then open:
+Professor: `http://localhost:3100/professor.html`. Build output is committed so `npm ci --omit=dev` can run the app without the build tool.
 
-- Professor: http://localhost:3100/professor.html
-- Student (manual): http://localhost:3100/student.html?session=XXXXXX
+`npm run test:ui` exercises the real professor/student pages with local PostgreSQL (PGlite) and a simulated auth provider. It needs Chrome on Windows, a Playwright Chromium installation elsewhere, or `CHROME_BIN` pointing to a Chrome executable. Live Google OAuth and email delivery require configured external credentials and a separate manual acceptance check.
 
-Click **Start New Session** on the professor page. Scan the QR code with a
-phone, or share the join URL. The student enters their name and lands on the
-calculator; they appear on the dashboard immediately.
+## Workflow
 
-### Letting phones join over Wi-Fi
+1. Sign in, open Library and create a multiple-choice / fill-in-the-blank test. Set correct choices or accepted answers, reorder questions and save in a class folder.
+2. Launch a saved test, or use Open classroom display in the Classroom calculator card. The classroom popup opens separately; move it to the projector. Use Open classroom display if popups are blocked. Click its QR to expand/minimize.
+3. Students enter their student number and name. Test questions remain hidden in the waiting room until Start test.
+4. The private dashboard shows monitoring events, live grades, raw grades and FAIL overrides with reasons. Students see their own effective score and percentage immediately after submission.
+5. Results stores prior tests and exports `.xlsx` files sorted naturally by student number, with text identifiers and exactly four columns: student number, student name, absolute score, percentage (0–100).
 
-To scan the QR code from a phone on the same network, run the server on your
-laptop and access it via its LAN IP (e.g. `http://192.168.1.42:3100/professor.html`).
-The generated QR code uses whatever origin the professor page was loaded from,
-so load the professor page via the LAN IP as well, not `localhost`.
+A confirmed continuous hidden interval **strictly longer than five seconds** during a running calculator or test produces a durable FAIL and locks the activity with “Call professor”. Network loss alone turns the roster red without failing the student. Returning after FAIL keeps the lock; a professor unlock with a reason permits continuation and preserves work. Submitted students do not accrue new failures. The raw grade and incident history remain available privately.
 
-## Calculator
+Sessions survive professor disconnection and server restart. Student enrollment and drafts resume using a private capability stored before joining. Keep the same browser; do not clear its storage. If storage is blocked, reconnection works while the page remains open, but recovery after closing/reloading cannot be guaranteed.
 
-Basic 4-function calculator with parentheses and nested parentheses. Supports
-standard order of operations. Keyboard input works on desktop for quick
-testing (digits, `+ - * /`, `( )`, `.`, `Enter`/`=`, `Backspace`, `Esc`/`C`).
+Completed test results can be deleted from Results after confirmation; the saved library test is kept. Calculator sessions are visibility-only, have no score/export, and never appear as saved results.
 
-Evaluation is done with `Function(...)` after the expression is whitelisted to
-digits, `+ - * /`, `.`, `(`, `)`, and whitespace. No identifiers or property
-access can pass the whitelist.
+The classroom window is reused on reopen and across sessions, including after a professor-page refresh. If the browser blocks an automatic popup on a slow launch, the Open classroom display control provides a direct retry.
 
-## What this does and does not do
+## Scope and limits
 
-**What it does:**
-- Detects when the calculator **tab** becomes hidden, backgrounded, minimized,
-  closed, or disconnected, via `visibilitychange`, `pagehide`, and a 3-second
-  heartbeat.
-- Updates the professor dashboard in real time via Socket.IO.
+This is a page-visibility monitor, not a lockdown browser. It cannot identify what a student switched to, prove intent, or prevent browser events being spoofed. OS interruptions may hide the page; professors should review the durable event history when overriding.
 
-**What it does not do:**
-- It does **not** detect which app or website the student switched to.
-- It is **not** a lockdown browser or anti-cheating system.
-- It does not record the student's activity, camera, microphone, or screen.
-- A student with browser DevTools open can easily stop or spoof the heartbeat.
-  Treat this purely as a visibility monitor.
+Use one Development app replica. All mutations are PostgreSQL transactions, but live socket rooms use a single process. No Redis adapter/multi-replica transport is implemented. Test on real student phones before graded use.
 
-## Architecture
+Legacy `onscreen_*` tables are retained untouched. V2 uses account-owned `onscreen_v2_tests` and `onscreen_v2_sessions`. Legacy records are not silently assigned to whichever professor signs in first; see the setup guide for migration considerations.
 
-- `server.js` — Express + Socket.IO. In-memory `Map` of sessions. A 2-second
-  interval checks heartbeat staleness (`>10s`) and the 60-second disconnect
-  grace window.
-- `public/professor.*` — dashboard UI, QR rendering, student list.
-- `public/student.*` — join form and calculator, visibility and heartbeat
-  wiring.
+## Roadmap — not implemented
 
-Single active session per professor socket. Restarting the server drops all
-state. That is acceptable for MVP; not for production.
+Library has separate “Upload a test” (text-based PDF/DOCX with supplied answer key) and “Create with AI” (source material) flows. Both produce editable drafts for professor review before saving. AI requires server-only OPENAI_API_KEY and OPENAI_MODEL on Railway Development; live generation remains unverified until configured. See V2_SETUP.md for format and limits.
 
-## Future expansion (not built)
-
-The code is structured so these could be added later without a rewrite:
-- Multiple choice questions
-- Timed exams
-- Answer submission
-- Persistent storage
+Library creation now starts with manual/upload/AI choices, supports folder editing, copying and weighted points. Launch supports optional class deadlines, score visibility and stable answer shuffling. See V2_SETUP.md for limits and timer/draft behavior.

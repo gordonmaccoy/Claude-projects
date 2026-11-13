@@ -1,8 +1,8 @@
 /* Theme variables. Toggle via [data-theme] on <html>. */
 :root[data-theme="dark"] {
-  --bg: #0b0d12;
-  --surface: #15171e;
-  --surface-raised: #1e2028;
+  --bg: var(--examio-navy);
+  --surface: #102b42;
+  --surface-raised: #173955;
   --text: #f5f6f8;
   --muted: #8a90a0;
   --border: rgba(255, 255, 255, 0.06);
@@ -10,8 +10,8 @@
   --key-num-bg: #23262f;
   --key-num-bg-hover: #2a2e38;
   --key-num-text: #ffffff;
-  --key-accent: #2563eb;
-  --key-accent-hover: #1d4ed8;
+  --key-accent: var(--examio-action);
+  --key-accent-hover: var(--examio-action-hover);
   --key-accent-text: #ffffff;
   --result: #ffffff;
   --error: #fca5a5;
@@ -19,18 +19,18 @@
 }
 
 :root[data-theme="light"] {
-  --bg: #e9edf2;
+  --bg: var(--examio-paper);
   --surface: #ffffff;
   --surface-raised: #f5f7fb;
-  --text: #0f1115;
-  --muted: #6b7280;
+  --text: var(--examio-ink);
+  --muted: var(--examio-muted);
   --border: rgba(15, 17, 21, 0.06);
   --shadow: 0 24px 48px rgba(15, 17, 21, 0.08), 0 2px 6px rgba(15, 17, 21, 0.04);
   --key-num-bg: #f0f3f8;
   --key-num-bg-hover: #e6ebf2;
-  --key-num-text: #0f1115;
-  --key-accent: #2563eb;
-  --key-accent-hover: #1d4ed8;
+  --key-num-text: var(--examio-ink);
+  --key-accent: var(--examio-action);
+  --key-accent-hover: var(--examio-action-hover);
   --key-accent-text: #ffffff;
   --result: #2563eb;
   --error: #dc2626;
@@ -43,7 +43,7 @@
 html, body {
   margin: 0;
   min-height: 100%;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--examio-font);
   background: var(--bg);
   color: var(--text);
   transition: background 200ms ease, color 200ms ease;
@@ -453,3 +453,29 @@ body {
   color: var(--muted);
   line-height: 1.5;
 }
+
+.activity-lock{position:fixed;inset:0;z-index:1000;background:#120808ed;display:grid;place-items:center;padding:24px;text-align:center;color:#ffd8d4}.activity-lock>div{max-width:500px;border:2px solid #b85650;border-radius:18px;padding:36px;background:#381e20}.blank-answer{width:100%;padding:14px;font:inherit;border:1px solid #718877;border-radius:8px}
+
+.test-timer{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;margin:16px 0;background:#203d30;color:#e8f3dd;border-radius:10px}.test-timer strong{font-size:26px;font-variant-numeric:tabular-nums}.test-timer.critical{background:#702c2c;color:#fff}.test-timer.critical strong{font-size:40px}#time-notice{font-weight:600}#submit-dialog{width:min(500px,90vw);padding:25px;border-radius:14px;border:1px solid #76967c;background:#f4f7ef;color:#183728}#submit-dialog::backdrop{background:#102c27a0}#submit-dialog button{padding:12px;margin:8px;border-radius:8px;font:inherit}
+
+body{flex-direction:column;align-items:stretch}.calculator{width:100%;box-sizing:border-box;margin:0 auto}#student-notice{align-self:center;max-width:600px;margin:12px 16px 0}#student-notice:empty{display:none}
+
+.student-brandbar { padding: 14px 24px; background: var(--examio-white); border-bottom: 1px solid var(--examio-line); }
+
+body:has(#calculator-section:not([hidden])) .student-brandbar { display: none; }
+.calc-brandbar { display: flex; justify-content: center; padding: 10px; background: var(--examio-white); border: 1px solid var(--examio-line); border-radius: 14px; }
+
+#student-connection { align-self: center; max-width: 600px; margin: 12px 16px; color: var(--muted); }
+#student-connection:empty { display: none; }
+.test-copy-guard :is(.tq-text,.tq-opt-text,.tq-opt-letter) { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+@media print { .test-copy-guard { display: none !important; } }
+
+.test-timer { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 3; }
+.question-image { display: block; max-width: 100%; max-height: 420px; object-fit: contain; margin: .5rem 0; }
+#calculator-complete { margin-top: 16px; }
+#student-corrections article { border-top: 1px solid var(--border); padding: 12px 0; text-align: left; }
+
+.correction-incorrect { color: #9e1e2c; }
+.correction-correct { color: #146532; }
+:root[data-theme="dark"] .correction-incorrect { color: #ffabab; }
+:root[data-theme="dark"] .correction-correct { color: #a2ebae; }
