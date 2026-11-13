@@ -464,7 +464,7 @@ socket.on('connect',()=> { if (account) { if($('notice').textContent.startsWith(
 socket.on('disconnect',()=> { if (account) notice('Live connection lost. Sessions remain saved; reconnecting…'); });
 socket.on('professor:update',view=> { const listed=sessionList.find(s=>s.id===view.id);if(view.phase==='ended'||(listed&&(listed.title!==view.title||listed.phase!==view.phase)))refresh().catch(e=>notice(e.message));if (current?.id === view.id) { current={...current,...view}; renderDashboard(); } if (historySession?.id===view.id) { historySession={...historySession,...view}; renderResults(); } });
 socket.on('auth:expired',()=> { notice('Please sign in again to reconnect the private dashboard.'); });
-let workspaceSignIn;
+let workspaceSignIn,registration;
 function signedIn() {
   if(!workspaceSignIn)workspaceSignIn=loadSignedInWorkspace().finally(()=>{workspaceSignIn=null;});
   return workspaceSignIn;
@@ -476,6 +476,8 @@ async function loadSignedInWorkspace() {
     if(account && account.id!==verified.id) clearPrivateWorkspace();
     generation=accountGeneration;account=verified;
     if(recoveringPassword)return;
+    const authSession=(await auth.auth.getSession()).data.session;
+    if(registration&&await registration.resume(authSession))return;
     settings.setAccount(verified);$('account-name').textContent=account.email;$('login').hidden=true;$('workspace').hidden=false;$('signout').hidden=false;
     socket.connect();
     try {
@@ -490,14 +492,14 @@ async function initAuth() {
   if (!config.supabaseUrl || !config.supabaseKey) { $('auth-message').textContent='Professor sign-in needs Development authentication configuration. See V2_SETUP.md.'; $('login').querySelectorAll('input,button').forEach(el=>el.disabled=true); return; }
   aiConfigured=Boolean(config.aiConfigured);if(Number.isSafeInteger(config.uploadMaxBytes)&&config.uploadMaxBytes>0)uploadMaxBytes=config.uploadMaxBytes;
   auth=window.createOnScreenAuth(config.supabaseUrl, config.supabaseKey, {auth:{flowType:'pkce',detectSessionInUrl:true}});
+  registration=window.createExamioRegistration({auth,api,onComplete:()=>setTimeout(()=>{void signedIn();},0)});
   auth.auth.onAuthStateChange((event) => {
     if (event==='PASSWORD_RECOVERY') { recoveringPassword=true; $('login').hidden=false; $('workspace').hidden=true; $('login-form').hidden=true; $('google').hidden=true; $('new-password-form').hidden=false; }
     if (event==='SIGNED_IN' && !account) setTimeout(()=>{if(!account)void signedIn();},0);
     if (event==='TOKEN_REFRESHED') setTimeout(()=>{if(account)watch().catch(e=>notice(e.message));},0);
-    if (event==='SIGNED_OUT') { clearPrivateWorkspace(); account=null; $('workspace').hidden=true; $('login').hidden=false; $('signout').hidden=true; }
+    if (event==='SIGNED_OUT') { clearPrivateWorkspace(); account=null; registration.reset(); $('workspace').hidden=true; $('login').hidden=false; $('signout').hidden=true; }
   });
-  $('login-form').onsubmit=async e=> { e.preventDefault(); const {error}=await auth.auth.signInWithPassword({email:$('email').value,password:$('password').value}); $('auth-message').textContent=error?.t(message || ''); };
-  $('signup').onclick=async()=> { const {error}=await auth.auth.signUp({email:$('email').value,password:$('password').value,options:{emailRedirectTo:location.origin+'/professor.html'}}); $('auth-message').textContent=error?.message || t('Check your email to confirm your account, then sign in.'); };
+  $('login-form').onsubmit=async e=> { e.preventDefault(); try{const {error}=await auth.auth.signInWithPassword({email:$('email').value,password:$('password').value}); $('auth-message').textContent=t(error?.message || '');}catch(error){$('auth-message').textContent=error.message;} };
   $('google').onclick=async()=> { const {error}=await auth.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+'/professor.html'}}); if(error) $('auth-message').textContent=error.message; };
   $('signout').onclick=async()=> { await auth.auth.signOut(); };
   $('reset-password').onclick=async()=> { const {error}=await auth.auth.resetPasswordForEmail($('email').value,{redirectTo:location.origin+'/professor.html'}); $('auth-message').textContent=error?.message || t('Check your email for a password reset link.'); };

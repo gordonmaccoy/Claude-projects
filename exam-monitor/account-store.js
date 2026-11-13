@@ -26,7 +26,7 @@ function createAccountStore(rawPool){
  const methods={
   async getAccount(ownerId){return withOwner(ownerId,account=>({...account}),{allowInactive:true});},
   async accountState(ownerId){return (await pool.query('SELECT state FROM onscreen_v2_accounts WHERE owner_id=$1',[ownerId])).rows[0]?.state||'active';},
-  async saveProfile(ownerId,profile){return withOwner(ownerId,async()=>{await pool.query('UPDATE onscreen_v2_accounts SET profile=$2 WHERE owner_id=$1',[ownerId,JSON.stringify(profile)]);return profile;});},
+  async saveProfile(ownerId,profile){return withOwner(ownerId,async account=>{const merged={...account.profile,...profile};if(account.profile.termsAcceptedAt){merged.termsAcceptedAt=account.profile.termsAcceptedAt;merged.termsVersion=account.profile.termsVersion;}await pool.query('UPDATE onscreen_v2_accounts SET profile=$2 WHERE owner_id=$1',[ownerId,JSON.stringify(merged)]);return merged;});},
   async saveContact(ownerId,email,input){return withOwner(ownerId,async()=>{
    const data={email,category:input.category,subject:input.subject,message:input.message};
    const previous=(await pool.query('SELECT * FROM onscreen_v2_contacts WHERE owner_id=$1 AND request_key=$2',[ownerId,input.requestId])).rows[0];

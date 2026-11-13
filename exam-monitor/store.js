@@ -27,6 +27,7 @@ function createStore(pool) {
         UNIQUE(owner_id,name)
       )`);
     },
+    async hasWorkspaceHistory(ownerId){return (await pool.query('SELECT EXISTS(SELECT 1 FROM onscreen_v2_onboarding WHERE owner_id=$1) OR EXISTS(SELECT 1 FROM onscreen_v2_tests WHERE owner_id=$1) OR EXISTS(SELECT 1 FROM onscreen_v2_sessions WHERE owner_id=$1) AS used',[ownerId])).rows[0].used;},
     async initializeOnboarding(ownerId,starter){
       const client=await pool.connect();
       try{
