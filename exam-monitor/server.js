@@ -87,8 +87,26 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
   }));
   const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:MAX_BYTES,files:1,fields:8,fieldSize:MAX_TEXT*4}}).single('file');
   const work=new Map();
-  function beginWork(req,res,isAI){const key=req.user.id+':'+(isAI?'ai':'import'),now=Date.now(),previous=work.get(key),interval=isAI?3600000:60000,limit=isAI?5:20;
-    const state=previous&&now-previous.start<interval?previous:{start:now,count:0,busy:false};if(state.busy||state.count>=limit){res.status(429).json({error:isAI?'OnScreen AI request limit reached (5 per hour). Please wait before retrying.':'Please wait before processing another document.'});return null;}state.busy=true;state.count++;work.set(key,state);return state;
+  function beginWork(req,res,isAI){
+    const key=req.user.id+':'+(isAI?'ai':'import'),now=Date.now(),previous=work.get(key);
+    const reject=(code,error,retrySeconds)=>{
+      if(retrySeconds)res.set('Retry-After',String(retrySeconds));
+      res.status(429).json({code,error,...(retrySeconds?{retryAfterSeconds:retrySeconds}:{})});
+      return null;
+    };
+    // Never reset an in-flight lock when its allowance window expires.
+    if(previous?.busy)return reject(isAI?'AI_BUSY':'IMPORT_BUSY',isAI?'An Examio AI request is already in progress. Please wait for it to finish.':'A document is already being processed. Please wait for it to finish.');
+    const interval=60000,limit=20;
+    const state=previous||{start:now,count:0,busy:false};
+    if(now-state.start>=interval){state.start=now;state.count=0;}
+    if(state.count>=limit){
+      const retry=Math.max(1,Math.ceil((state.start+interval-now)/1000));
+      return reject(isAI?'AI_RETRY_LIMIT':'IMPORT_LIMIT',isAI?`Too many Examio AI attempts in a short time. Try again in ${retry} seconds. There is no hourly AI allowance.`:'Please wait before processing another document.',retry);
+    }
+    // No hourly AI quota. Bound rapid attempts (including failures) separately
+    // to protect provider costs and server resources from retry loops.
+    state.count++;
+    state.busy=true;work.set(key,state);return state;
   }
   for(const mode of ['import','generate','import-ai'])api.post('/'+mode,upload,wrap(async(req,res)=>{
     const isAI=mode!=='import';if(isAI&&!aiConfigured){if(req.file)req.file.buffer.fill(0);return res.status(503).json({error:'AI needs Development OPENAI_API_KEY and OPENAI_MODEL configuration.'});}
@@ -96,7 +114,7 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
     try{const source=req.file?await extractDocument(req.file):(req.body.source||req.body.text);const result=mode==='import'?parseTest(source,req.file?.originalname):mode==='import-ai'?await importWithAI({source,filename:req.file?.originalname}):await generate({source,prompt:req.body.prompt,count:req.body.count,types:req.body.types,difficulty:req.body.difficulty});res.json(result);}
     catch(e){res.status(400).json({error:e.message||'Unable to process this material.'});}finally{state.busy=false;if(req.file)req.file.buffer.fill(0);}
   }));
-  api.post('/answer-key',wrap(async(req,res)=>{if(!aiConfigured)return res.status(503).json({error:'AI needs Development OPENAI_API_KEY and OPENAI_MODEL configuration.'});const state=beginWork(req,res,true);if(!state)return;try{res.json(await completeAnswers(req.body.test));}catch(e){res.status(400).json({error:e.message||'Unable to determine answer keys.'});}finally{state.busy=false;}}));
+  api.post('/answer-key',wrap(async(req,res)=>{if(!aiConfigured)return res.status(503).json({error:'AI needs Development OPENAI_API_KEY and OPENAI_MODEL configuration.'});const state=beginWork(req,res,true);if(!state)return;try{const result=await completeAnswers(req.body.test);res.json(result);}catch(e){res.status(400).json({error:e.message||'Unable to determine answer keys.'});}finally{state.busy=false;}}));
   api.put('/folder-order',wrap(async(req,res)=>{
     if(!validIdList(req.body.ids,1000))return res.status(400).json({error:'Invalid folder order.'});
     if(!await store.orderFolders(req.user.id,req.body.ids))return res.status(409).json({error:'The folders changed. Refresh and try again.'});
