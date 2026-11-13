@@ -44,6 +44,7 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
     if (!req.user) return res.status(401).json({ error: 'Please sign in with a verified professor account.' });
     const state=await store.accountState(req.user.id);
     if(state!=='active'&&!((req.method==='GET'&&req.path==='/settings')||(req.method==='DELETE'&&req.path==='/account')))return res.status(423).json({error:'Account deletion is in progress or complete.'});
+    if(state==='active' && store.registerShareIdentity)await store.registerShareIdentity(req.user);
     // Continue only after remote identity validation, never from client claims.
     req.authenticated = true;
     next();
@@ -75,6 +76,21 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
   }
   api.use(settingsController.router);
   api.get('/me', (req, res) => res.json(req.user));
+  const shareWrap=fn=>wrap(async(req,res)=>{try{return await fn(req,res);}catch(error){if([400,404,409,410,423,429].includes(error.status))return res.status(error.status).json({error:error.message});throw error;}});
+  api.get('/shares',shareWrap(async(req,res)=>res.json(await store.listShares(req.user))));
+  api.post('/tests/:id/share',shareWrap(async(req,res)=>{
+    const {email,requestId}=req.body||{};
+    if(!require('./settings-service').validEmail(email)||typeof requestId!=='string'||!/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(requestId))return res.status(400).json({error:'Enter an email address and retry the sharing request.'});
+    res.json(await store.createShare(req.user,req.params.id,email,requestId));
+  }));
+  api.post('/shares/:id/accept',shareWrap(async(req,res)=>{
+    const folderId=req.body?.folderId??null;
+    if(folderId!==null&&(typeof folderId!=='string'||folderId.length>100))return res.status(400).json({error:'Choose a valid class folder.'});
+    res.json(await store.acceptShare(req.user,req.params.id,folderId));
+  }));
+  api.post('/shares/:id/decline',shareWrap(async(req,res)=>res.json(await store.declineShare(req.user,req.params.id))));
+  api.post('/shares/:id/cancel',shareWrap(async(req,res)=>res.json(await store.cancelShare(req.user,req.params.id))));
+
   api.post('/onboarding',wrap(async(req,res)=>res.json(await store.initializeOnboarding(req.user.id,require('./onboarding').createStarterTest(req.body?.language)))));
   api.post('/practice-test',wrap(async(req,res)=>{
     const starter=require('./onboarding').createStarterTest(req.body?.language);

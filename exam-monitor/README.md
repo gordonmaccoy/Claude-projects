@@ -49,3 +49,26 @@ Legacy `onscreen_*` tables are retained untouched. V2 uses account-owned `onscre
 Library has separate “Upload a test” (text-based PDF/DOCX with supplied answer key) and “Create with AI” (source material) flows. Both produce editable drafts for professor review before saving. AI requires server-only OPENAI_API_KEY and OPENAI_MODEL on Railway Development; live generation remains unverified until configured. See V2_SETUP.md for format and limits.
 
 Library creation now starts with manual/upload/AI choices, supports folder editing, copying and weighted points. Launch supports optional class deadlines, score visibility and stable answer shuffling. See V2_SETUP.md for limits and timer/draft behavior.
+
+### Sharing quizzes (in-app only)
+
+Saved quizzes can be shared with an existing Examio account by email. The recipient
+must open/sign into Examio before sending so the private server-side directory has
+seen their verified email. There is no public account lookup or email notification.
+For privacy, submission returns the same receipt for unavailable addresses; requests
+sent before an account is eligible must be sent again, and never activate for a later signup.
+
+Recipients use **Shared with me** to accept into their own class folder or decline.
+An acceptance atomically creates one independent copy containing quiz content,
+images and answer keys, never grades, sessions or student responses. Pending requests
+can be canceled; accepted copies cannot be remotely revoked. Requests expire after
+seven days. Expired/completed snapshots are cleared; request receipts become eligible for deletion
+after 37 days and are cleaned on the next sharing activity. Account deletion removes related
+requests and directory entries. Browser privacy cleanup also clears sharing UI.
+
+Sharing is limited to 20 attempts per sender/hour and five requests per
+sender/recipient/day. The database tables use server-owner access only with RLS
+and no client policies; these tables are not intended for direct Supabase Data API use.
+The existing one-replica server architecture is unchanged.
+
+Run `node --test test/sharing*.test.js` for persistence, HTTP and UI-controller tests.
