@@ -6,8 +6,8 @@
   <meta name="theme-color" content="#f4f7f2">
   <meta name="description" content="Examio helps educators launch classroom tests, monitor student activity and grade results in the browser—without student installs.">
   <title>Examio — No Installation. Live Monitoring. Instant Results.</title>
-  <link rel="stylesheet" href="/landing.css?v=walkthrough-video">
-  <script src="/ko.js" defer></script><script src="/language.js" defer></script><script src="/landing.js?v=language" defer></script>
+  <link rel="stylesheet" href="/landing.css?v=room-menu">
+  <script src="/ko.js?v=launch-menu" defer></script><script src="/language.js" defer></script><script src="/landing.js?v=room-menu" defer></script>
 <link rel="stylesheet" href="/examio.css">
 </head>
 <body>
@@ -25,6 +25,7 @@
     <a class="button button-small" href="/professor.html?signup=1">Get started</a>
   </header>
 
+  <section class="room-join" aria-label="Join a test"><form id="room-join-form"><label for="room-name">Joining an activity?</label><div><input id="room-name" name="room" placeholder="Room name" required maxlength="50" autocomplete="off" aria-describedby="room-join-status"><button type="submit" aria-label="Join room">→</button></div></form><p id="room-join-status" role="status">Room-name joining is coming in step 2. For now, scan your professor’s QR code.</p></section>
   <main id="main">
     <section class="hero" aria-labelledby="hero-title">
       <div class="hero-inner">

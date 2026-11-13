@@ -560,9 +560,18 @@ function folderActions(folder) {
   return actions;
 }
 let launchTest=null;
-function openLaunch(test){launchTest=test;$('launch-test-title').textContent=test.title;$('launch-duration').value='0';$('launch-show-scores').checked=true;$('launch-shuffle').checked=false;$('launch-corrections').checked=false;$('launch-error').textContent='';$('launch-dialog').showModal();}
+function resetLaunchOptions(){
+ $('launch-room-enabled').checked=false;$('launch-room-name').value='';$('launch-room-name').disabled=true;
+ const examples=['Furry Bazooka','Orange Socks','Flimsy Pencil','Disco Turnip','Sleepy Rocket','Wobbly Penguin'];$('launch-room-preview').textContent='Example: '+examples[Math.floor(Math.random()*examples.length)]+' · not reserved';
+ $('launch-time-enabled').checked=false;$('launch-duration').value='10';$('launch-duration').disabled=true;
+ for(const id of ['launch-show-scores','launch-corrections','launch-monitoring','launch-fail-hidden','launch-text-selection','launch-copy-block','launch-fullscreen','launch-tab-visibility','launch-focus'])$(id).checked=true;
+ $('launch-shuffle').checked=false;$('launch-shuffle-questions').checked=false;$('launch-deterrents').open=false;
+}
+$('launch-room-enabled').onchange=()=>{$('launch-room-name').disabled=!$('launch-room-enabled').checked;if(!$('launch-room-name').disabled)$('launch-room-name').focus();};
+$('launch-time-enabled').onchange=()=>{$('launch-duration').disabled=!$('launch-time-enabled').checked;if(!$('launch-duration').disabled)$('launch-duration').focus();};
+function openLaunch(test){launchTest=test;$('launch-test-title').textContent=test.title;resetLaunchOptions();$('launch-error').textContent='';$('launch-dialog').showModal();}
 $('launch-cancel').onclick=()=> $('launch-dialog').close();
-$('launch-form').onsubmit=async e=>{e.preventDefault();$('launch-confirm').disabled=true;try{await launchSession({testId:launchTest.id,language:window.examioLanguage.current,durationMinutes:Number($('launch-duration').value),showScores:$('launch-show-scores').checked,shuffleAnswers:$('launch-shuffle').checked,showCorrections:$('launch-corrections').checked});$('launch-dialog').close();}catch(e){$('launch-error').textContent=e.message;}finally{$('launch-confirm').disabled=false;}};
+$('launch-form').onsubmit=async e=>{e.preventDefault();$('launch-confirm').disabled=true;try{await launchSession({testId:launchTest.id,language:window.examioLanguage.current,durationMinutes:$('launch-time-enabled').checked?Number($('launch-duration').value):0,showScores:$('launch-show-scores').checked,shuffleAnswers:$('launch-shuffle').checked,showCorrections:$('launch-corrections').checked});$('launch-dialog').close();}catch(e){$('launch-error').textContent=e.message;}finally{$('launch-confirm').disabled=false;}};
 $('extend-time').onclick=action(async()=>{const updated=await api('/sessions/'+current.id+'/extend','POST',{});updateSession(updated);notice('Added 1 minute (60 seconds). New end time: '+new Date(updated.deadlineAt).toLocaleTimeString());});
 $('test-pause').onclick=action(async()=>{if(!current||!['running','paused'].includes(current.phase))return;const id=current.id,verb=current.phase==='paused'?'resume':'pause';$('test-pause').disabled=true;try{updateSession(await api('/sessions/'+id+'/'+verb,'POST',{}));}finally{$('test-pause').disabled=false;}});
 let entryAction=null;

@@ -68,3 +68,5 @@
   reducedMotion.addEventListener?.('change', () => { explicitMotion = false; syncTimer(); });
   syncTimer();
 })();
+
+const roomJoinForm=document.querySelector('#room-join-form');if(roomJoinForm)roomJoinForm.addEventListener('submit',event=>{event.preventDefault();document.querySelector('#room-join-status').textContent=window.examioLanguage.t('Room-name joining is not connected yet. Please scan your professor’s QR code to join this test.');});
