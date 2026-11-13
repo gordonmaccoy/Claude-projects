@@ -1,4 +1,5 @@
 const { randomBytes, randomInt, createHash } = require('node:crypto');
+const {validateSecurity,effectiveSecurity}=require('./security');
 const token = () => randomBytes(24).toString('base64url');
 const hash = value => createHash('sha256').update(value).digest('hex');
 function validateTest(input) {
@@ -52,7 +53,7 @@ function launchOptions(input={}) {
  if(language!=='en'&&language!=='ko')throw new Error('Invalid session language');
  const durationMinutes=input.durationMinutes??0,showScores=input.showScores??true,shuffleAnswers=input.shuffleAnswers??false,showCorrections=input.showCorrections??false;
  if(!Number.isInteger(durationMinutes)||durationMinutes<0||durationMinutes>360||typeof showScores!=='boolean'||typeof shuffleAnswers!=='boolean'||typeof showCorrections!=='boolean')throw new Error('Invalid launch options');
- return {durationMinutes,showScores,shuffleAnswers,showCorrections,language};
+ return {durationMinutes,showScores,shuffleAnswers,showCorrections,language,security:validateSecurity(input.security)};
 }
 function newSession(ownerId, test, now = Date.now(), options={}) {
  const settings=launchOptions(options);
@@ -80,7 +81,8 @@ function join(s, input, now = Date.now()) {
   const resumeToken = input.resumeToken || token();
   const st = { id: token(), tokenHash: hash(resumeToken), number, name, visible: true, lastSeen: now,
     hiddenSince: null, failedAt: null, overrideAt: null, draft: {}, submission: null, events: [] };
-  if(s.shuffleAnswers && s.test){st.optionOrder={};for(const q of s.test.questions){if(q.type==='blank')continue;const order=q.options.map(o=>o.id);for(let i=order.length-1;i>0;i--){const j=randomInt(i+1);[order[i],order[j]]=[order[j],order[i]];}st.optionOrder[q.id]=order;}}
+  if(effectiveSecurity(s).enabled && s.shuffleAnswers && s.test){st.optionOrder={};for(const q of s.test.questions){if(q.type==='blank')continue;const order=q.options.map(o=>o.id);shuffle(order);st.optionOrder[q.id]=order;}}
+  if(effectiveSecurity(s).shuffleQuestions&&s.test){st.questionOrder=s.test.questions.map(q=>q.id);shuffle(st.questionOrder);}
   s.students.push(st);
   return { studentId: st.id, resumeToken };
 }
@@ -90,19 +92,21 @@ function student(s, id) {
   return st;
 }
 function isFailed(st) { return st.failedAt !== null && st.overrideAt === null; }
+function shuffle(order){for(let i=order.length-1;i>0;i--){const j=randomInt(i+1);[order[i],order[j]]=[order[j],order[i]];}}
+function recordMonitoring(st,event){if(st.events.length<1000)st.events.push(event);}
 function sweep(s, now = Date.now()) {
   let changed = false;
   if (s.phase !== 'running') return false;
   const cutoff=s.deadlineAt && now>=s.deadlineAt?s.deadlineAt:now;
   for (const st of s.students) {
-    if (!st.completedAt && !st.submission && !isFailed(st) && st.hiddenSince !== null && cutoff - st.hiddenSince > 5000) {
+    if (effectiveSecurity(s).inactivityFail && !st.completedAt && !st.submission && !isFailed(st) && st.hiddenSince !== null && cutoff - st.hiddenSince > 5000) {
       st.failedAt = cutoff; st.overrideAt = null;
       st.events.push({ type: 'fail', at: cutoff, hiddenSince: st.hiddenSince });
       changed = true;
     }
   }
   if(s.deadlineAt && now>=s.deadlineAt){
-    for(const st of s.students)if(!st.submission){const answers=validateAnswers(s,st.draft||{});st.submission={answers,originalScore:scoreAnswers(s.test,answers),submittedAt:s.deadlineAt,autoSubmitted:true};st.draft={};st.events.push({type:'time-expired',at:s.deadlineAt});}
+    for(const st of s.students)if(!st.submission){const answers=validateAnswers(s,st.draft||{});st.submission={answers,originalScore:scoreAnswers(s.test,answers),submittedAt:s.deadlineAt,autoSubmitted:true};st.draft={};if(effectiveSecurity(s).enabled)st.events.push({type:'time-expired',at:s.deadlineAt});}
     s.phase='ended';s.endedAt=s.deadlineAt;changed=true;
   }
   return changed;
@@ -119,7 +123,7 @@ function resume(s,ownerId,now=Date.now()) {
  if(s.ownerId!==ownerId)throw new Error('Session not found');
  if(s.mode!=='test'||s.phase!=='paused')throw new Error('Test is not paused');
  s.phase='running';s.deadlineAt=s.remainingMs==null?null:now+s.remainingMs;s.remainingMs=null;s.pausedAt=null;
- for(const st of s.students)st.hiddenSince=st.visible||st.submission||isFailed(st)?null:now;
+ for(const st of s.students){st.hiddenSince=!effectiveSecurity(s).inactivityFail||st.visible||st.submission||isFailed(st)?null:now;st.focused=true;}
 }
 function remainingTime(s,now=Date.now()){return s.phase==='paused'?s.remainingMs??null:s.deadlineAt?Math.max(0,s.deadlineAt-now):null;}
 function extend(s,ownerId,minutes=1,now=Date.now()){
@@ -131,18 +135,29 @@ function extend(s,ownerId,minutes=1,now=Date.now()){
 function start(s, now = Date.now()) {
   if (s.phase !== 'waiting') throw new Error('Test is not waiting');
   s.phase = 'running'; s.startedAt = now; s.deadlineAt=s.durationMinutes?now+s.durationMinutes*60000:null;
-  for (const st of s.students) st.hiddenSince = st.visible ? null : now;
+  for (const st of s.students) st.hiddenSince = !effectiveSecurity(s).inactivityFail||st.visible ? null : now;
 }
 function visibility(s, id, visible, now = Date.now()) {
   if (typeof visible !== 'boolean') throw new Error('Invalid visibility');
   sweep(s, now); // evaluate the elapsed interval BEFORE a return clears it
   const st = student(s, id);
   if (st.completedAt || st.submission || s.phase === 'ended') return;
+  const security=effectiveSecurity(s);
   const wasVisible = st.visible;
-  if (st.visible !== visible) st.events.push({ type: visible ? 'visible' : 'hidden', at: now });
+  if (s.phase==='running'&&!isFailed(st)&&security.tabVisibility&&st.visible !== visible)recordMonitoring(st,{type:visible?'visible':'hidden',at:now});
   st.visible = visible; st.lastSeen = now;
+  if(isFailed(st)){st.hiddenSince=null;return;}
   if (visible) st.hiddenSince = null;
-  else if (s.phase === 'running' && st.hiddenSince === null && wasVisible) st.hiddenSince = now;
+  else if (s.phase === 'running' && security.inactivityFail && st.hiddenSince === null && wasVisible) st.hiddenSince = now;
+}
+function securityEvent(s,id,type,now=Date.now()){
+ if(!['focus-lost','focus-returned','fullscreen-entered','fullscreen-exit'].includes(type))throw Error('Invalid security event');
+ const st=student(s,id),security=effectiveSecurity(s);
+ if(s.phase!=='running'||st.completedAt||st.submission||isFailed(st)||!security.enabled)return;
+ const focus=type.startsWith('focus-');if(focus?!security.focusVisibility:!security.fullscreen)return;
+ const key=focus?'focused':'fullscreen',value=type==='focus-returned'||type==='fullscreen-entered';
+ if(st[key]===value||(focus&&value&&st[key]===undefined)||(!focus&&!value&&st[key]!==true))return;
+ st[key]=value;recordMonitoring(st,{type,at:now});
 }
 function validateAnswers(s, answers) {
   if (!answers || typeof answers !== 'object' || Array.isArray(answers)) throw new Error('Invalid answers');
@@ -169,9 +184,9 @@ function incorrectAnswers(s,st) {
     const answer=st.submission.answers?.[q.id];
     if(correctAnswer(q,answer))return [];
     const chosen=q.options?.find(o=>o.id===answer), key=q.options?.find(o=>o.id===q.correctOptionId);
-    return [{number:index+1,question:q.text,image:q.image,answer:q.type==='blank'?(answer?.trim()||''):chosen?.text||'',
+    return [{number:st.questionOrder?st.questionOrder.indexOf(q.id)+1:index+1,question:q.text,image:q.image,answer:q.type==='blank'?(answer?.trim()||''):chosen?.text||'',
       correct:q.type==='blank'?q.acceptedAnswers.join(' / '):key?.text||'',answerImage:chosen?.image,correctImage:key?.image}];
-  });
+  }).sort((a,b)=>a.number-b.number);
 }
 function detailedResults(s) {
   return s.students.map(st=>{
@@ -192,7 +207,7 @@ function detailedResults(s) {
 function completeCalculator(s,id,now=Date.now()) {
   const st=student(s,id);
   if(s.mode!=='calculator'||s.phase!=='running'||isFailed(st))throw Error('Calculator cannot be completed in this state');
-  if(!st.completedAt){st.completedAt=now;st.hiddenSince=null;st.events.push({type:'calculator-completed',at:now});}
+  if(!st.completedAt){st.completedAt=now;st.hiddenSince=null;if(effectiveSecurity(s).enabled)st.events.push({type:'calculator-completed',at:now});}
 }
 function totalPoints(test){return (test?.questions||[]).reduce((sum,q)=>sum+Math.round((q.points??1)*100),0)/100;}
 function result(s, st) {
@@ -241,29 +256,29 @@ function override(s, id, professorId, reason, now = Date.now()) {
   st.hiddenSince = null;
   st.events.push({ type: 'override', at: now, professorId, reason: reason.trim() });
 }
-function status(st, now) { if(st.completedAt)return 'completed'; if(st.submission) return isFailed(st)?'red':'green'; return isFailed(st) || !st.visible || now - st.lastSeen > 10000 ? 'red' : 'green'; }
+function status(st, now,s) { if(st.completedAt)return 'completed'; if(st.submission) return isFailed(st)?'red':'green';const security=effectiveSecurity(s);if(!security.enabled)return 'green';return isFailed(st)||(security.tabVisibility&&!st.visible)||(security.focusVisibility&&st.focused===false)||now-st.lastSeen>10000?'red':'green'; }
 function publicView(s, now = Date.now()) {
   return { roomName:s.roomName||null,title: s.resultTitle || s.test?.title || 'Classroom calculator', language:s.language??'en', phase: s.phase,remainingMs:remainingTime(s,now),calculator:s.mode==='calculator'&&!s.resultTitle,deadlineAt:s.deadlineAt||null,
-    students: s.students.map(st => ({ name: st.name, status: isFailed(st)?'failed':st.completedAt?'completed':st.submission?'submitted':status(st,now) })) };
+    students: s.students.map(st => ({ name: st.name, status: isFailed(st)?'failed':st.completedAt?'completed':st.submission?'submitted':status(st,now,s) })) };
 }
 function privateView(s, now = Date.now()) {
-  return { id: s.id, roomName:s.roomName||null,mode: s.mode, language:s.language??'en', title: s.resultTitle || s.test?.title || 'Classroom calculator', phase: s.phase,
-    remainingMs:remainingTime(s,now),durationMinutes:s.durationMinutes||0,deadlineAt:s.deadlineAt||null,showScores:s.showScores!==false,shuffleAnswers:!!s.shuffleAnswers,extensionVersion:s.extensionVersion||0,
+  return { id: s.id, security:effectiveSecurity(s),roomName:s.roomName||null,mode: s.mode, language:s.language??'en', title: s.resultTitle || s.test?.title || 'Classroom calculator', phase: s.phase,
+    remainingMs:remainingTime(s,now),durationMinutes:s.durationMinutes||0,deadlineAt:s.deadlineAt||null,showScores:s.showScores!==false,shuffleAnswers:effectiveSecurity(s).enabled&&!!s.shuffleAnswers,extensionVersion:s.extensionVersion||0,
     createdAt: s.createdAt, startedAt: s.startedAt, endedAt: s.endedAt, displayToken: s.displayToken,
-    students: s.students.map(st => ({ id: st.id, number: st.number, name: st.name, status: status(st, now),
+    students: s.students.map(st => ({ id: st.id, number: st.number, name: st.name, status: status(st, now,s),
       failed: isFailed(st), completed:Boolean(st.completedAt), result: result(s, st), events: st.events,
       finalized:Boolean(st.submission?.professorFinalized),
-      progress:s.mode==='test'?{question:Math.max(0,s.test.questions.findIndex(q=>q.id===st.progressQuestionId)+1),answered:s.test.questions.filter(q=>{const a=(st.submission?.answers||st.draft||{})[q.id];return typeof a==='string'&&a.trim();}).length,total:s.test.questions.length}:null,
+      progress:s.mode==='test'?{question:Math.max(0,(st.questionOrder||s.test.questions.map(q=>q.id)).indexOf(st.progressQuestionId)+1),answered:s.test.questions.filter(q=>{const a=(st.submission?.answers||st.draft||{})[q.id];return typeof a==='string'&&a.trim();}).length,total:s.test.questions.length}:null,
       score: result(s, st)?.score ?? (isFailed(st) ? 0 : null), total: totalPoints(s.test) })) };
 }
 function studentView(s, st) {
   const internal=result(s,st);const final=internal?{score:internal.score,total:internal.total,percentage:internal.percentage,failed:internal.failed,submittedAt:internal.submittedAt}:null;
-  return { phase: s.phase, remainingMs:remainingTime(s), mode: s.mode, language:s.language??'en', name: st.name, failed: isFailed(st), completed:Boolean(st.completedAt),terminal:Boolean(st.completedAt||st.submission?.professorFinalized),deadlineAt:s.deadlineAt||null,extensionVersion:s.extensionVersion||0,lastExtension:s.lastExtension?{minutes:s.lastExtension.minutes}:null,
+  return { security:effectiveSecurity(s),phase: s.phase, remainingMs:remainingTime(s), mode: s.mode, language:s.language??'en', name: st.name, failed: isFailed(st), completed:Boolean(st.completedAt),terminal:Boolean(st.completedAt||st.submission?.professorFinalized),deadlineAt:s.deadlineAt||null,extensionVersion:s.extensionVersion||0,lastExtension:s.lastExtension?{minutes:s.lastExtension.minutes}:null,
     test: s.test && s.phase === 'running' && !st.submission ? { title: s.resultTitle || s.test.title,
-      questions: s.test.questions.map(q => ({ id: q.id, type:q.type || 'mc', points:q.points??1,text: q.text, ...(q.image?{image:q.image}:{}), ...(q.type === 'blank' ? {} : {options:st.optionOrder?.[q.id]?st.optionOrder[q.id].map(id=>q.options.find(o=>o.id===id)):q.options}) })) } : null,
+      questions: (st.questionOrder?st.questionOrder.map(id=>s.test.questions.find(q=>q.id===id)):s.test.questions).map(q => ({ id: q.id, type:q.type || 'mc', points:q.points??1,text: q.text, ...(q.image?{image:q.image}:{}), ...(q.type === 'blank' ? {} : {options:st.optionOrder?.[q.id]?st.optionOrder[q.id].map(id=>q.options.find(o=>o.id===id)):q.options}) })) } : null,
     ...(final && !final.failed && s.showCorrections===true?{corrections:incorrectAnswers(s,st)}:{}),
     draft: st.submission ? {} : st.draft, result:final && s.showScores===false?{hidden:true,failed:final.failed,submittedAt:final.submittedAt}:final };
 }
 module.exports = { validateTest, newSession, join, student, start, sweep, visibility, submit, override,
-  pause,resume,launchOptions,detailedResults,completeCalculator,totalPoints,extend,finalizeFail, progress, scoreAnswers, validateAnswers, publicView, privateView, studentView, hash, isFailed };
+  pause,resume,launchOptions,securityEvent,detailedResults,completeCalculator,totalPoints,extend,finalizeFail, progress, scoreAnswers, validateAnswers, publicView, privateView, studentView, hash, isFailed };
 

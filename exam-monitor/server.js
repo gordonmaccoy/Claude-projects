@@ -308,6 +308,7 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
     }
     on('student:sync',()=>studentMutation(()=>null,true));
     on('student:visibility', ({ visible }) => studentMutation((s, id, now) => exam.visibility(s, id, visible,now),true));
+    on('student:security', ({type}) => studentMutation((s,id,now)=>exam.securityEvent(s,id,type,now),true));
     on('student:progress',({questionId})=>studentMutation((s,id)=>exam.progress(s,id,questionId)));
     on('student:draft', ({ answers,questionId }) => studentMutation((s, id) => {
       if (s.phase !== 'running') throw new Error('Test is not running');

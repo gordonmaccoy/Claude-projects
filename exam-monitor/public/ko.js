@@ -538,3 +538,16 @@ window.examioKoreanHelp = {
 Object.assign(window.examioKorean, {
  "NEW TO EXAMIO":"EXAMIO 시작하기", "New to Examio?":"Examio가 처음이신가요?", "Create your account":"계정 만들기", "Your profile":"내 프로필", "Your institution":"소속 기관", "About you":"사용자 정보", "Institution":"소속 기관", "Registration steps":"가입 단계", "Students do not need accounts. They join using your classroom QR code.":"학생은 계정이 필요하지 않습니다. 강의실 QR 코드로 참여합니다.", "Confirm email":"이메일 확인", "Confirm password":"비밀번호 확인", "Organization type":"기관 유형", "Select organization type":"기관 유형 선택", "Primary / secondary school":"초·중·고등학교", "University":"대학교", "Corporate":"기업", "Other":"기타", "Role":"역할", "Select your role":"역할 선택", "Teacher":"교사", "Professor":"교수", "Admin":"관리자", "IT":"IT 담당자", "Phone number (optional)":"전화번호 (선택)", "I agree to the":"다음에 동의합니다:", "terms":"이용약관", "and":"및", "privacy policy":"개인정보 처리방침", "Back to sign in":"로그인으로 돌아가기", "Previous":"이전", "Verify your email":"이메일 인증", "We’ve sent a one-time verification code to:":"다음 이메일로 일회용 인증 코드를 보냈습니다:", "Verification code":"인증 코드", "Verify email":"이메일 인증하기", "Check your email address and spam folder if the email hasn’t arrived.":"이메일이 도착하지 않았다면 주소와 스팸 폴더를 확인하세요.", "Verification codes expire after 15 minutes.":"인증 코드는 15분 후 만료됩니다.", "Resend code":"코드 다시 보내기", "You can request another code after one minute.":"1분 후 코드를 다시 요청할 수 있습니다.", "Email addresses must match.":"이메일 주소가 일치해야 합니다.", "Passwords must match.":"비밀번호가 일치해야 합니다.", "A new verification email has been sent. Check your spam folder too.":"새 인증 이메일을 보냈습니다. 스팸 폴더도 확인하세요.", "Choose your role.":"역할을 선택하세요.", "Please agree to the terms and privacy policy.":"이용약관과 개인정보 처리방침에 동의해 주세요.", "Verification could not be confirmed. Please try again.":"인증을 확인할 수 없습니다. 다시 시도해 주세요."
 });
+
+Object.assign(window.examioKorean,{
+ "Invalid security options": "잘못된 보안 옵션입니다.",
+ "Start this test now?": "지금 시험을 시작하시겠습니까?",
+ "Fail and lock an attempt after the test page is hidden for more than 5 seconds, even if visibility event logging is off.": "표시 상태 이벤트 기록이 꺼져 있어도 시험 페이지가 5초 넘게 숨겨지면 실격 처리하고 잠급니다.",
+ "Enter fullscreen": "전체 화면으로 전환",
+ "Fullscreen is unavailable in this browser. You can continue.": "이 브라우저는 전체 화면을 지원하지 않습니다. 계속 진행할 수 있습니다.",
+ "Fullscreen could not be opened. You can continue or try again.": "전체 화면으로 전환하지 못했습니다. 계속 진행하거나 다시 시도할 수 있습니다.",
+ "Leaving this page hidden for more than 5 seconds results in FAIL and a score of zero. Tell your professor about interruptions.": "이 페이지가 5초 넘게 숨겨지면 실격 처리되며 점수는 0점이 됩니다. 문제가 발생하면 교수님께 알리세요.",
+ "Leaving or returning to this page is recorded.": "이 페이지를 떠나거나 돌아오는 활동이 기록됩니다.",
+ "Leaving or returning focus to this window is recorded.": "이 창에서 포커스가 벗어나거나 돌아오는 활동이 기록됩니다.",
+ "Use the fullscreen button when the activity starts. Fullscreen changes are recorded.": "활동이 시작되면 전체 화면 버튼을 사용하세요. 전체 화면 변경이 기록됩니다."
+});

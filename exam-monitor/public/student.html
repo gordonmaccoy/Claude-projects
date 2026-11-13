@@ -5,11 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#f4f7f2" id="theme-color" />
   <title>Examio · Student</title>
-  <link rel="stylesheet" href="student.css?v=correction-colors" />
+  <link rel="stylesheet" href="student.css?v=security-policy" />
 <link rel="stylesheet" href="/examio.css">
 <link rel="stylesheet" href="/pause.css?v=editor-polish"></head>
 <body>
   <header class="student-brandbar"><div class="brand examio-brand"><img class="brand-mark" src="/landing/examio-mark.svg" alt="" width="48" height="48"><span class="brand-type"><strong>Examio</strong><small>TEST <i>•</i> MONITOR <i>•</i> GRADE</small></span></div></header>
+<div class="fullscreen-tools"><button id="student-fullscreen" type="button" hidden>Enter fullscreen</button><p id="fullscreen-status" role="status" aria-live="polite"></p></div>
   <section id="join-section" class="join" hidden>
     <div class="join-card">
       <h1>Join Examio</h1>
@@ -23,7 +24,7 @@
     </div>
   </section>
 
-  <section id="waiting-section" class="join" hidden><div class="join-card"><h1>You’re in.</h1><p>Wait for your professor to start the test.</p><p>Once it starts, leaving this page hidden for more than 5 seconds results in FAIL and a score of zero. Tell your professor about interruptions.</p></div></section><p id="student-connection" role="status"></p><p id="student-notice" class="error" role="status" aria-live="polite"></p><section id="calculator-section" class="calculator" hidden>
+  <section id="waiting-section" class="join" hidden><div class="join-card"><h1>You’re in.</h1><p>Wait for your professor to start the test.</p><p id="security-policy-warning"></p></div></section><p id="student-connection" role="status"></p><p id="student-notice" class="error" role="status" aria-live="polite"></p><section id="calculator-section" class="calculator" hidden>
     <div class="calc-frame">
       <div class="calc-brandbar"><div class="brand examio-brand"><img class="brand-mark" src="/landing/examio-mark.svg" alt="" width="48" height="48"><span class="brand-type"><strong>Examio</strong><small>TEST <i>•</i> MONITOR <i>•</i> GRADE</small></span></div></div>
       <header class="calc-header">
@@ -114,7 +115,8 @@
 
   <div id="pause-lock" class="activity-lock examio-pause-overlay" role="alertdialog" aria-modal="true" aria-label="Test paused" hidden><div class="examio-pause-card"><span class="examio-pause-symbol" aria-hidden="true">Ⅱ</span><h2>Test is Paused.</h2><p>Wait a moment.</p></div></div>
   <div id="activity-lock" class="activity-lock" role="alertdialog" aria-modal="true" aria-labelledby="lock-heading" hidden><div><h1 id="lock-heading">Call professor</h1><p>FAILED · This page was hidden for more than 5 seconds.</p><p>Your work is kept. Ask your professor to unlock this activity.</p></div></div>
+
   <dialog id="submit-dialog" aria-labelledby="submit-heading"><h2 id="submit-heading">Submit test?</h2><p id="submit-warning"></p><div><button id="submit-review" type="button">Review answers</button><button id="submit-confirm" type="button">Submit test</button></div></dialog><script src="/socket.io/socket.io.js"></script>
-  <script src="/ko.js?v=editor-polish"></script><script src="/language.js"></script><script src="student.js?v=dashboard-upgrade"></script>
+  <script src="/ko.js?v=deterrents"></script><script src="/language.js"></script><script src="student-security.js?v=security-policy"></script><script src="student.js?v=security-policy"></script>
 <nav class="policy-links" aria-label="Policies"><a href="/privacy.html">Privacy Policy</a><a href="/terms.html">Terms of Service</a></nav></body>
 </html>

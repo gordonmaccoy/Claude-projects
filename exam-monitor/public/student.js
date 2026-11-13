@@ -16,6 +16,7 @@ for(const el of [els.themeToggle,els.testThemeToggle]) el.onclick=()=>applyTheme
 const resumeKey=`onscreen-resume-${sessionId}`, draftKey=`onscreen-draft-${sessionId}`, calculatorKey=`onscreen-calculator-${sessionId}`;
 const socket=io({autoConnect:false}); let joined=false, currentView=null, renderedTest=false, testAnswers={}, submitting=false, draftTimer, updateVersion=0, memoryToken=null;
 let completingCalculator=false;
+const securityGuard=window.examioStudentSecurity({document,window,root:els.testQuestions,button:$('student-fullscreen'),status:$('fullscreen-status'),t,report:type=>{if(joined&&socket.connected)socket.emit('student:security',{type},()=>{});}});
 let reconnectTimer, connectionVersion=0;
 const connectionNotice=$('student-connection');
 const message=text=>$('student-notice').textContent=t(text || '');
@@ -80,7 +81,13 @@ function showView(view) {
   if((view.result||view.failed||view.phase==='ended'||view.phase==='paused')&&$('submit-dialog').open)$('submit-dialog').close();
   timerSnapshot={deadlineAt:view.deadlineAt,serverNow:view.serverNow,receivedAt:performance.now()};
   if(view.terminal){clearTimeout(draftTimer);clearTimeout(reconnectTimer);connectionNotice.textContent='';if(!view.completed||!completingCalculator)socket.disconnect();}
-  els.testQuestions.classList.toggle('test-copy-guard',view.mode==='test'&&view.phase==='running'&&!view.result);
+  securityGuard.update(view);
+  const warnings=[];
+  if(view.security?.enabled&&view.security?.inactivityFail)warnings.push(t('Leaving this page hidden for more than 5 seconds results in FAIL and a score of zero. Tell your professor about interruptions.'));
+  if(view.security?.enabled&&view.security?.tabVisibility)warnings.push(t('Leaving or returning to this page is recorded.'));
+  if(view.security?.enabled&&view.security?.focusVisibility)warnings.push(t('Leaving or returning focus to this window is recorded.'));
+  if(view.security?.enabled&&view.security?.fullscreen)warnings.push(t('Use the fullscreen button when the activity starts. Fullscreen changes are recorded.'));
+  $('security-policy-warning').textContent=warnings.join(' ');
   const paused=view.phase==='paused'&&!view.result&&!view.completed;
   $('pause-lock').hidden=!paused;
   if(paused)clearTimeout(draftTimer);
@@ -203,21 +210,6 @@ function updateTimer(){
 setInterval(updateTimer,250);
 async function visibility() { if(!joined || currentView?.result || currentView?.phase==='ended' || !socket.connected) return; const res=await emit('student:visibility',{visible:!document.hidden}); if(res.view)showView(res.view);if(!res.ok && !res.timedOut && !currentView?.terminal) message(res.error); }
 document.addEventListener('visibilitychange',visibility);
-function protectedQuestionText(node) {
-  const element=node?.nodeType===Node.ELEMENT_NODE?node:node?.parentElement;
-  return Boolean(element?.closest('.tq-text, .tq-opt-text, .tq-opt-letter') && els.testQuestions.contains(element));
-}
-for(const event of ['contextmenu','dragstart']) els.testQuestions.addEventListener(event,e=>{
-  if(els.testQuestions.classList.contains('test-copy-guard')&&protectedQuestionText(e.target))e.preventDefault();
-});
-document.addEventListener('copy',event=>{
-  if(!els.testQuestions.classList.contains('test-copy-guard') || event.target.closest?.('input, textarea'))return;
-  const selection=window.getSelection();
-  if(!selection || selection.isCollapsed)return;
-  for(let i=0;i<selection.rangeCount;i++){
-    if(selection.getRangeAt(i).intersectsNode(els.testQuestions)){event.preventDefault();return;}
-  }
-});
 window.addEventListener('pagehide',()=> { if(joined && !currentView?.result && currentView?.phase!=='ended') socket.emit('student:visibility',{visible:false},()=>{}); });
 setInterval(()=> { if(joined&&!currentView?.terminal) { visibility(); if(currentView?.mode==='test' && !currentView?.result) uploadDraft(); } },3000);
 if(!sessionId) { showJoinError('Scan your professor’s QR code to join.');els.form.querySelector('button').disabled=true; }

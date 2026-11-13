@@ -321,7 +321,7 @@ $('calculator-launch').onclick = action(async () => {
   else await launchSession({ mode: 'calculator',language:window.examioLanguage.current });
 });
 $('display-open').onclick = action(() => current && openClassroomDisplay(current));
-$('test-start').onclick = action(async () => { if (!confirm('Start this test now? Hidden pages for more than 5 seconds will receive FAIL.')) return; current = await api(`/sessions/${current.id}/start`, 'POST', {}); renderDashboard(); });
+$('test-start').onclick = action(async () => { if (!confirm(current.security?.inactivityFail===false?'Start this test now?':'Start this test now? Hidden pages for more than 5 seconds will receive FAIL.')) return; current = await api(`/sessions/${current.id}/start`, 'POST', {}); renderDashboard(); });
 $('session-end').onclick = action(async () => {
   if (!confirm('End this session?')) return;
   current = await api(`/sessions/${current.id}/end`, 'POST', {});
@@ -565,12 +565,15 @@ function resetLaunchOptions(){
  $('launch-time-enabled').checked=false;$('launch-duration').value='10';$('launch-duration').disabled=true;$('launch-time-field').hidden=true;
  for(const id of ['launch-show-scores','launch-corrections','launch-monitoring','launch-fail-hidden','launch-text-selection','launch-copy-block','launch-fullscreen','launch-tab-visibility','launch-focus'])$(id).checked=true;
  $('launch-shuffle').checked=false;$('launch-shuffle-questions').checked=false;$('launch-deterrents').open=false;
+ updateLaunchSecurity();
 }
+function updateLaunchSecurity(){$('launch-security-controls').disabled=!$('launch-monitoring').checked;}
+$('launch-monitoring').onchange=updateLaunchSecurity;
 $('launch-room-enabled').onchange=()=>{$('launch-room-name').disabled=!$('launch-room-enabled').checked;$('launch-room-field').hidden=!$('launch-room-enabled').checked;if(!$('launch-room-name').disabled)$('launch-room-name').focus();};
 $('launch-time-enabled').onchange=()=>{$('launch-duration').disabled=!$('launch-time-enabled').checked;$('launch-time-field').hidden=!$('launch-time-enabled').checked;if(!$('launch-duration').disabled)$('launch-duration').focus();};
 function openLaunch(test){launchTest=test;$('launch-test-title').textContent=test.title;resetLaunchOptions();$('launch-error').textContent='';$('launch-dialog').showModal();}
 $('launch-cancel').onclick=()=> $('launch-dialog').close();
-$('launch-form').onsubmit=async e=>{e.preventDefault();$('launch-confirm').disabled=true;try{await launchSession({testId:launchTest.id,...($('launch-room-enabled').checked?{roomName:$('launch-room-name').value.trim()}:{}),language:window.examioLanguage.current,durationMinutes:$('launch-time-enabled').checked?Number($('launch-duration').value):0,showScores:$('launch-show-scores').checked,shuffleAnswers:$('launch-shuffle').checked,showCorrections:$('launch-corrections').checked});$('launch-dialog').close();}catch(e){$('launch-error').textContent=t(e.message);}finally{$('launch-confirm').disabled=false;}};
+$('launch-form').onsubmit=async e=>{e.preventDefault();$('launch-confirm').disabled=true;try{await launchSession({testId:launchTest.id,...($('launch-room-enabled').checked?{roomName:$('launch-room-name').value.trim()}:{}),language:window.examioLanguage.current,durationMinutes:$('launch-time-enabled').checked?Number($('launch-duration').value):0,showScores:$('launch-show-scores').checked,shuffleAnswers:$('launch-shuffle').checked,showCorrections:$('launch-corrections').checked,security:{enabled:$('launch-monitoring').checked,inactivityFail:$('launch-fail-hidden').checked,shuffleQuestions:$('launch-shuffle-questions').checked,textSelection:$('launch-text-selection').checked,copyPaste:$('launch-copy-block').checked,fullscreen:$('launch-fullscreen').checked,tabVisibility:$('launch-tab-visibility').checked,focusVisibility:$('launch-focus').checked}});$('launch-dialog').close();}catch(e){$('launch-error').textContent=t(e.message);}finally{$('launch-confirm').disabled=false;}};
 $('extend-time').onclick=action(async()=>{const updated=await api('/sessions/'+current.id+'/extend','POST',{});updateSession(updated);notice('Added 1 minute (60 seconds). New end time: '+new Date(updated.deadlineAt).toLocaleTimeString());});
 $('test-pause').onclick=action(async()=>{if(!current||!['running','paused'].includes(current.phase))return;const id=current.id,verb=current.phase==='paused'?'resume':'pause';$('test-pause').disabled=true;try{updateSession(await api('/sessions/'+id+'/'+verb,'POST',{}));}finally{$('test-pause').disabled=false;}});
 let entryAction=null;

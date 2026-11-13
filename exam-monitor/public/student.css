@@ -479,3 +479,7 @@ body:has(#calculator-section:not([hidden])) .student-brandbar { display: none; }
 .correction-correct { color: #146532; }
 :root[data-theme="dark"] .correction-incorrect { color: #ffabab; }
 :root[data-theme="dark"] .correction-correct { color: #a2ebae; }
+
+.fullscreen-tools { text-align:center; margin:12px auto; max-width:38rem; padding:0 16px; }
+.fullscreen-tools button { font:inherit; padding:8px 16px; border:1px solid currentColor; border-radius:8px; background:transparent; color:inherit; cursor:pointer; }
+.fullscreen-tools p { font-size:.85rem; margin:6px 0; }
