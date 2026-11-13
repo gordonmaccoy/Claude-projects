@@ -1,4 +1,12 @@
 window.examioKorean = {
+  "Test is Paused.":"시험이 일시정지되었습니다.",
+  "Wait a moment.":"잠시 기다려 주세요.",
+  "Upload a Quiz":"퀴즈 업로드",
+  "← Back":"← 뒤로",
+  "Write your own questions and answers.":"문제와 정답을 직접 작성합니다.",
+  "Upload a PDF or Word quiz to organize its questions.":"PDF 또는 Word 퀴즈를 업로드하여 문제를 정리합니다.",
+  "Create questions from a topic or source document.":"주제 또는 자료를 바탕으로 문제를 만듭니다.",
+  "Paste questions from an existing quiz.":"기존 퀴즈의 문제를 붙여넣습니다.",
   "Pause test":"시험 일시정지",
   "Resume test":"시험 재개",
   "Test paused":"시험 일시정지 중",

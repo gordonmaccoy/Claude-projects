@@ -248,9 +248,11 @@ function openBuilder(test) {
   if (!tbQuestions.length) addQuestion(); else renderTestBuilder();
   $('test-builder').scrollIntoView({ behavior: 'smooth' });
 }
-$('new-test').onclick = () => {closeCreation();creationVersion++;tab('library');$('test-builder').hidden=true;$('import-panel').hidden=true;$('creation-choice').hidden=false;$('new-title').value='';$('new-folder-choice').value='';resetImport();document.querySelector('.creation-methods').hidden=false;$('creation-dialog').showModal();};
+$('new-test').onclick = () => {$('creation-back').hidden=true;closeCreation();creationVersion++;tab('library');$('test-builder').hidden=true;$('import-panel').hidden=true;$('creation-choice').hidden=false;$('new-title').value='';$('new-folder-choice').value='';resetImport();document.querySelector('.creation-methods').hidden=false;$('creation-dialog').showModal();};
 $('create-manual').onclick=()=>openBuilder({title:$('new-title').value.trim(),folderId:$('new-folder-choice').value});
-$('creation-cancel').onclick=closeCreation;
+$('creation-cancel').onclick=closeCreation;$('creation-close').onclick=closeCreation;
+$('creation-back').onclick=()=>{creationVersion++;importRequest?.abort();importRequest=null;$('import-panel').hidden=true;document.querySelector('.creation-methods').hidden=false;$('creation-choice').hidden=false;$('creation-back').hidden=true;};
+$('import-file').onchange=()=>{$('clear-import-file').hidden=!$('import-file').files.length;};$('clear-import-file').onclick=()=>{$('import-file').value='';$('clear-import-file').hidden=true;};
 $('tb-add-q-btn').onclick = () => { if (tbQuestions.length < 100) addQuestion(); };
 $('tb-cancel-btn').onclick = () =>{creationVersion++;$('test-builder').hidden=true;};
 $('tb-start-btn').onclick = action(async () => {
@@ -391,9 +393,10 @@ function closeResults() {
 }
 $('result-close').onclick=()=>{closeResults();$('results-refresh').focus();};
 function renderResultStatistics(students){const stats=window.examioResultAnalysis.statistics(students),root=$('result-stats');root.replaceChildren();for(const [label,value] of [[t('Students'),stats.students],[t('Completion'),stats.completion+'%'],[t('Class average'),stats.average==null?'—':stats.average+'%']]){const cell=document.createElement('div'),title=document.createElement('span'),number=document.createElement('strong');title.textContent=label;number.textContent=value;cell.append(title,number);root.append(cell);}}
-function renderResults() { $('result-detail').hidden=false; $('result-title').textContent=historySession.title; $('result-delete').hidden=historySession.phase !== 'ended'; $('result-rename').hidden=historySession.phase !== 'ended';renderResultStatistics(historySession.students); renderTable($('result-students'),historySession); }
+function renderResults() { $('result-detail').hidden=false; $('result-title').textContent=historySession.title; $('result-delete').hidden=false; $('result-rename').hidden=false;renderResultStatistics(historySession.students); renderTable($('result-students'),historySession); }
 async function deleteResults(session) {
-  if(!confirm(`Move the saved results for “${session.title}” to Trash for 30 days?`)) return;
+  if(!confirm(`Move the saved results for “${session.title}” to Trash for 30 days?${session.phase!=='ended'?' This will end the active session first.':''}`)) return;
+  if(session.phase!=='ended')await api(`/sessions/${session.id}/end`,'POST',{});
   await api(`/sessions/${session.id}`, 'DELETE');
   if(historySession?.id === session.id) closeResults();
   if(current?.id === session.id) { current=null; $('dashboard').hidden=true; $('calculator-card').hidden=false; }
@@ -579,12 +582,13 @@ function renameResults(session){openEntry({title:session.phase==='ended'?'Rename
 $('result-rename').onclick=()=>renameResults(historySession);$('session-rename').onclick=()=>renameResults(current);
 let importRequest=null;
 function closeCreation(){creationVersion++;importRequest?.abort();importRequest=null;$('creation-dialog').close();}
-function resetImport(){ $('import-source').value='';$('import-file').value='';$('generation-prompt').value='';$('ai-consent').checked=false;$('import-use-ai').checked=true;$('ai-count').value='10';$('ai-types').value='mixed';$('ai-difficulty').value='medium';$('import-status').textContent='';}
+function resetImport(){ $('clear-import-file').hidden=true;$('import-source').value='';$('import-file').value='';$('generation-prompt').value='';$('ai-consent').checked=false;$('import-use-ai').checked=true;$('ai-count').value='10';$('ai-types').value='mixed';$('ai-difficulty').value='medium';$('import-status').textContent='';}
 function updateImportMode(){const useAI=importMode==='generate'||$('import-use-ai').checked;$('ai-options').hidden=!useAI;$('import-submit').disabled=Boolean(importRequest)||(useAI&&!aiConfigured);$('import-submit').textContent=importMode==='generate'?'Generate questions':useAI?'Prepare questions with AI':'Import questions';}
 function openImport(mode){
+ $('creation-back').hidden=false;
  importRequest?.abort();importRequest=null;creationVersion++;importMode=mode;resetImport();document.querySelector('.creation-methods').hidden=true;$('creation-choice').hidden=false;$('import-panel').hidden=false;
  $('generation-settings').hidden=mode!=='generate';$('generation-prompt-label').hidden=mode!=='generate';$('import-ai-toggle').hidden=mode==='generate';$('import-format-help').hidden=mode==='generate';$('import-file-label').hidden=mode==='paste';$('import-source-label').hidden=mode!=='paste';
- $('import-heading').textContent=mode==='generate'?'Generate Questions':mode==='paste'?'Copy-Paste Questions':'Extract Questions from Document';
+ $('import-heading').textContent=mode==='generate'?'Generate Questions':mode==='paste'?'Copy-Paste Questions':'Upload a Quiz';
  $('import-help').textContent=mode==='generate'?'Describe a topic, attach a PDF or DOCX, or use both. Review all generated questions and answers before saving.':'Import existing questions, preserving their wording and supplied answers. Review the prepared draft before saving.';
  $('ai-consent-text').textContent='Send this content to OpenAI to prepare questions and answers. API usage charges apply.';$('ai-config-note').textContent=aiConfigured?'':'AI is not configured. Existing formatted questions can still be imported with Use AI turned off.';updateImportMode();
 }
@@ -658,7 +662,7 @@ function renderTestBuilder() {
  els.tbQuestions.replaceChildren();
  tbQuestions.forEach((q,i)=> {
   const card=document.createElement('div');card.className='tb-q-card';card.dataset.index=i;
-  const header=document.createElement('div');header.className='tb-q-header';const handle=document.createElement('span');handle.textContent='⠿ Q'+(i+1);handle.draggable=true;handle.className='drag-handle';handle.title='Drag to reorder';handle.ondragstart=e=>{draggingQuestion=i;e.dataTransfer.setData('text/plain',String(i));e.dataTransfer.effectAllowed='move';};handle.ondragend=()=>draggingQuestion=null;
+  const header=document.createElement('div');header.className='tb-q-header';const handle=document.createElement('span');handle.textContent='⠿ '+t('Question')+' '+(i+1);handle.draggable=true;handle.className='drag-handle';handle.title='Drag to reorder';handle.ondragstart=e=>{draggingQuestion=i;e.dataTransfer.setData('text/plain',String(i));e.dataTransfer.effectAllowed='move';};handle.ondragend=()=>draggingQuestion=null;
   card.ondragover=e=> {if(draggingQuestion!==null)e.preventDefault();};card.ondrop=e=> {e.preventDefault();if(draggingQuestion!==null)moveQuestion(draggingQuestion,i);draggingQuestion=null;};header.append(handle);
   const up=button('↑',()=>moveQuestion(i,i-1));up.disabled=i===0;up.setAttribute('aria-label','Move question '+(i+1)+' up');const down=button('↓',()=>moveQuestion(i,i+1));down.disabled=i===tbQuestions.length-1;down.setAttribute('aria-label','Move question '+(i+1)+' down');header.append(up,down);
   const pointsLabel=document.createElement('label');pointsLabel.textContent=t('Points');const points=document.createElement('input');points.type='number';points.className='tb-points';points.min='0.01';points.max='1000';points.step='0.01';points.value=q.points??1;points.setAttribute('aria-label','Question '+(i+1)+' points');points.oninput=()=>q.points=Number(points.value);pointsLabel.append(points);header.append(pointsLabel);
@@ -669,7 +673,7 @@ function renderTestBuilder() {
    const label=document.createElement('label');label.textContent=t('Accepted answers (one per line)');const answers=document.createElement('textarea');answers.className='tb-accepted';answers.rows=3;answers.value=(q.acceptedAnswers||[]).join('\n');answers.oninput=()=>q.acceptedAnswers=answers.value.split('\n').map(s=>s.trim()).filter(Boolean);label.append(answers);card.append(label);
    const sensitive=document.createElement('label');const check=document.createElement('input');check.type='checkbox';check.checked=q.caseSensitive;check.onchange=()=>q.caseSensitive=check.checked;sensitive.append(check,' Case sensitive');card.append(sensitive);
   } else {
-   (q.options||[]).forEach((o,j)=>{const row=document.createElement('div');row.className='tb-option-row';const radio=document.createElement('input');radio.type='radio';radio.name=q.id;radio.checked=q.correctOptionId===o.id;radio.setAttribute('aria-label','Correct answer '+String.fromCharCode(65+j));radio.onchange=()=>q.correctOptionId=o.id;const input=document.createElement('input');input.className='tb-opt-text';input.maxLength=500;input.placeholder='Option '+String.fromCharCode(65+j);input.value=o.text;input.oninput=()=>o.text=input.value;row.append(radio,input);if(q.options.length>2)row.append(button(t('Remove option'),()=>{q.options.splice(j,1);if(q.correctOptionId===o.id)q.correctOptionId='';renderTestBuilder();}));card.append(row,imageControl(o,'Image for option '+String.fromCharCode(65+j)+' (optional)'));});
+   (q.options||[]).forEach((o,j)=>{const row=document.createElement('div');row.className='tb-option-row';row.dataset.optionId=o.id;if(q.correctOptionId)row.classList.add(q.correctOptionId===o.id?'answer-key-correct':'answer-key-incorrect');const radio=document.createElement('input');radio.type='radio';radio.name=q.id;radio.checked=q.correctOptionId===o.id;radio.setAttribute('aria-label','Correct answer '+String.fromCharCode(65+j));radio.onchange=()=>{q.correctOptionId=o.id;for(const answerRow of card.querySelectorAll('.tb-option-row')){answerRow.classList.toggle('answer-key-correct',answerRow.dataset.optionId===o.id);answerRow.classList.toggle('answer-key-incorrect',answerRow.dataset.optionId!==o.id);}};const input=document.createElement('input');input.className='tb-opt-text';input.maxLength=500;input.placeholder='Option '+String.fromCharCode(65+j);input.value=o.text;input.oninput=()=>o.text=input.value;row.append(radio,input);if(q.options.length>2)row.append(button(t('Remove option'),()=>{q.options.splice(j,1);if(q.correctOptionId===o.id)q.correctOptionId='';renderTestBuilder();}));card.append(row,imageControl(o,'Image for option '+String.fromCharCode(65+j)+' (optional)'));});
    if(q.options.length<5)card.append(button(t('+ Add Option'),()=>{q.options.push({id:q.id+'_'+crypto.randomUUID(),text:''});renderTestBuilder();}));
   }
   if(q.answerExplanation){const reason=document.createElement('p');reason.className='answer-rationale';reason.textContent='AI answer rationale: '+q.answerExplanation;card.append(reason);}

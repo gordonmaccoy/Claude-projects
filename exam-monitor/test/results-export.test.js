@@ -1,9 +1,23 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
-const {PDFDocument}=require('pdf-lib');
+const {PDFDocument,PDFName}=require('pdf-lib');
+const {createCanvas,loadImage}=require('@napi-rs/canvas');
 const {createExportMailer}=require('../results-email');
 const {resultsPdf}=require('../results-pdf');
 const session={id:'ABC123',mode:'test',phase:'ended',test:{title:'한국어 성적',questions:[]},students:[]};
+test('detailed grade matrices fit landscape pages and paginate large classes while summary stays portrait',async()=>{
+ const copy=structuredClone(session);copy.test.questions=Array.from({length:50},(_,i)=>({id:String(i),type:'blank',text:'문제 '+(i+1),acceptedAnswers:['정답']}));
+ copy.students=Array.from({length:70},(_,i)=>({id:String(i),number:String(70-i).padStart(4,'0'),name:'김학생 '+i,events:[],draft:{'0':'정답','1':'오답'},submission:i%2?{answers:{'0':'정답','1':'오답'},originalScore:1,submittedAt:1}:null}));
+ const detail=await PDFDocument.load(await resultsPdf(copy,true));
+ assert.ok(detail.getPages().every(p=>p.getWidth()>p.getHeight()),'all detailed matrix and appendix pages must be landscape');
+ assert.ok(detail.getPageCount()>=3,'large class has repeated matrix pages plus answer appendix');
+ const image=detail.context.enumerateIndirectObjects().map(([,value])=>value).find(value=>value.dict?.get(PDFName.of('Subtype'))?.toString()==='/Image');
+ const rendered=await loadImage(Buffer.from(image.contents)),canvas=createCanvas(rendered.width,rendered.height),context=canvas.getContext('2d');context.drawImage(rendered,0,0);
+ // First student's number must retain dark ink after the actual PDF raster/JPEG pipeline.
+ const pixels=context.getImageData(62,418,120,25).data;let dark=0;for(let i=0;i<pixels.length;i+=4)if(pixels[i]<100)dark++;
+ assert.ok(dark>=10,'student numbers need readable dark strokes at exported resolution');
+ const summary=await PDFDocument.load(await resultsPdf(copy));assert.ok(summary.getPages().every(p=>p.getHeight()>p.getWidth()));
+});
 test('result PDF produces branded readable pages for Korean and long detailed content',async()=>{
  const copy=structuredClone(session);copy.test.questions=Array.from({length:45},(_,i)=>({id:String(i),type:'blank',text:'한국어 긴 문제 '.repeat(15),acceptedAnswers:['정답']}));
  const bytes=await resultsPdf(copy,true);assert.equal(bytes.subarray(0,4).toString(),'%PDF');const pdf=await PDFDocument.load(bytes);assert.ok(pdf.getPageCount()>2);assert.match(pdf.getTitle(),/한국어/);
