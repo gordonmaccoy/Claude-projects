@@ -1,4 +1,8 @@
 window.examioKorean = {
+ "Set Quiz Time Limit (Optional)":"퀴즈 시간 제한 설정 (선택)",
+ "Enter room name":"강의실 이름 입력",
+ "Switching off will disable ALL monitoring and cheating deterrents.":"끄면 모든 모니터링 및 부정행위 방지 기능이 비활성화됩니다.",
+ "Check individual options below.":"아래 개별 옵션을 확인하세요.",
  "Launch test options":"시험 시작 옵션",
  "Step 2 preview":"2단계 미리보기",
  "Step 2":"2단계",

@@ -561,14 +561,13 @@ function folderActions(folder) {
 }
 let launchTest=null;
 function resetLaunchOptions(){
- $('launch-room-enabled').checked=false;$('launch-room-name').value='';$('launch-room-name').disabled=true;
- const examples=['Furry Bazooka','Orange Socks','Flimsy Pencil','Disco Turnip','Sleepy Rocket','Wobbly Penguin'];$('launch-room-preview').textContent='Example: '+examples[Math.floor(Math.random()*examples.length)]+' · not reserved';
- $('launch-time-enabled').checked=false;$('launch-duration').value='10';$('launch-duration').disabled=true;
+ $('launch-room-enabled').checked=false;$('launch-room-name').value='';$('launch-room-name').disabled=true;$('launch-room-field').hidden=true;
+ $('launch-time-enabled').checked=false;$('launch-duration').value='10';$('launch-duration').disabled=true;$('launch-time-field').hidden=true;
  for(const id of ['launch-show-scores','launch-corrections','launch-monitoring','launch-fail-hidden','launch-text-selection','launch-copy-block','launch-fullscreen','launch-tab-visibility','launch-focus'])$(id).checked=true;
  $('launch-shuffle').checked=false;$('launch-shuffle-questions').checked=false;$('launch-deterrents').open=false;
 }
-$('launch-room-enabled').onchange=()=>{$('launch-room-name').disabled=!$('launch-room-enabled').checked;if(!$('launch-room-name').disabled)$('launch-room-name').focus();};
-$('launch-time-enabled').onchange=()=>{$('launch-duration').disabled=!$('launch-time-enabled').checked;if(!$('launch-duration').disabled)$('launch-duration').focus();};
+$('launch-room-enabled').onchange=()=>{$('launch-room-name').disabled=!$('launch-room-enabled').checked;$('launch-room-field').hidden=!$('launch-room-enabled').checked;if(!$('launch-room-name').disabled)$('launch-room-name').focus();};
+$('launch-time-enabled').onchange=()=>{$('launch-duration').disabled=!$('launch-time-enabled').checked;$('launch-time-field').hidden=!$('launch-time-enabled').checked;if(!$('launch-duration').disabled)$('launch-duration').focus();};
 function openLaunch(test){launchTest=test;$('launch-test-title').textContent=test.title;resetLaunchOptions();$('launch-error').textContent='';$('launch-dialog').showModal();}
 $('launch-cancel').onclick=()=> $('launch-dialog').close();
 $('launch-form').onsubmit=async e=>{e.preventDefault();$('launch-confirm').disabled=true;try{await launchSession({testId:launchTest.id,language:window.examioLanguage.current,durationMinutes:$('launch-time-enabled').checked?Number($('launch-duration').value):0,showScores:$('launch-show-scores').checked,shuffleAnswers:$('launch-shuffle').checked,showCorrections:$('launch-corrections').checked});$('launch-dialog').close();}catch(e){$('launch-error').textContent=e.message;}finally{$('launch-confirm').disabled=false;}};
