@@ -1,5 +1,6 @@
 const {fork}=require('node:child_process');
 const {randomUUID}=require('node:crypto');
+const GLYPH_WARNING='The PDF contains unreadable characters (�). Compare the affected questions with the original before saving; characters have not been guessed.';
 const MAX_BYTES=5*1024*1024,MAX_TEXT=60000;
 async function extractDocument(file) {
   if(!file?.buffer || !file.buffer.length) throw new Error('Choose a PDF or DOCX file.');
@@ -23,7 +24,7 @@ async function extractDocument(file) {
         if(!retried&&(signal||code===3221225477||code<0)){retried=true;start();}
         else finish(new Error('The document could not be processed. Try a smaller PDF or DOCX.'));
       });
-      current.send({buffer:file.buffer,ext},error=>{if(error&&current===child)finish(new Error('The document could not be processed.'));});
+      current.send({buffer:file.buffer,ext,title:String(file.originalname||'Uploaded test').replace(/\.[^.]+$/,'').slice(0,80)},error=>{if(error&&current===child)finish(new Error('The document could not be processed.'));});
     }
     start();
   });
@@ -32,7 +33,7 @@ if(process.argv[2]==='--extract-document'&&process.send) process.once('message',
   const buffer=Buffer.from(workerData.buffer);let text;
   if(workerData.ext==='pdf') {
     const {PDFParse}=require('pdf-parse');const parser=new PDFParse({data:buffer});
-    try { const result=await parser.getText(); if(result.total>100)throw new Error('Use a document of at most 100 pages.');text=result.text; if (/^Answer Key\b/.test(text.trim())) text=await require('./socrative-key').readSocrativeKey(await parser.load()) || text; } finally { await parser.destroy(); }
+    try { const result=await parser.getText(); if(result.total>100)throw new Error('Use a document of at most 100 pages.');text=result.text; if (/^Answer Key\b/.test(text.trim())) text=await require('./socrative-key').readSocrativeKey(await parser.load()) || text; else text=await require('./pdf-choice-layout').readPositionedChoiceTest(await parser.load(),workerData.title) || text; } finally { await parser.destroy(); }
   } else {
     const {unzipSync}=require('fflate');let total=0,found=false;
     unzipSync(buffer,{filter:f=>{total+=f.originalSize;if(total>20*1024*1024)throw new Error('The expanded document is too large.');if(f.name==='word/document.xml')found=true;return false;}});
@@ -41,12 +42,12 @@ if(process.argv[2]==='--extract-document'&&process.send) process.once('message',
   }
   if(!text?.trim())throw new Error('No readable text was found. Scanned/image-only files need OCR before upload.');
   if(text.length>MAX_TEXT)throw new Error('Use source material under 60,000 characters. Split longer documents into sections.');
-  process.send({text:text.trim()},()=>process.disconnect());
+  process.send({text:text.trim().replace(/\0/g,'\uFFFD')},()=>process.disconnect());
 })().catch(e=>process.send({error:e.message || 'Unable to read this document.'},()=>process.disconnect())));
 function parseTest(text,filename='Uploaded test') {
  if(typeof text!=='string'||!text.trim()||text.length>MAX_TEXT)throw new Error('Provide readable test text under 60,000 characters.');
- const template=parseSentenceBlocks(text,filename);if(template)return template;
- const warnings=[],questions=[],keys={};let current=null,title='',inKey=false;
+ const template=parseSentenceBlocks(text,filename);if(template){if(text.includes('\uFFFD'))template.warnings.unshift(GLYPH_WARNING);return template;}
+ const warnings=text.includes('\uFFFD')?[GLYPH_WARNING]:[],questions=[],keys={};let current=null,title='',inKey=false;
  const normalize=s=>s.trim().replace(/\s+/g,' ').toLowerCase();
  const optionPattern=/^(?:[•●-]\s*)?(\*?)\(?([A-E])(?:\)|\.|:)\s*(.+)$/i;
  const questionPattern=/^(?:Q(?:uestion)?\s*)?(\d{1,3})\s*[).:\-]\s*(.+)$/i;
@@ -105,4 +106,4 @@ function parseSentenceBlocks(text,filename){
  }
  return {test:{title:filename.replace(/\.[^.]+$/,'').slice(0,80)||'Uploaded test',questions},warnings};
 }
-module.exports={extractDocument,parseTest,MAX_BYTES,MAX_TEXT};
+module.exports={extractDocument,parseTest,MAX_BYTES,MAX_TEXT,GLYPH_WARNING};
