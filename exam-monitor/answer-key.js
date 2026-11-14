@@ -74,6 +74,15 @@ function createAIImporter(options={}){
    if(q.type==='blank'&&known.acceptedAnswers.length){if(JSON.stringify(q.acceptedAnswers)!==JSON.stringify(known.acceptedAnswers))warnings.push('Question '+(index+1)+': supplied accepted answers preserved.');q.acceptedAnswers=known.acceptedAnswers;q.caseSensitive=known.caseSensitive;}
    else if(q.type!=='blank'&&known.correctOptionId){const choice=known.options.findIndex(o=>o.id===known.correctOptionId),expected=q.options[choice].id;if(q.correctOptionId!==expected){warnings.push('Question '+(index+1)+': supplied answer preserved; AI suggested a different answer. Review before saving.');q.answerExplanation='Supplied answer preserved. AI suggested a different answer; professor review is recommended.';}q.correctOptionId=expected;}
   }
+  const unresolved=test.questions.filter(q=>isMissing(q)&&!q.answerKeyConflict);
+  if(unresolved.length){
+   // Layout recognition and solving are separate jobs. Missing marks alone
+   // must not leave a readable imported quiz waiting for manual answers.
+   const solved=await complete(test);
+   const resolved=new Set(solved.test.questions.flatMap((q,i)=>!isMissing(q)?[i+1]:[]));
+   const remainingWarnings=warnings.filter(w=>{const n=/^Question (\d+): review the answer\./.exec(w);return !n||!resolved.has(Number(n[1]));});
+   return {test:solved.test,warnings:[...remainingWarnings,...solved.warnings]};
+  }
   return {test,warnings};
  };
 }
