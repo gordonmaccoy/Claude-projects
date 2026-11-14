@@ -116,7 +116,7 @@
   <div id="pause-lock" class="activity-lock examio-pause-overlay" role="alertdialog" aria-modal="true" aria-label="Test paused" hidden><div class="examio-pause-card"><span class="examio-pause-symbol" aria-hidden="true">Ⅱ</span><h2>Test is Paused.</h2><p>Wait a moment.</p></div></div>
   <div id="activity-lock" class="activity-lock" role="alertdialog" aria-modal="true" aria-labelledby="lock-heading" hidden><div><h1 id="lock-heading">Call professor</h1><p>FAILED · This page was hidden for more than 5 seconds.</p><p>Your work is kept. Ask your professor to unlock this activity.</p></div></div>
 
-  <dialog id="submit-dialog" aria-labelledby="submit-heading"><h2 id="submit-heading">Submit test?</h2><p id="submit-warning"></p><div><button id="submit-review" type="button">Review answers</button><button id="submit-confirm" type="button">Submit test</button></div></dialog><script src="/socket.io/socket.io.js"></script>
+  <dialog id="submit-dialog" aria-labelledby="submit-heading"><h2 id="submit-heading">Submit your quiz answers?</h2><p class="submit-explanation">Once submitted answers cannot be changed</p><p id="submit-warning"></p><div class="submit-actions"><button id="submit-confirm" type="button">Yes, submit</button><button id="submit-review" type="button">No, I'll double-check.</button></div></dialog><script src="/socket.io/socket.io.js"></script>
   <script src="/ko.js?v=deterrents"></script><script src="/language.js"></script><script src="student-security.js?v=security-policy"></script><script src="student.js?v=security-policy"></script>
 <nav class="policy-links" aria-label="Policies"><a href="/privacy.html">Privacy Policy</a><a href="/terms.html">Terms of Service</a></nav></body>
 </html>

@@ -582,3 +582,10 @@ Object.assign(window.examioKorean, {
  "Submitted": "제출됨",
  "{joined} joined · {connected} connected · {submitted} submitted": "{joined}명 참여 · {connected}명 연결됨 · {submitted}명 제출됨"
 });
+
+Object.assign(window.examioKorean, {
+ "Submit your quiz answers?": "퀴즈 답안을 제출할까요?",
+ "Once submitted answers cannot be changed": "제출 후에는 답안을 변경할 수 없습니다",
+ "Yes, submit": "네, 제출합니다",
+ "No, I'll double-check.": "아니요, 다시 확인할게요."
+});

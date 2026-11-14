@@ -483,3 +483,14 @@ body:has(#calculator-section:not([hidden])) .student-brandbar { display: none; }
 .fullscreen-tools { text-align:center; margin:12px auto; max-width:38rem; padding:0 16px; }
 .fullscreen-tools button { font:inherit; padding:8px 16px; border:1px solid currentColor; border-radius:8px; background:transparent; color:inherit; cursor:pointer; }
 .fullscreen-tools p { font-size:.85rem; margin:6px 0; }
+#submit-dialog{width:min(380px,calc(100vw - 32px));max-height:85dvh;padding:22px;border:1px solid var(--border);border-radius:16px;background:var(--surface);color:var(--text);box-shadow:var(--shadow);font-family:var(--examio-font,system-ui,sans-serif)}
+#submit-dialog::backdrop{background:rgba(4,16,31,.65)}
+#submit-heading{font-size:24px;font-weight:800;line-height:1.2;letter-spacing:-.5px;margin:0 0 10px}
+#submit-dialog .submit-explanation{font-size:13px;line-height:1.5;color:var(--muted);margin:0 0 18px}
+#submit-warning{font-size:13px;line-height:1.5;margin:0 0 18px;color:var(--text)}
+#submit-warning:empty{display:none}
+#submit-dialog .submit-actions{display:flex;flex-wrap:nowrap;gap:8px}
+#submit-dialog .submit-actions button{min-width:0;flex:1.35;margin:0;padding:11px 8px;border:1px solid var(--border);background:var(--surface-raised);color:var(--text);font-size:clamp(.72rem,2.8vw,.85rem);font-weight:700;line-height:1.4;white-space:nowrap;cursor:pointer}
+#submit-dialog .submit-actions #submit-confirm{flex:1;background:var(--key-accent);border-color:var(--key-accent);color:var(--key-accent-text)}
+#submit-dialog .submit-actions #submit-confirm:hover{background:var(--key-accent-hover)}
+#submit-dialog button:focus-visible{outline:2px solid var(--key-accent);outline-offset:3px}

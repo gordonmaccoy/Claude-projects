@@ -186,7 +186,7 @@ async function uploadDraft() {
 els.testSubmitBtn.onclick=()=> {
  if(submitting||currentView?.failed||currentView?.result||currentView?.phase!=='running')return;
  const unanswered=currentView.test.questions.map((q,i)=>testAnswers[q.id]?.trim()?null:i+1).filter(n=>n!==null);
- $('submit-warning').textContent=unanswered.length?t(unanswered.length===1?'You have {count} unanswered question ({numbers}). Unanswered questions receive zero points. Submit anyway?':'You have {count} unanswered questions ({numbers}). Unanswered questions receive zero points. Submit anyway?',{count:unanswered.length,numbers:unanswered.join(', ')}):t('Submit your test? You cannot change your answers afterwards.');
+ $('submit-warning').textContent=unanswered.length?t(unanswered.length===1?'You have {count} unanswered question ({numbers}). Unanswered questions receive zero points. Submit anyway?':'You have {count} unanswered questions ({numbers}). Unanswered questions receive zero points. Submit anyway?',{count:unanswered.length,numbers:unanswered.join(', ')}):'';
  $('submit-dialog').showModal();
 };
 $('submit-review').onclick=()=> $('submit-dialog').close();
