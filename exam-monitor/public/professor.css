@@ -167,3 +167,17 @@ select,textarea{font:inherit;background:#fff;color:#223c31;border:1px solid #c5c
 .quiz-sharing-dialog p,.quiz-sharing-dialog h3{overflow-wrap:anywhere}.quiz-sharing-dialog input,.quiz-sharing-dialog select{box-sizing:border-box;max-width:100%}
 .quiz-sharing-dialog .share-request{border:1px solid var(--examio-line,#cbd6df);border-radius:12px;padding:16px;margin:12px 0}.quiz-sharing-dialog .share-request h3{margin-top:0}.quiz-sharing-dialog .sharing-note{font-size:.9rem;line-height:1.5}.quiz-sharing-dialog .actions{flex-wrap:wrap}#shares-open{white-space:normal}
 @media(max-width:600px){.quiz-sharing-dialog{padding:18px}.quiz-sharing-dialog .actions button{flex:1 1 140px}.quiz-sharing-dialog .section-heading{gap:12px;flex-wrap:wrap}#shares-open{font-size:13px;padding:8px}}
+/* Private address book inside quiz sharing. */
+.quiz-sharing-dialog {font-family:var(--examio-font,system-ui,sans-serif);color:#102b42;background:#fff;border:1px solid #d1deeb;border-radius:16px;padding:24px;--examio-ink:#102b42;--examio-muted:#617383;color-scheme:light;}
+.quiz-sharing-dialog::backdrop {background:#102b4280;}
+.sharing-contacts {border-block:1px solid #dbe5ed;padding-block:16px;margin-block:16px;}
+.sharing-contacts h3 {margin:0;flex:1;min-width:150px;}
+.sharing-contacts .actions button {flex:0 0 auto;}
+.sharing-contact-list {max-height:220px;overflow:auto;margin:12px 0;}
+.sharing-contact-row {display:flex;align-items:center;gap:6px;margin:6px 0;}
+.sharing-contact-select {flex:1;min-width:0;text-align:left;}
+.sharing-contact-select strong,.sharing-contact-select small {display:block;overflow-wrap:anywhere;}
+.sharing-contact-select small {font-weight:400;margin-top:3px;}
+.sharing-contact-row>button:not(.sharing-contact-select) {padding:8px;font-size:.85rem;}
+#contact-editor {border:1px solid #dbe5ed;border-radius:10px;padding:12px;}
+#contacts-status {font-size:.9rem;}

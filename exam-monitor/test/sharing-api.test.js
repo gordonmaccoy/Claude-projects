@@ -5,6 +5,16 @@ test('sharing API verifies accounts, excludes unknown users, accepts once and bo
  const req=async(path,method='GET',body,user='a')=>{const r=await fetch(`http://127.0.0.1:${runtime.server.address().port}/api/${path}`,{method,headers:{Authorization:'Bearer '+user,'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});return {status:r.status,data:await r.json()};};
  try{await req('me','GET',undefined,'b');await store.saveTest('a',{id:'quiz',title:'Quiz',questions:[{id:'q',text:'Q',options:[{id:'a',text:'A'},{id:'b',text:'B'}],correctOptionId:'a'}]});
  assert.equal((await req('shares','GET',undefined,'invalid')).status,401);
+ assert.equal((await req('sharing-contacts','GET',undefined,'invalid')).status,401);
+ assert.equal((await req('sharing-contacts','POST',{name:'Bad',email:'bad'})).status,400);
+ const contact=await req('sharing-contacts','POST',{name:'Colleague',email:'b@example.com'});assert.equal(contact.status,200);
+ assert.equal((await req('sharing-contacts')).data.length,1);
+ assert.equal((await req('sharing-contacts','GET',undefined,'b')).data.length,0);
+ assert.equal((await req('sharing-contacts','POST',{id:contact.data.id,name:'Changed',email:'b@example.com'},'b')).status,404);
+ assert.equal((await req('sharing-contacts/'+contact.data.id,'DELETE',undefined,'b')).status,200);
+ assert.equal((await req('sharing-contacts')).data.length,1);
+ assert.equal((await req('sharing-contacts/'+contact.data.id,'DELETE')).status,200);
+ assert.equal((await req('sharing-contacts')).data.length,0);
  assert.equal((await req('tests/quiz/share','POST',{email:'b@example.com',requestId:'bad'})).status,400);
  const body={email:'b@example.com',requestId:crypto.randomUUID()};assert.equal((await req('tests/quiz/share','POST',body)).status,200);await req('tests/quiz/share','POST',body);
  const incoming=(await req('shares','GET',undefined,'b')).data.incoming;assert.equal(incoming.length,1);assert.equal((await req(`shares/${incoming[0].id}/accept`,'POST',{},'c')).status,404);

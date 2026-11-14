@@ -174,16 +174,16 @@ function setupQuizDrop(folder,list) {
     await refresh();
   });
 }
-function createQuizSharingUI({api,getFolders,isSignedIn,notify,onImported}) {
+function createQuizSharingUI({api,getFolders,isSignedIn,notify,onImported,contacts=null}) {
   const el=id=>document.getElementById(id);
   let generation=0,requestVersion=0,loading=false,timer=null,share=null,busy=false;
   const make=(tag,text,className)=>{const node=document.createElement(tag);if(text!==undefined)node.textContent=text;if(className)node.className=className;return node;};
   const status=message=>{el('shares-status').textContent=message;};
-  function setBusy(value){busy=value;for(const id of ['share-submit','share-email','share-cancel'])el(id).disabled=value;}
-  function reset(){generation++;requestVersion++;loading=false;share=null;setBusy(false);clearInterval(timer);timer=null;for(const id of ['share-dialog','shares-dialog'])if(el(id).open)el(id).close();for(const id of ['shares-incoming','shares-outgoing'])el(id).replaceChildren();el('shares-open').hidden=true;el('shares-open').textContent='Shared with me';el('share-email').value='';el('share-quiz-title').textContent='';el('share-error').textContent='';if(el('shares-dialog').dataset)delete el('shares-dialog').dataset.signature;status('');}
-  function openShare(test){if(busy)return;share={id:test.id,requestId:crypto.randomUUID(),email:null};el('share-quiz-title').textContent=test.title;el('share-email').value='';el('share-error').textContent='';setBusy(false);el('share-dialog').showModal();el('share-email').focus();}
+  function setBusy(value){busy=value;contacts?.setBusy(value);for(const id of ['share-submit','share-email','share-cancel'])el(id).disabled=value;}
+  function reset(){contacts?.reset();generation++;requestVersion++;loading=false;share=null;setBusy(false);clearInterval(timer);timer=null;for(const id of ['share-dialog','shares-dialog'])if(el(id).open)el(id).close();for(const id of ['shares-incoming','shares-outgoing'])el(id).replaceChildren();el('shares-open').hidden=true;el('shares-open').textContent='Shared with me';el('share-email').value='';el('share-quiz-title').textContent='';el('share-error').textContent='';if(el('shares-dialog').dataset)delete el('shares-dialog').dataset.signature;status('');}
+  function openShare(test){if(busy)return;share={id:test.id,requestId:crypto.randomUUID(),email:null};el('share-quiz-title').textContent=test.title;el('share-email').value='';el('share-error').textContent='';setBusy(false);el('share-dialog').showModal();contacts?.open();el('share-email').focus();}
   el('share-dialog').oncancel=event=>{if(busy)event.preventDefault();};
-  el('share-dialog').onclose=()=>{share=null;};
+  el('share-dialog').onclose=()=>{share=null;contacts?.reset();};
   el('share-cancel').onclick=()=>{if(!busy)el('share-dialog').close();};
   el('share-form').onsubmit=async event=>{
     event.preventDefault();if(busy||!share||!el('share-email').reportValidity())return;
@@ -229,7 +229,8 @@ function createQuizSharingUI({api,getFolders,isSignedIn,notify,onImported}) {
 }
 // End quiz sharing controller
 
-const quizSharing=createQuizSharingUI({api,getFolders:()=>folders,isSignedIn:()=>!!account,notify:notice,onImported:async()=>{await refresh();}});
+const sharingContacts=window.createSharingContacts({api,t});
+const quizSharing=createQuizSharingUI({api,contacts:sharingContacts,getFolders:()=>folders,isSignedIn:()=>!!account,notify:notice,onImported:async()=>{await refresh();}});
 document.addEventListener("visibilitychange",()=>{if(!document.hidden&&account)quizSharing.refresh();});
 async function refresh() {
   [library, sessionList, folders] = await Promise.all([api('/tests'), api('/sessions'),api('/folders')]);

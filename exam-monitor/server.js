@@ -78,6 +78,9 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
   api.get('/me', (req, res) => res.json(req.user));
   const shareWrap=fn=>wrap(async(req,res)=>{try{return await fn(req,res);}catch(error){if([400,404,409,410,423,429].includes(error.status))return res.status(error.status).json({error:error.message});throw error;}});
   api.get('/shares',shareWrap(async(req,res)=>res.json(await store.listShares(req.user))));
+  api.get('/sharing-contacts',shareWrap(async(req,res)=>res.json(await store.listSharingContacts(req.user.id))));
+  api.post('/sharing-contacts',shareWrap(async(req,res)=>res.json(await store.saveSharingContact(req.user.id,req.body))));
+  api.delete('/sharing-contacts/:id',shareWrap(async(req,res)=>res.json(await store.deleteSharingContact(req.user.id,req.params.id))));
   api.post('/tests/:id/share',shareWrap(async(req,res)=>{
     const {email,requestId}=req.body||{};
     if(!require('./settings-service').validEmail(email)||typeof requestId!=='string'||!/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(requestId))return res.status(400).json({error:'Enter an email address and retry the sharing request.'});

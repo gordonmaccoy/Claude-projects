@@ -553,3 +553,24 @@ Object.assign(window.examioKorean,{
  "Leaving or returning focus to this window is recorded.": "이 창에서 포커스가 벗어나거나 돌아오는 활동이 기록됩니다.",
  "Use the fullscreen button when the activity starts. Fullscreen changes are recorded.": "활동이 시작되면 전체 화면 버튼을 사용하세요. 전체 화면 변경이 기록됩니다."
 });
+
+Object.assign(window.examioKorean, {
+ "Personal contacts": "개인 연락처",
+ "Add contact": "연락처 추가",
+ "Search contacts": "연락처 검색",
+ "Name or email": "이름 또는 이메일",
+ "Contact name (optional)": "연락처 이름 (선택 사항)",
+ "Contact email": "연락처 이메일",
+ "Save contact": "연락처 저장",
+ "Edit contact": "연락처 수정",
+ "Remove contact": "연락처 삭제",
+ "Remove": "삭제",
+ "Loading contacts…": "연락처 불러오는 중…",
+ "No matching contacts.": "일치하는 연락처가 없습니다.",
+ "No saved contacts yet. Add a colleague or enter their email below.": "저장된 연락처가 없습니다. 동료를 추가하거나 아래에 이메일을 입력하세요.",
+ "Contacts could not load. You can still enter an email below.": "연락처를 불러오지 못했습니다. 아래에 이메일을 직접 입력할 수 있습니다.",
+ "Contact saved.": "연락처가 저장되었습니다.",
+ "Contact removed.": "연락처가 삭제되었습니다.",
+ "Enter a valid contact email.": "올바른 연락처 이메일을 입력하세요.",
+ "Edit": "수정"
+});

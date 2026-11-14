@@ -8,6 +8,24 @@ function createSharingStore(pool,accounts,store){
  const activeRecipient=`EXISTS(SELECT 1 FROM onscreen_v2_accounts a WHERE a.owner_id=s.recipient_id AND a.state='active')`;
  const activeSender=`EXISTS(SELECT 1 FROM onscreen_v2_accounts a WHERE a.owner_id=s.sender_id AND a.state='active')`;
  const methods={
+  async listSharingContacts(ownerId){return accounts.withOwner(ownerId,async()=>
+   (await pool.query('SELECT id,name,email FROM onscreen_v2_sharing_contacts WHERE owner_id=$1 ORDER BY LOWER(name),email',[ownerId])).rows);},
+  async saveSharingContact(ownerId,input){return accounts.withOwner(ownerId,async()=>{
+   const email=normalizeEmail(input?.email),name=typeof input?.name==='string'?input.name.trim():'';
+   if(!require('./settings-service').validEmail(email))throw problem('Enter a valid contact email.',400);
+   if(typeof input?.name!=='string'||name.length>100||/[\x00-\x1f]/.test(name))throw problem('Enter a contact name of up to 100 characters.',400);
+   if(input.id){
+    if(typeof input.id!=='string'||input.id.length>100)throw problem('Contact not found.',404);
+    const existing=(await pool.query('SELECT id FROM onscreen_v2_sharing_contacts WHERE owner_id=$1 AND id=$2',[ownerId,input.id])).rows[0];if(!existing)throw problem('Contact not found.',404);
+    const duplicate=(await pool.query('SELECT id FROM onscreen_v2_sharing_contacts WHERE owner_id=$1 AND email=$2 AND id<>$3',[ownerId,email,input.id])).rows[0];if(duplicate)throw problem('A contact with this email already exists.',409);
+    return (await pool.query('UPDATE onscreen_v2_sharing_contacts SET name=$3,email=$4 WHERE owner_id=$1 AND id=$2 RETURNING id,name,email',[ownerId,input.id,name,email])).rows[0];
+   }
+   const existing=(await pool.query('SELECT id FROM onscreen_v2_sharing_contacts WHERE owner_id=$1 AND email=$2',[ownerId,email])).rows[0];
+   if(existing)return (await pool.query('UPDATE onscreen_v2_sharing_contacts SET name=$3 WHERE owner_id=$1 AND id=$2 RETURNING id,name,email',[ownerId,existing.id,name])).rows[0];
+   const count=Number((await pool.query('SELECT COUNT(*) AS n FROM onscreen_v2_sharing_contacts WHERE owner_id=$1',[ownerId])).rows[0].n);if(count>=500)throw problem('Your contacts list is full (500 contacts). Remove a contact first.',400);
+   return (await pool.query('INSERT INTO onscreen_v2_sharing_contacts(id,owner_id,name,email) VALUES($1,$2,$3,$4) RETURNING id,name,email',[randomUUID(),ownerId,name,email])).rows[0];
+  });},
+  async deleteSharingContact(ownerId,id){return accounts.withOwner(ownerId,async()=>{await pool.query('DELETE FROM onscreen_v2_sharing_contacts WHERE owner_id=$1 AND id=$2',[ownerId,id]);return {ok:true};});},
   async registerShareIdentity(user){
    const email=normalizeEmail(user.email);if(!email)return;
    return accounts.withOwner(user.id,async()=>{
@@ -33,6 +51,7 @@ function createSharingStore(pool,accounts,store){
    }
    await pool.query(`INSERT INTO onscreen_v2_quiz_shares(id,sender_id,sender_email,recipient_id,recipient_email,source_id,request_key,title,question_count,snapshot)
      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,[randomUUID(),user.id,normalizeEmail(user.email),recipientId,email,testId,requestId,snapshot.title,snapshot.questions.length,recipientId?JSON.stringify(snapshot):null]);
+   await pool.query(`INSERT INTO onscreen_v2_sharing_contacts(id,owner_id,name,email) SELECT $1,$2,'',$3 WHERE (SELECT COUNT(*) FROM onscreen_v2_sharing_contacts WHERE owner_id=$2)<500 ON CONFLICT(owner_id,email) DO NOTHING`,[randomUUID(),user.id,email]);
    return receipt();
   });},
   async listShares(user){return accounts.withOwner(user.id,async()=>{
@@ -60,6 +79,8 @@ function createSharingStore(pool,accounts,store){
   });}
  };
  return {methods,async init(){
+  await pool.query(`CREATE TABLE IF NOT EXISTS onscreen_v2_sharing_contacts(id TEXT PRIMARY KEY,owner_id TEXT NOT NULL REFERENCES onscreen_v2_accounts(owner_id) ON DELETE CASCADE,name TEXT NOT NULL DEFAULT '',email TEXT NOT NULL,UNIQUE(owner_id,email))`);
+  await pool.query('ALTER TABLE onscreen_v2_sharing_contacts ENABLE ROW LEVEL SECURITY');
   await pool.query('CREATE TABLE IF NOT EXISTS onscreen_v2_share_identities(owner_id TEXT PRIMARY KEY,email TEXT NOT NULL)');
   await pool.query('CREATE INDEX IF NOT EXISTS onscreen_v2_share_email ON onscreen_v2_share_identities(email)');
   await pool.query(`CREATE TABLE IF NOT EXISTS onscreen_v2_quiz_shares(id TEXT PRIMARY KEY,sender_id TEXT NOT NULL REFERENCES onscreen_v2_share_identities(owner_id) ON DELETE CASCADE,sender_email TEXT NOT NULL,recipient_id TEXT REFERENCES onscreen_v2_share_identities(owner_id) ON DELETE CASCADE,recipient_email TEXT NOT NULL,source_id TEXT NOT NULL,request_key TEXT NOT NULL,title TEXT NOT NULL,question_count INTEGER NOT NULL,snapshot JSONB,copy_id TEXT,status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','accepted','declined','cancelled','expired')),created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW()+INTERVAL '7 days',UNIQUE(sender_id,request_key))`);
