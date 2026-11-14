@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="wall" x2="0" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#174377"/>
+      <stop offset="1" stop-color="#081f40"/>
+    </linearGradient>
+    <radialGradient id="light" cx=".78" cy=".2" r=".66" gradientUnits="objectBoundingBox">
+      <stop stop-color="#367db4" stop-opacity=".32"/>
+      <stop offset="1" stop-color="#132e59" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="floor" x2="0" y2="1">
+      <stop stop-color="#102f57"/>
+      <stop offset="1" stop-color="#06162e"/>
+    </linearGradient>
+    <linearGradient id="glass" x2="1" y2="1">
+      <stop stop-color="#3978ac"/>
+      <stop offset="1" stop-color="#183e70"/>
+    </linearGradient>
+    <pattern id="perforations" width="24" height="24" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1" fill="#8ed4ff" opacity=".55"/>
+    </pattern>
+  </defs>
+  <path fill="url(#wall)" d="M0 0h1600v900H0z"/>
+  <path fill="#092444" d="M0 0h1600v155l-310 91H286L0 143z"/>
+  <path fill="#1b4772" d="M294 245h992v324H294z"/>
+  <path fill="#143861" d="M0 146l294 99v324L0 748zM1286 245l314-90v603l-314-189z"/>
+  <path fill="url(#floor)" d="M0 748l294-179h992l314 189v142H0z"/>
+  <g fill="none" stroke="#5aa4e0" opacity=".15">
+    <path d="M88 0l248 245M395 0l117 245M680 0l38 245M975 0l-51 245M1250 0l-132 245M1518 0l-228 245"/>
+    <path d="M0 92h1600M44 157h1509M157 205h1292"/>
+    <path d="M395 569L53 898M546 569L323 898M698 569L594 898M887 569l98 329M1045 569l213 329M1197 569l351 329"/>
+  </g>
+  <g fill="#5b9fcb" opacity=".18">
+    <path d="M347 121h193l25 12H369zM978 120h193l-21 13H956zM631 176h126l3 8H637zM841 176h128l-7 8H837z"/>
+  </g>
+  <path fill="#0a2c50" stroke="#326996" stroke-width="6" d="M423 275h754v259H423z"/>
+  <path fill="#12345e" d="M432 284h736v240H432z"/>
+  <g fill="none" stroke="#62b1df" opacity=".14" stroke-width="3">
+    <path d="M461 464h118l24-22h102M882 353h67l24 25h102M1075 437h75M492 326h86"/>
+    <circle cx="711" cy="442" r="6"/>
+    <circle cx="877" cy="353" r="6"/>
+  </g>
+  <path fill="url(#perforations)" opacity=".31" d="M301 257h103v277H301zm893 0h81v277h-81z"/>
+  <path fill="url(#glass)" d="M1330 268l247-65v344l-247-34z"/>
+  <g stroke="#0d2b50" stroke-width="9" fill="none">
+    <path d="M1330 268l247-65v344l-247-34zM1406 248v275m82-297v308M1330 389l247-15"/>
+  </g>
+  <path fill="#0b2b52" stroke="#245580" stroke-width="5" d="M52 341l171 43v221L52 693z"/>
+  <path fill="#153a63" d="M70 377l137 32v170L70 639z"/>
+  <path fill="#62a6cb" opacity=".42" d="M177 523l14-4v7l-14 4z"/>
+  <path fill="#28567e" d="M294 557h992v12H294z"/>
+  <g fill="#1d416b" stroke="#2e628a" stroke-width="3">
+    <path d="M359 623h882l44 19H315zM261 672h1090l62 24H196zM124 734h1366l77 30H45z"/>
+  </g>
+  <g fill="#0b2548" opacity=".78">
+    <path d="M315 642h970v11H315zm-119 54h1217v16H196zM45 764h1522v20H45z"/>
+    <path d="M415 653h14v18h-14zm757 0h14v18h-14zM326 711h18v23h-18zm943 0h18v23h-18zM189 783h23v41h-23zm1212 0h23v41h-23z"/>
+  </g>
+  <path fill="#081c38" d="M0 860l73-33h1454l73 33v40H0z"/>
+  <path fill="#224e75" d="M0 856l73-33h1454l73 33v7l-73-32H73L0 863z"/>
+  <path fill="url(#light)" d="M0 0h1600v900H0z"/>
+</svg>

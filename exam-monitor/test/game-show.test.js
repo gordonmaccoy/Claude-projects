@@ -20,5 +20,12 @@ test('ties and zero scores do not announce a unique leader; podium cues once per
  assert.deepEqual(track(view('podium',[leader('b')],2)),{cue:'podium'});
  assert.equal(track(view('podium',[leader('b')],2)),null);
  assert.equal(track(view('podium',[],0,'empty')),null);
- assert.deepEqual(track(view('podium',[leader('a')],2,'other')),{cue:'podium'});
+ assert.equal(track(view('podium',[leader('a')],2,'other')),null);
+});
+
+test('refresh into settled scores or podium does not replay a cue',()=>{
+ const track=createTracker();
+ assert.equal(track(view('leaderboard',[leader('a')],3)),null);
+ assert.equal(track(view('leaderboard',[leader('b')],2)),null);
+ assert.equal(track(view('podium',[leader('a')],3,'another')),null);
 });

@@ -2,7 +2,7 @@ const test=require('node:test'),assert=require('node:assert/strict');
 const {actionLabel,channelName,relay}=require('../public/game-classroom-control');
 test('classroom exposes the existing teacher transition only when phase can advance',()=>{
  const view={questionIndex:0,questionCount:2};
- for(const [phase,label] of [['lobby','Start Game'],['media','Start Question'],['reveal','Show Leaderboard'],['leaderboard','Next Question']]){
+ for(const [phase,label] of [['lobby','Start Game'],['media','Start Question'],['reveal','Show Scores'],['leaderboard','Next Question']]){
   assert.equal(actionLabel({...view,phase}),label);
  }
  assert.equal(actionLabel({...view,phase:'leaderboard',questionIndex:1}),'Show Podium');

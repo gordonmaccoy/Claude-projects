@@ -5,7 +5,7 @@
     switch (view.phase) {
       case 'lobby': return 'Start Game';
       case 'media': return 'Start Question';
-      case 'reveal': return 'Show Leaderboard';
+      case 'reveal': return 'Show Scores';
       case 'leaderboard': return view.questionIndex + 1 >= view.questionCount ? 'Show Podium' : 'Next Question';
       default: return null;
     }

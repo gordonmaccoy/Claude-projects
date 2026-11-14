@@ -12,7 +12,7 @@ test('round timer reads the authoritative window and flags the final five second
  assert.deepEqual(client.roundTime(v,800,800),{seconds:7,progress:.35,urgent:false,label:'SECONDS LEFT'});
  assert.deepEqual(client.roundTime(v,800,2800),{seconds:5,progress:.25,urgent:true,label:'SECONDS LEFT'});
  assert.deepEqual(client.roundTime(v,800,9000),{seconds:0,progress:0,urgent:true,label:'SECONDS LEFT'});
- assert.deepEqual(client.roundTime({...v,phase:'countdown',serverNow:1000},800,800),{seconds:2,progress:2/3,urgent:false,label:'GET READY'});
+ assert.deepEqual(client.roundTime({...v,phase:'countdown',serverNow:1000},800,800),{seconds:2,progress:.4,urgent:false,label:'READING TIME'});
  assert.equal(client.roundTime({...v,phase:'reveal'},800,800),null);
  assert.equal(client.roundTime({...v,deadlineAt:null},800,800),null);
 });
@@ -28,4 +28,36 @@ test('game creator sends pasted text as JSON and omits empty request bodies',()=
  const headers={Authorization:'Bearer test-token'};
  assert.deepEqual(client.requestInit({source:'1. Test?'},headers,'POST'),{method:'POST',headers:{'Content-Type':'application/json',...headers},body:'{"source":"1. Test?"}'});
  assert.deepEqual(client.requestInit(undefined,headers,'GET'),{method:'GET',headers,body:undefined});
+});
+
+test('answer slots are distinct with accessible labels and bounded count',()=>{
+ assert.deepEqual(client.choiceSlots(5).map(v=>v.label),['Choice A, triangle','Choice B, diamond','Choice C, circle','Choice D, square','Choice E, star']);
+ assert.deepEqual(client.choiceSlots(2).map(v=>v.slot),[0,1]);
+ assert.deepEqual(client.choiceSlots(6),[]);
+ assert.deepEqual(client.choiceSlots('4'),[]);
+});
+test('player stages distinguish incorrect and unanswered outcomes without needing question data',()=>{
+ assert.equal(client.resultKind({answer:{correct:true,points:900}}),'correct');
+ assert.equal(client.resultKind({answer:{correct:false,points:0}}),'wrong');
+ assert.equal(client.resultKind({roundEndReason:'timeout'}),'timeout');
+ assert.equal(client.resultKind({roundEndReason:'all-answered'}),'unanswered');
+});
+test('live views reject older polls and backwards phase changes',()=>{
+ const a={id:'x',phase:'reveal',questionIndex:0,serverNow:55};
+ assert.equal(client.isOlderView({...a,phase:'question'},a),true);
+ assert.equal(client.isOlderView({...a,serverNow:54},a),true);
+ assert.equal(client.isOlderView({...a,phase:'leaderboard'},a),false);
+ assert.equal(client.isOlderView({...a,phase:'countdown',questionIndex:1},a),false);
+});
+test('projector ranking movement orders by previous ranks without rearranging the final order',()=>{
+ const rows=[{id:'a',rank:1,previousRank:3},{id:'b',rank:2,previousRank:1},{id:'c',rank:3,previousRank:2}];
+ assert.deepEqual(client.priorRows(rows).map(r=>r.id),['b','c','a']);
+ assert.deepEqual(rows.map(r=>r.id),['a','b','c']);
+});
+
+test('live poll can align to a phase boundary without scheduling a tight loop',()=>{
+ const v={phase:'countdown',startsAt:3200,serverNow:3000};
+ assert.equal(client.nextPollDelay(v,800,800),220);
+ assert.equal(client.nextPollDelay(v,800,1200),150);
+ assert.equal(client.nextPollDelay({...v,phase:'reveal'},800,800),1000);
 });

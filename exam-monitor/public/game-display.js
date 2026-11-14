@@ -1,5 +1,5 @@
 (async () => {
-  const {$, status, json, render} = GameClient;
+  const {$, status, json, render, nextPollDelay} = GameClient;
   const [id, displayToken, controlParam] = location.hash.slice(1).split('/').map(decodeURIComponent);
   if (!id || !displayToken) {
     status('Open the classroom display from the game host page.', true);
@@ -37,7 +37,7 @@
   const trackCue = GameShow.createTracker();
   const audio = GameAudio.create({button: $('game-audio-toggle'), slider: $('game-volume')});
   const celebration = $('celebration');
-  let celebrationTimer, stopped = false;
+  let celebrationTimer, pollTimer, receivedAt, polling = false, stopped = false;
   function clearCelebration() {
     clearTimeout(celebrationTimer);
     celebration.hidden = true;
@@ -51,7 +51,10 @@
     celebrationTimer = setTimeout(clearCelebration, 3400);
   }
   function applyView(next) {
+    if (GameAudio.isStaleView(next, view)) return;
+    const hasPreviousView = view?.id === next.id;
     view = next;
+    receivedAt = Date.now();
     $('game-audio-controls').hidden = view.phase === 'closed';
     $('join-details').hidden = view.phase !== 'lobby';
     if (view.phase === 'lobby') {
@@ -63,8 +66,8 @@
     updateControl();
     if (view.phase !== 'leaderboard') clearCelebration();
     const event = trackCue(view);
-    if (event?.cue === 'lead') showLeader(event.player);
-    audio.update(view, event?.cue);
+    if (hasPreviousView && event?.cue === 'lead') showLeader(event.player);
+    audio.update(view, hasPreviousView ? event?.cue : undefined);
   }
   if (controls) {
     controls.onmessage = ({data}) => {
@@ -78,6 +81,7 @@
         if (data.view?.id === id) {
           version++;
           applyView(data.view);
+          if (!polling) schedulePoll();
         } else if (data.error) status(data.error,true);
         updateControl();
       }
@@ -98,7 +102,14 @@
     };
   }
 
+  function schedulePoll(failed = false) {
+    clearTimeout(pollTimer);
+    if (!stopped) pollTimer = setTimeout(poll, failed ? 1000 : nextPollDelay(view, receivedAt));
+  }
   async function poll() {
+    if (stopped || polling) return;
+    polling = true;
+    let failed = false;
     const at = version;
     try {
       GameClassroomControl.send(controls,{kind:'hello',client});
@@ -107,6 +118,7 @@
       if (at === version) applyView(next);
       status('');
     } catch (e) {
+      failed = true;
       $('join-details').hidden = true;
       status(e.status === 404 ? 'This game has ended or expired.' : e.message, true);
       if ([403,404,410].includes(e.status)) {
@@ -118,7 +130,8 @@
         render({id,phase:'closed'});
       }
     } finally {
-      if (!stopped) setTimeout(poll,1000);
+      polling = false;
+      schedulePoll(failed);
     }
   }
   addEventListener('pagehide', event => {
