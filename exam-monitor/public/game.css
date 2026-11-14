@@ -126,3 +126,4 @@ details,.explanation,.top-rank,.podium div,.roster span{background:#173c61;borde
 .podium-place[data-place="1"] .podium-label{color:#ffe0a1}
 .game-display .stage:has(.podium) .rankings{position:relative;z-index:1}
 @keyframes spotlight-sweep{from{transform:rotate(0deg);opacity:.2}to{transform:rotate(var(--beam-angle));opacity:1}}
+.game-display #classroom-advance{min-height:46px;padding:10px 21px;font-size:clamp(14px,1.5vw,18px)}

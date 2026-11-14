@@ -30,7 +30,7 @@ function fromTest(test,{compatibleOnly=false}={}){
 }
 function toTest(game){const source=validateGame(game);return {id:randomUUID(),title:source.title,folderId:null,questions:source.questions.map(q=>{const ids=new Map(q.options.map(o=>[o.id,randomUUID()]));const {durationSeconds,media,...rest}=q;return {...rest,id:randomUUID(),points:1,options:q.options.map(o=>({...o,id:ids.get(o.id)})),correctOptionId:ids.get(q.correctOptionId)};})};}
 function newSession(ownerId,game,now=Date.now()){
- return {id:randomUUID(),ownerId,pin:String(randomInt(100000,1000000)),displayToken:randomBytes(24).toString('base64url'),game:validateGame(game),phase:'lobby',questionIndex:-1,players:[],participants:[],recoveryRequests:[],createdAt:now,updatedAt:now,expiresAt:now+TTL,startsAt:null,deadlineAt:null};
+ return {id:randomUUID(),ownerId,pin:String(randomInt(100000,1000000)),displayToken:randomBytes(24).toString('base64url'),classroomControlKey:randomBytes(24).toString('base64url'),game:validateGame(game),phase:'lobby',questionIndex:-1,players:[],participants:[],recoveryRequests:[],createdAt:now,updatedAt:now,expiresAt:now+TTL,startsAt:null,deadlineAt:null};
 }
 function active(s,now=Date.now()){if(s.phase==='closed'||s.expiresAt<=now)fail('Game has ended or expired.',410);}
 function changed(s,now){s.updatedAt=Math.max(s.updatedAt,now);s.expiresAt=Math.max(s.expiresAt,now+TTL);}
@@ -88,5 +88,5 @@ function publicView(s,now=Date.now()){
  return {id:s.id,pin:s.pin,title:s.game.title,phase:s.phase,questionIndex:s.questionIndex,questionCount:s.game.questions.length,startsAt:s.startsAt,deadlineAt:s.deadlineAt,serverNow:now,players:rows,leaderboard,question,media:s.phase==='media'&&q?.media?{...q.media}:null};
 }
 function playerView(s,playerId,now=Date.now()){const v=publicView(s,now),p=s.players.find(p=>p.id===playerId);if(!p)fail('Player not found.',404);const q=s.game.questions[s.questionIndex],a=q&&answerFor(p,q.id),reveal=['reveal','leaderboard','podium'].includes(s.phase);const {players,leaderboard,media,pin,title,...own}=v;const {counts,...question}=own.question||{};return {...own,question:own.question?question:null,rank:leaderboard.find(row=>row.id===p.id).rank,playerId:p.id,nickname:p.nickname,avatarId:p.avatarId||'avatar-01',score:v.players.find(row=>row.id===p.id).score,answered:!!a,answer:a?{optionId:a.optionId,...(reveal?{points:a.points,correct:a.correct}:{})}:null};}
-function hostView(s,now=Date.now()){return {...publicView(s,now),displayToken:s.displayToken,recoveryRequests:s.recoveryRequests.filter(r=>now-r.createdAt<5*60*1000).map(({code,nickname,createdAt})=>({code,nickname,createdAt}))};}
+function hostView(s,now=Date.now()){return {...publicView(s,now),displayToken:s.displayToken,...(s.classroomControlKey?{classroomControlKey:s.classroomControlKey}:{}),recoveryRequests:s.recoveryRequests.filter(r=>now-r.createdAt<5*60*1000).map(({code,nickname,createdAt})=>({code,nickname,createdAt}))};}
 module.exports={TTL,validateGame,fromTest,toTest,newSession,join,touch,authenticatePlayer,advance,sweep,answer,requestRecovery,approveRecovery,publicView,playerView,hostView,points};

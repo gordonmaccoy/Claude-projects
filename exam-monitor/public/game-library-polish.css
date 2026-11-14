@@ -1,0 +1,15 @@
+/* Scoped library card actions; the editor and live-game surfaces stay unchanged. */
+#games .game-card{display:flex;flex-direction:column;min-width:0;overflow:visible}
+#games .game-card h2{overflow-wrap:anywhere}
+#games .game-card-actions{display:flex;align-items:center;gap:10px;margin-top:auto;padding-top:22px}
+#games .game-card-actions>.primary{flex:1;min-height:46px}
+#games .game-actions-disclosure{flex:none}
+#games .game-actions-toggle{display:grid;place-items:center;width:46px;height:46px;padding:0;border-radius:12px;background:#163b60;border:1px solid #4a729b;color:#dcedff}
+#games .game-actions-toggle span{font-size:28px;line-height:1;transform:translateY(-4px)}
+#games .game-actions-toggle:hover,#games .game-actions-toggle[aria-expanded=true]{background:#245580;border-color:#9bcdff;color:#fff}
+#games .game-actions-panel{position:fixed;z-index:100;overflow-y:auto;overscroll-behavior:contain;padding:6px;border:1px solid #648eb4;border-radius:14px;background:#102b42;color:#f0f7ff;box-shadow:0 12px 36px #020e26a6}
+#games .game-actions-panel button{display:block;width:100%;min-height:46px;border:0;border-radius:8px;background:transparent;padding:12px 14px;text-align:left;color:#edf6ff;font-size:15px}
+#games .game-actions-panel button:hover,#games .game-actions-panel button:focus-visible{background:#234e76}
+#games .game-actions-panel button:focus-visible{outline:2px solid #9bcdff;outline-offset:-2px}
+#games .game-actions-panel button.danger{color:#ffc2ce;border-top:1px solid #315577;border-radius:0 0 8px 8px;margin-top:4px}
+@media(max-width:600px){#games .game-card-actions{gap:12px}#games .game-card-actions>.primary{flex-grow:1}}

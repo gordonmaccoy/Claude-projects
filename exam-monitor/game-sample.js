@@ -17,4 +17,5 @@ function createSampleGame(language){
  return fromTest(sample);
 }
 
-module.exports={createSampleGame};
+function isSampleTitle(title){return typeof title==='string'&&['sample game: easy quiz','샘플 게임: 쉬운 퀴즈'].includes(title.trim().toLowerCase());}
+module.exports={createSampleGame,isSampleTitle};

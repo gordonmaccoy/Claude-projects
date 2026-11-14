@@ -18,14 +18,14 @@ test('sample contains the two built-in Test Library questions and two easy extra
  }
 });
 
-test('sample import saves a four-question copy to the requesting professor’s library',async t=>{
+test('legacy sample endpoint delegates to one-time owner initialization',async t=>{
  const express=require('express');
  const {createGameController}=require('../game-routes');
  const saved=[];
  const app=express();
  app.use(express.json());
  app.use((req,_res,next)=>{req.user={id:'professor-A'};next();});
- const controller=createGameController({store:{async saveGame(owner,game){saved.push({owner,game});return game;}},origin:()=>''});
+ const controller=createGameController({store:{async ensureSampleGame(owner,language){const game=createSampleGame(language);saved.push({owner,game});return game;}},origin:()=>''});
  app.use('/api',controller.api);
  const server=app.listen(0,'127.0.0.1');
  await new Promise((resolve,reject)=>{server.once('listening',resolve);server.once('error',reject);});

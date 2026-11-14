@@ -8,7 +8,7 @@
     "start": "node server.js",
     "build": "node build.js",
     "test": "node --test test/*.test.js",
-    "check": "node --check server.js && node --check exam.js && node --check public/professor.js && node --check public/student.js && node --check public/classroom.js && node --check game.js && node --check game-store.js && node --check game-routes.js && node --check public/game-client.js && node --check public/game-library.js && node --check public/game-host.js && node --check public/game-player.js && node --check public/game-display.js && node --check public/game-avatars.js && node --check public/game-audio.js && node --check public/game-show.js",
+    "check": "node --check server.js && node --check exam.js && node --check public/professor.js && node --check public/student.js && node --check public/classroom.js && node --check game.js && node --check game-store.js && node --check game-routes.js && node --check public/game-client.js && node --check public/game-library.js && node --check public/game-host.js && node --check public/game-player.js && node --check public/game-display.js && node --check public/game-avatars.js && node --check public/game-audio.js && node --check public/game-show.js && node --check public/game-classroom-control.js",
     "test:ui": "node test/browser-smoke.js",
     "test:game-ui": "node test/game-browser.js"
   },

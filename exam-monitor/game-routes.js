@@ -1,7 +1,6 @@
 const express=require('express');
 const QRCode=require('qrcode');
 const game=require('./game');
-const {createSampleGame}=require('./game-sample');
 function createGameController({store,origin}){
  const api=express.Router(),publicApi=express.Router();
  const wrap=fn=>(req,res,next)=>Promise.resolve(fn(req,res)).catch(e=>[400,403,404,409,410,429].includes(e.status)?res.status(e.status).json({error:e.message}):next(e));
@@ -14,12 +13,12 @@ function createGameController({store,origin}){
  const missing=()=>{throw Object.assign(new Error('Game not found or expired.'),{status:404});};
  const owned=async(req)=>{const s=await store.getGameSession(req.params.id);if(!s||s.ownerId!==req.user.id)missing();return s;};
  const saved=async(req)=>{const g=await store.getGame(req.user.id,req.params.id);if(!g)missing();return g;};
- const host=async(s,req)=>({...game.hostView(s),joinUrl:origin(req)+'/game-player.html?session='+encodeURIComponent(s.id),displayUrl:origin(req)+'/game-display.html#'+encodeURIComponent(s.id)+'/'+s.displayToken});
+ const host=async(s,req)=>({...game.hostView(s),joinUrl:origin(req)+'/game-player.html?session='+encodeURIComponent(s.id),displayUrl:origin(req)+'/game-display.html#'+encodeURIComponent(s.id)+'/'+s.displayToken,...(s.classroomControlKey?{classroomControlUrl:origin(req)+'/game-display.html#'+encodeURIComponent(s.id)+'/'+s.displayToken+'/'+s.classroomControlKey}:{})});
  // Bounded, expiring counters deter PIN guessing and public write flooding.
  publicApi.use(createPublicLimiter());
- api.get('/games',wrap(async(req,res)=>res.json(await store.listGames(req.user.id))));
+ api.get('/games',wrap(async(req,res)=>{await store.ensureSampleGame(req.user.id,req.query.language);res.json(await store.listGames(req.user.id));}));
  api.post('/games',wrap(async(req,res)=>res.json(await store.saveGame(req.user.id,game.validateGame(req.body)))));
- api.post('/games/sample',wrap(async(req,res)=>res.json(await store.saveGame(req.user.id,createSampleGame(req.body?.language)))));
+ api.post('/games/sample',wrap(async(req,res)=>res.json(await store.ensureSampleGame(req.user.id,req.body?.language))));
  api.post('/games/from-test',wrap(async(req,res)=>{const source=await store.getTest(req.user.id,req.body?.testId);if(!source)missing();res.json(await store.saveGame(req.user.id,game.fromTest(source,{compatibleOnly:req.body?.compatibleOnly===true})));}));
  api.get('/games/:id',wrap(async(req,res)=>res.json(await saved(req))));
  api.put('/games/:id',wrap(async(req,res)=>{await saved(req);res.json(await store.saveGame(req.user.id,{...game.validateGame(req.body),id:req.params.id},true));}));
@@ -28,7 +27,10 @@ function createGameController({store,origin}){
  api.get('/game-sessions',wrap(async(req,res)=>res.json(await Promise.all((await store.listGameSessions(req.user.id)).map(s=>host(s,req))))));
  api.post('/game-sessions',wrap(async(req,res)=>{const g=await store.getGame(req.user.id,req.body?.gameId);if(!g)missing();if((await store.listGameSessions(req.user.id)).length>=3)throw Object.assign(new Error('Close an existing game before launching another.'),{status:409});let s;for(let attempt=0;attempt<5;attempt++){try{s=await store.createGameSession(game.newSession(req.user.id,g,Date.now()));break;}catch(e){if(e.code!=='23505'||attempt===4)throw e;}}res.json(await host(s,req));}));
  api.get('/game-sessions/:id',sessionWrap(async(req,res)=>{await owned(req);const session=await current(req.params.id,req.gameReceivedAt);res.json(await host(session,req));}));
- api.post('/game-sessions/:id/advance',sessionWrap(async(req,res)=>{await owned(req);const {session}=await store.mutateGame(req.params.id,s=>{game.sweep(s,Date.now());if(req.body?.expectedPhase!==s.phase||req.body?.questionIndex!==s.questionIndex)return;game.advance(s,Date.now());});res.json(await host(session,req));}));
+ async function advanceOwned(req){await owned(req);return (await store.mutateGame(req.params.id,s=>{if(s.ownerId!==req.user.id)missing();game.sweep(s,Date.now());if(req.body?.expectedPhase!==s.phase||req.body?.questionIndex!==s.questionIndex)return;game.advance(s,Date.now());})).session;}
+ api.post('/game-sessions/:id/advance',sessionWrap(async(req,res)=>res.json(await host(await advanceOwned(req),req))));
+ api.get('/game-sessions/:id/classroom-control',sessionWrap(async(req,res)=>{await owned(req);res.json({canAdvance:true});}));
+ api.post('/game-sessions/:id/classroom-control',sessionWrap(async(req,res)=>res.json(game.publicView(await advanceOwned(req)))));
  api.post('/game-sessions/:id/recover',sessionWrap(async(req,res)=>{await owned(req);const {session}=await store.mutateGame(req.params.id,s=>game.approveRecovery(s,req.body?.code,req.body?.playerId,Date.now()));res.json(await host(session,req));}));
  api.post('/game-sessions/:id/close',sessionWrap(async(req,res)=>{await owned(req);await store.closeGame(req.user.id,req.params.id);res.json({ok:true});}));
  publicApi.post('/resolve',wrap(async(req,res)=>{const pin=String(req.body?.pin||'').trim();if(!/^\d{6}$/.test(pin))missing();const s=await store.findGamePin(pin);if(!s)missing();res.json({sessionId:s.id});}));

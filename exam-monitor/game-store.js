@@ -1,9 +1,18 @@
 const {randomUUID,randomInt}=require('node:crypto');
 const game=require('./game');
+const {createSampleGame,isSampleTitle}=require('./game-sample');
 const problem=(message,status=404)=>Object.assign(new Error(message),{status});
 function createGameStore(pool,accounts){
  const live="expires_at>$2 AND NOT EXISTS(SELECT 1 FROM onscreen_v2_accounts a WHERE a.owner_id=s.owner_id AND a.state<>'active')";
  const methods={
+  async ensureSampleGame(ownerId,language){return accounts.withOwner(ownerId,async()=>{
+   const marker=(await pool.query('SELECT game_sample_initialized FROM onscreen_v2_accounts WHERE owner_id=$1',[ownerId])).rows[0];
+   const existing=(await methods.listGames(ownerId)).find(g=>isSampleTitle(g.title));
+   if(marker.game_sample_initialized)return existing||null;
+   const sample=existing||await methods.saveGame(ownerId,createSampleGame(language));
+   await pool.query('UPDATE onscreen_v2_accounts SET game_sample_initialized=TRUE WHERE owner_id=$1',[ownerId]);
+   return sample;
+  });},
   async listGames(ownerId){return (await pool.query("SELECT g.data FROM onscreen_v2_games g WHERE owner_id=$1 AND NOT EXISTS(SELECT 1 FROM onscreen_v2_accounts a WHERE a.owner_id=g.owner_id AND a.state<>'active') ORDER BY updated_at DESC",[ownerId])).rows.map(r=>r.data);},
   async getGame(ownerId,id){return (await pool.query("SELECT g.data FROM onscreen_v2_games g WHERE owner_id=$1 AND id=$2 AND NOT EXISTS(SELECT 1 FROM onscreen_v2_accounts a WHERE a.owner_id=g.owner_id AND a.state<>'active')",[ownerId,id])).rows[0]?.data||null;},
   async saveGame(ownerId,input,updateOnly=false){return accounts.withOwner(ownerId,async()=>{
@@ -31,6 +40,6 @@ function createGameStore(pool,accounts){
   async closeGame(ownerId,id){return accounts.withOwner(ownerId,async()=>!!(await pool.query('DELETE FROM onscreen_v2_game_sessions WHERE owner_id=$1 AND id=$2 RETURNING id',[ownerId,id])).rows.length);},
   async purgeExpiredGames(now=Date.now()){await pool.query("DELETE FROM onscreen_v2_game_sessions WHERE expires_at<=$1 OR data->>'phase'='closed'",[now]);}
  };
- return {methods,async init(){await pool.query('CREATE TABLE IF NOT EXISTS onscreen_v2_games(id TEXT PRIMARY KEY,owner_id TEXT NOT NULL REFERENCES onscreen_v2_accounts(owner_id),data JSONB NOT NULL,updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())');await pool.query('CREATE INDEX IF NOT EXISTS onscreen_v2_games_owner ON onscreen_v2_games(owner_id)');await pool.query('CREATE TABLE IF NOT EXISTS onscreen_v2_game_sessions(id TEXT PRIMARY KEY,owner_id TEXT NOT NULL REFERENCES onscreen_v2_accounts(owner_id),pin TEXT UNIQUE NOT NULL,data JSONB NOT NULL,expires_at BIGINT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())');await pool.query('CREATE INDEX IF NOT EXISTS onscreen_v2_game_sessions_owner ON onscreen_v2_game_sessions(owner_id)');await pool.query('CREATE INDEX IF NOT EXISTS onscreen_v2_game_sessions_expiry ON onscreen_v2_game_sessions(expires_at)');}};
+ return {methods,async init(){await pool.query('ALTER TABLE onscreen_v2_accounts ADD COLUMN IF NOT EXISTS game_sample_initialized BOOLEAN NOT NULL DEFAULT FALSE');await pool.query('CREATE TABLE IF NOT EXISTS onscreen_v2_games(id TEXT PRIMARY KEY,owner_id TEXT NOT NULL REFERENCES onscreen_v2_accounts(owner_id),data JSONB NOT NULL,updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())');await pool.query('CREATE INDEX IF NOT EXISTS onscreen_v2_games_owner ON onscreen_v2_games(owner_id)');await pool.query('CREATE TABLE IF NOT EXISTS onscreen_v2_game_sessions(id TEXT PRIMARY KEY,owner_id TEXT NOT NULL REFERENCES onscreen_v2_accounts(owner_id),pin TEXT UNIQUE NOT NULL,data JSONB NOT NULL,expires_at BIGINT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())');await pool.query('CREATE INDEX IF NOT EXISTS onscreen_v2_game_sessions_owner ON onscreen_v2_game_sessions(owner_id)');await pool.query('CREATE INDEX IF NOT EXISTS onscreen_v2_game_sessions_expiry ON onscreen_v2_game_sessions(expires_at)');}};
 }
 module.exports={createGameStore};

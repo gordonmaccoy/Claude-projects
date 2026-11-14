@@ -28,3 +28,4 @@ test('player screens receive only their own identity and ranking while classroom
   assert.equal(own.question?.counts,undefined);assert.equal(g.publicView(s,0).players.length,2);
  }
 });
+test('classroom relay capability is random, host-only, and absent on old sessions',()=>{const s=session(),other=session();assert.match(s.classroomControlKey,/^[A-Za-z0-9_-]{32}$/);assert.notEqual(s.classroomControlKey,other.classroomControlKey);assert.notEqual(s.classroomControlKey,s.displayToken);const p=g.join(s,{nickname:'Teacher test',resumeToken:token},0);assert.equal(g.hostView(s).classroomControlKey,s.classroomControlKey);assert.equal(g.publicView(s).classroomControlKey,undefined);assert.equal(g.playerView(s,p.playerId).classroomControlKey,undefined);delete s.classroomControlKey;assert.equal(g.hostView(s).classroomControlKey,undefined);});
