@@ -574,3 +574,11 @@ Object.assign(window.examioKorean, {
  "Enter a valid contact email.": "올바른 연락처 이메일을 입력하세요.",
  "Edit": "수정"
 });
+
+Object.assign(window.examioKorean, {
+ "Show live activity": "실시간 활동 표시",
+ "Display only. Private monitoring stays unchanged.": "화면 표시만 변경됩니다. 비공개 모니터링은 유지됩니다.",
+ "Connected": "연결됨",
+ "Submitted": "제출됨",
+ "{joined} joined · {connected} connected · {submitted} submitted": "{joined}명 참여 · {connected}명 연결됨 · {submitted}명 제출됨"
+});

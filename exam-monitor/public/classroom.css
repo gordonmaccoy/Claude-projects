@@ -17,3 +17,13 @@
 [data-theme=dark] .class-display-header{background:#102f50;border-color:#375977}[data-theme=dark] .class-display-header .class-room-banner{background:transparent}
 @media(max-width:760px){.class-display-header{grid-template-columns:minmax(0,1fr) auto;gap:16px;padding:16px 5vw}.class-display-header .class-room-banner{grid-column:1/-1;grid-row:2}.class-display-header #qr-toggle{grid-column:2;grid-row:1}.class-brand-group .examio-brand{transform-origin:left center;max-width:100%}.class-session-info{padding:16px 5vw;flex-wrap:wrap}.class-display-header #qr{width:100px;height:100px}.class-display-header #qr-toggle.expanded #qr{width:min(72vh,80vw);height:min(72vh,80vw)}}
 @media(max-width:400px){.class-brand-group .examio-brand .brand-type strong{font-size:25px}.class-brand-group .examio-brand .brand-type small{font-size:7px}.class-brand-group .brand-mark{width:34px;height:34px}.class-display-header{gap:10px}.class-display-header #qr{width:80px;height:80px}.class-display-header #qr-toggle span{font-size:9px}}
+.class-activity-switch{display:inline-flex;align-items:center;gap:9px;position:relative;font-size:13px;font-weight:700;cursor:pointer;line-height:1.4}
+.class-activity-switch input{position:absolute;opacity:0;width:1px;height:1px}
+.class-switch-track{width:44px;height:25px;border-radius:20px;background:white;border:1px solid #a8bbcf;position:relative;flex-shrink:0}
+.class-switch-track::after{content:"";position:absolute;top:2px;left:2px;width:19px;height:19px;border-radius:50%;background:#a5b5c8;transition:transform .15s}
+.class-activity-switch input:checked+.class-switch-track{background:#0758cb;border-color:#0758cb}
+.class-activity-switch input:checked+.class-switch-track::after{background:white;transform:translateX(19px)}
+.class-activity-switch input:focus-visible+.class-switch-track{outline:3px solid #087bea;outline-offset:3px}
+.class-activity-hint{font-size:11px;max-width:240px;color:var(--examio-muted);line-height:1.4}
+[data-theme=dark] .class-activity-switch input:checked+.class-switch-track{background:white;border-color:white}
+[data-theme=dark] .class-activity-switch input:checked+.class-switch-track::after{background:#0758cb}

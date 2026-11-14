@@ -71,7 +71,7 @@ test('HTTP/socket exam flow enforces ownership, recovers after restart, sanitize
     const updated = once(publicSocket, 'display:update');
     await request(`/api/sessions/${sid}/start`, 'POST', {});
     const [pub] = await updated;
-    assert.deepEqual(Object.keys(pub.students[0]).sort(), ['name', 'status']);
+    assert.deepEqual(Object.keys(pub.students[0]).sort(), ['name', 'status', 'submitted']);
     assert.equal(JSON.stringify(pub).includes('0010'), false);
     const resumedView = (await emit(a, 'student:join', { sessionId: sid, resumeToken: joined.resumeToken })).view;
     assert.equal(resumedView.test.questions[0].correctOptionId, undefined);

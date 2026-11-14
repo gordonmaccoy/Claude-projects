@@ -20,7 +20,7 @@ test('waiting room withholds questions and failure; public view never leaks priv
   assert.equal(s.students[0].failedAt, null);
   assert.equal(exam.studentView(s, s.students[0]).test, null);
   const pub = exam.publicView(s, 20000);
-  assert.deepEqual(Object.keys(pub.students[0]).sort(), ['name', 'status']);
+  assert.deepEqual(Object.keys(pub.students[0]).sort(), ['name', 'status', 'submitted']);
   assert.equal(JSON.stringify(pub).includes('001'), false);
   assert.equal(JSON.stringify(pub).includes('correctOptionId'), false);
   assert.throws(() => exam.submit(s, j.studentId, { q: 'a' }, 20000), /not running/);

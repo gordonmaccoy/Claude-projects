@@ -259,7 +259,7 @@ function override(s, id, professorId, reason, now = Date.now()) {
 function status(st, now,s) { if(st.completedAt)return 'completed'; if(st.submission) return isFailed(st)?'red':'green';const security=effectiveSecurity(s);if(!security.enabled)return 'green';return isFailed(st)||(security.tabVisibility&&!st.visible)||(security.focusVisibility&&st.focused===false)||now-st.lastSeen>10000?'red':'green'; }
 function publicView(s, now = Date.now()) {
   return { roomName:s.roomName||null,title: s.resultTitle || s.test?.title || 'Classroom calculator', language:s.language??'en', phase: s.phase,remainingMs:remainingTime(s,now),calculator:s.mode==='calculator'&&!s.resultTitle,deadlineAt:s.deadlineAt||null,
-    students: s.students.map(st => ({ name: st.name, status: isFailed(st)?'failed':st.completedAt?'completed':st.submission?'submitted':status(st,now,s) })) };
+    students: s.students.map(st => ({ name: st.name, submitted:Boolean(st.submission||st.completedAt),status: isFailed(st)?'failed':st.completedAt?'completed':st.submission?'submitted':status(st,now,s) })) };
 }
 function privateView(s, now = Date.now()) {
   return { id: s.id, security:effectiveSecurity(s),roomName:s.roomName||null,mode: s.mode, language:s.language??'en', title: s.resultTitle || s.test?.title || 'Classroom calculator', phase: s.phase,
