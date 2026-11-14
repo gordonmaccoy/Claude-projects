@@ -1,6 +1,7 @@
 const express=require('express');
 const QRCode=require('qrcode');
 const game=require('./game');
+const {createSampleGame}=require('./game-sample');
 function createGameController({store,origin}){
  const api=express.Router(),publicApi=express.Router();
  const wrap=fn=>(req,res,next)=>Promise.resolve(fn(req,res)).catch(e=>[400,403,404,409,410,429].includes(e.status)?res.status(e.status).json({error:e.message}):next(e));
@@ -18,6 +19,7 @@ function createGameController({store,origin}){
  publicApi.use(createPublicLimiter());
  api.get('/games',wrap(async(req,res)=>res.json(await store.listGames(req.user.id))));
  api.post('/games',wrap(async(req,res)=>res.json(await store.saveGame(req.user.id,game.validateGame(req.body)))));
+ api.post('/games/sample',wrap(async(req,res)=>res.json(await store.saveGame(req.user.id,createSampleGame(req.body?.language)))));
  api.post('/games/from-test',wrap(async(req,res)=>{const source=await store.getTest(req.user.id,req.body?.testId);if(!source)missing();res.json(await store.saveGame(req.user.id,game.fromTest(source,{compatibleOnly:req.body?.compatibleOnly===true})));}));
  api.get('/games/:id',wrap(async(req,res)=>res.json(await saved(req))));
  api.put('/games/:id',wrap(async(req,res)=>{await saved(req);res.json(await store.saveGame(req.user.id,{...game.validateGame(req.body),id:req.params.id},true));}));

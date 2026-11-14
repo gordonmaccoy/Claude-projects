@@ -18,3 +18,13 @@ test('players select a validated character retained through resume and device re
 test('Object prototype question identifiers remain unanswered until a real response arrives',()=>{for(const id of ['toString','hasOwnProperty']){const q=quiz();q.questions[0].id=id;const s=g.newSession('owner',q,0),p=g.join(s,{nickname:'Alex',resumeToken:token},0);g.advance(s,0);g.sweep(s,3000);assert.equal(s.phase,'question');assert.equal(g.playerView(s,p.playerId,3000).answered,false);assert.equal(g.publicView(s,3000).players[0].score,0);g.sweep(s,23000);assert.equal(s.phase,'reveal');assert.deepEqual(g.publicView(s,23000).question.counts,{a:0,b:0});}});
 test('timely answer queued behind timeout sweep retains earned points but cannot answer after host advances',()=>{const s=session(),p=g.join(s,{nickname:'Alex',resumeToken:token},0);g.advance(s,0);g.sweep(s,24000);assert.equal(s.phase,'reveal');const expiry=s.expiresAt;g.answer(s,{...p,questionId:'q1',optionId:'a'},7000);assert.equal(s.players[0].score,900);assert.equal(s.phase,'reveal');assert.equal(s.expiresAt,expiry);const otherSession=session(),b=g.join(otherSession,{nickname:'Bo',resumeToken:other},0);g.advance(otherSession,0);g.sweep(otherSession,24000);g.advance(otherSession,25000);assert.throws(()=>g.answer(otherSession,{...b,questionId:'q1',optionId:'a'},7000),/open/i);});
 test('expired recovery requests free capacity and reused device receives a fresh code',()=>{const s=session();g.join(s,{nickname:'Alex',resumeToken:token},0);let first;for(let i=0;i<20;i++){const r=g.requestRecovery(s,{nickname:'Alex',resumeToken:String(i).padStart(43,'z')},1);if(!i)first=r.code;}assert.equal(s.recoveryRequests.length,20);const fresh=g.requestRecovery(s,{nickname:'Alex',resumeToken:'z'.repeat(42)+'0'},300002);assert.notEqual(fresh.code,first);assert.equal(s.recoveryRequests.length,1);assert.equal(s.recoveryRequests[0].createdAt,300002);});
+test('player screens receive only their own identity and ranking while classroom retains full roster',()=>{
+ const s=session(),a=g.join(s,{nickname:'Alex',resumeToken:token},0);g.join(s,{nickname:'Other player',resumeToken:other},0);
+ for(const phase of ['lobby','media','question','reveal','leaderboard','podium']){
+  s.phase=phase;s.questionIndex=0;
+  const own=g.playerView(s,a.playerId,0);assert.equal(own.nickname,'Alex');assert.equal(own.rank,1);
+  for(const field of ['players','leaderboard','pin','title','media'])assert.equal(Object.hasOwn(own,field),false);
+  assert.equal(JSON.stringify(own).includes('Other player'),false);
+  assert.equal(own.question?.counts,undefined);assert.equal(g.publicView(s,0).players.length,2);
+ }
+});
