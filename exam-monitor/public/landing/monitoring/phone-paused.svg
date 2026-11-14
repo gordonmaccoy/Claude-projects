@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="426" viewBox="0 0 640 426" role="img">
+<title>Test is Paused on a phone</title>
+<defs>
+ <linearGradient id="background" x2="1" y2="1" gradientUnits="objectBoundingBox"><stop stop-color="#e0edff"/><stop offset="1" stop-color="#eef5ff"/></linearGradient>
+ <filter id="shadow" x="-.2" y="-.15" width="1.4" height="1.35"><feDropShadow dx="0" dy="13" stdDeviation="13" flood-color="#102946" flood-opacity=".28"/></filter>
+</defs>
+<rect width="640" height="426" fill="url(#background)"/>
+<path d="M-36 391C66 160 178 204 233 31c13-40 94-51 147-47H-36Zm709-377C574 33 490 146 462 241c-24 83-69 149-130 194h341Z" fill="#fff" opacity=".49"/>
+<circle cx="143" cy="177" r="96" fill="none" stroke="#095cc8" stroke-opacity=".12" stroke-width="1.5"/>
+<circle cx="143" cy="177" r="67" fill="none" stroke="#095cc8" stroke-opacity=".12" stroke-width="1.5"/>
+<circle cx="510" cy="264" r="72" fill="none" stroke="#095cc8" stroke-opacity=".12" stroke-width="1.5"/>
+<path d="M135 341h28m-14-14v28m332-204h25m-12-12v24" fill="none" stroke="#095cc8" stroke-opacity=".23" stroke-width="2" stroke-linecap="round"/>
+<rect x="198" y="13" width="244" height="400" rx="31" fill="#13253e" stroke="#607489" stroke-width="3" filter="url(#shadow)"/>
+<rect x="198" y="13" width="244" height="400" rx="31" fill="#13253e" stroke="#607489" stroke-width="3"/>
+<rect x="206" y="21" width="228" height="384" rx="24" fill="#eaf3ff"/>
+<path d="M197 96v40m246 3v53" stroke="#607489" stroke-width="3" stroke-linecap="round"/>
+<rect x="289" y="30" width="62" height="13" rx="6.5" fill="#13253e"/>
+<g font-family="system-ui, sans-serif">
+ <text x="223" y="42" font-size="9" font-weight="650" fill="#0b315e">9:41</text>
+ <path d="M399 33h14v6h-14zM415 35v2" stroke="#0b315e" stroke-width="1.3" fill="none"/>
+ <rect x="398" y="33" width="12" height="6" rx="1" fill="#0b315e"/>
+ <rect x="219" y="58" width="198" height="34" rx="8" fill="#fff" fill-opacity=".93"/>
+ <rect x="230" y="67" width="16" height="16" rx="4" fill="#e6f6ee" stroke="#1a8b5b"/>
+ <path d="m234 75 3 3 5-6" fill="none" stroke="#1a8b5b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+ <text x="254" y="79" font-size="13" font-weight="800" fill="#082d5b">Examio</text>
+ <rect x="218" y="113" width="204" height="222" rx="13" fill="#ffffff" stroke="#b2cdf2" stroke-width="1.4"/>
+ <g text-anchor="middle" fill="#0b315e"><circle cx="320" cy="179" r="24" fill="#095cc8"/><path d="M316 170v18m8-18v18" stroke="#fff" stroke-width="4" stroke-linecap="round"/><text x="320" y="226" font-size="23" font-weight="800">Test is Paused.</text><text x="320" y="252" font-size="15">Wait a moment.</text></g>
+</g>
+<rect x="286" y="389" width="68" height="4" rx="2" fill="#0b315e" opacity=".85"/>
+</svg>

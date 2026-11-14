@@ -29,7 +29,7 @@ button { font: inherit; }
 .brand { display: inline-flex; align-items: center; gap: 10px; color: var(--navy); text-decoration: none; flex: 0 0 auto; }
 .brand-mark { width: 48px; height: 48px; }
 .brand-type { display: grid; gap: 1px; line-height: 1; }
-.brand-type strong { font-size: 1.8rem; letter-spacing: -.07em; font-weight: 850; }
+.brand-type strong { font-size: var(--examio-wordmark-size); letter-spacing: var(--examio-wordmark-tracking); font-weight: var(--examio-wordmark-weight); }
 .brand-type small { font-size: .54rem; font-weight: 800; letter-spacing: .14em; white-space: nowrap; }
 .brand-type i { color: var(--green); font-style: normal; margin: 0 .1rem; }
 .main-nav { display: flex; align-items: center; gap: clamp(20px, 3vw, 42px); margin-left: auto; }
@@ -126,7 +126,7 @@ button { font: inherit; }
 @media (max-width: 760px) {
   .site-header { min-height: 76px; padding: 13px 18px; gap: 12px; }
   .brand-mark { width: 39px; height: 39px; }
-  .brand-type strong { font-size: 1.5rem; }
+  .brand-type strong { font-size: var(--examio-wordmark-compact); }
   .brand-type small { font-size: .45rem; letter-spacing: .11em; }
   .main-nav { display: none; }
   .button-small { min-height: 40px; padding: 0 13px; font-size: .82rem; }

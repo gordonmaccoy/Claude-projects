@@ -9,6 +9,10 @@
   --examio-muted: #617383;
   --examio-line: #dce6de;
   --examio-white: #fff;
+  --examio-wordmark-size: 2.05rem;
+  --examio-wordmark-compact: 1.65rem;
+  --examio-wordmark-weight: 700;
+  --examio-wordmark-tracking: -.02em;
   --examio-font: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 .examio-brand { text-decoration: none; flex: 0 0 auto; }
@@ -16,7 +20,7 @@
 .examio-brand { display: inline-flex; align-items: center; gap: 10px; color: var(--examio-navy); }
 .examio-brand .brand-mark { flex: none; width: 48px; height: 48px; }
 .examio-brand .brand-type { display: grid; gap: 1px; margin: 0; color: inherit; font: inherit; font-family: var(--examio-font); line-height: 1; letter-spacing: normal; text-transform: none; }
-.examio-brand strong { font-size: 1.8rem; font-weight: 850; letter-spacing: -.07em; }
+.examio-brand strong { font-size: var(--examio-wordmark-size); font-weight: var(--examio-wordmark-weight); letter-spacing: var(--examio-wordmark-tracking); }
 .examio-brand small { font-size: .54rem; font-weight: 800; letter-spacing: .14em; white-space: nowrap; }
 .examio-brand i { color: #25aa42; font-style: normal; margin: 0 .1rem; }
 .language-bar { display: flex; justify-content: flex-end; padding: .5rem 1rem; }
@@ -33,6 +37,6 @@
 }
 @media (max-width: 720px) {
   .examio-brand .brand-mark { width: 39px; height: 39px; }
-  .examio-brand strong { font-size: 1.5rem; }
+  .examio-brand strong { font-size: var(--examio-wordmark-compact); }
   .examio-brand small { font-size: .45rem; letter-spacing: .075em; }
 }

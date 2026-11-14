@@ -194,3 +194,13 @@ Object.assign(window.examioKorean,{
 });
 
 Object.assign(window.examioKorean,{"No apps to install.":"앱 설치 없이.","Instant QR code access!":"QR 코드로 바로 참여하세요!"});
+
+Object.assign(window.examioKorean,{
+ "With the five-second rule on, the screen locks after the page has been hidden for more than five seconds.": "5초 규칙을 켜면 페이지가 5초 넘게 숨겨졌을 때 화면이 잠깁니다.",
+ "Review the activity log and make the final call": "활동 기록을 확인하고 최종 판단하세요",
+ "Check what happened, then unlock the attempt or submit the fail score.": "무슨 일이 있었는지 확인한 후 응시 잠금을 해제하거나 실격 점수를 제출하세요.",
+ "Class display showing 20 sample students with active, away, submitted and failed statuses": "예시 학생 20명의 접속, 이탈, 제출, 실격 상태를 보여주는 강의실 화면",
+ "Phone showing the Examio Test is Paused notification": "Examio 시험 일시정지 안내가 표시된 휴대폰",
+ "Phone showing the Examio Call professor notification": "Examio 교수님께 문의 안내가 표시된 휴대폰",
+ "Activity log showing monitoring events and the professor’s unlock and fail-score controls": "모니터링 기록 및 교수자의 잠금 해제와 실격 점수 제출 버튼"
+});
