@@ -33,7 +33,7 @@ async function readSocrativeKey(document) {
       const letter=label.str.trim();
       if(number&&text) {
         if(Number(number[1])!==questions.length+1) throw Error('Socrative questions could not be matched in order.');
-        current={text,options:[]};
+        current={text,options:[],answers:[],textX:Math.min(...rest.map(item=>item.transform[4]))};
         questions.push(current);
       } else if(current&&/^[A-E]$/.test(letter)&&text) {
         if(letter.charCodeAt(0)!==65+current.options.length) throw Error('Socrative answer choices could not be matched in order.');
@@ -47,18 +47,22 @@ async function readSocrativeKey(document) {
       } else if(current) {
         const continuation=clean(ordered.map(item=>item.str).join(' '));
         if(current.options.length) current.options.at(-1).text+=' '+continuation;
+        // Socrative short-answer keys are printed slightly left of the stem.
+        // Keep them separate instead of merging the key into the question.
+        else if(ordered[0].transform[4]<current.textX-2)current.answers.push(continuation);
         else current.text+=' '+continuation;
       }
     }
     canvas.width=1;
     canvas.height=1;
   }
-  if(!title||!questions.length||questions.some(q=>q.options.length<2||q.options.filter(o=>o.correct).length!==1)) {
-    throw Error('This Socrative answer key has a question without exactly one readable marked choice. Review the PDF before importing.');
+  if(!title||!questions.length||questions.some(q=>q.options.length===1||q.options.length>5)) {
+    throw Error('The Socrative question layout could not be read completely. Check that the PDF contains readable question text and choices.');
   }
   return [title,...questions.flatMap((q,i)=>[
     (i+1)+'. '+q.text,
-    ...q.options.map(o=>(o.correct?'*':'')+o.letter+') '+o.text)
+    ...q.options.map(o=>(o.correct?'*':'')+o.letter+') '+o.text),
+    ...(!q.options.length&&q.answers.length?['Answer: '+q.answers.join(' ')]:[])
   ])].join('\n');
 }
 module.exports={readSocrativeKey};
