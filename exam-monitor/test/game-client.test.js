@@ -16,3 +16,16 @@ test('round timer reads the authoritative window and flags the final five second
  assert.equal(client.roundTime({...v,phase:'reveal'},800,800),null);
  assert.equal(client.roundTime({...v,deadlineAt:null},800,800),null);
 });
+
+test('game creator sends files as authenticated multipart without overriding the boundary',()=>{
+ const form=new FormData();form.append('file',new Blob(['example'],{type:'application/pdf'}),'review.pdf');
+ const controller=new AbortController();
+ const init=client.requestInit(form,{Authorization:'Bearer test-token'},'POST',{signal:controller.signal});
+ assert.equal(init.body,form);assert.equal(init.signal,controller.signal);
+ assert.deepEqual(init.headers,{Authorization:'Bearer test-token'});
+});
+test('game creator sends pasted text as JSON and omits empty request bodies',()=>{
+ const headers={Authorization:'Bearer test-token'};
+ assert.deepEqual(client.requestInit({source:'1. Test?'},headers,'POST'),{method:'POST',headers:{'Content-Type':'application/json',...headers},body:'{"source":"1. Test?"}'});
+ assert.deepEqual(client.requestInit(undefined,headers,'GET'),{method:'GET',headers,body:undefined});
+});

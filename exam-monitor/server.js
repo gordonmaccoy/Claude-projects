@@ -125,12 +125,15 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
     state.busy=true;work.set(key,state);return state;
   }
   for(const mode of ['import','generate','import-ai'])api.post('/'+mode,upload,wrap(async(req,res)=>{
+    const reviewSupplied=mode==='import-ai'&&(req.body?.reviewSupplied===true||(req.is('multipart/form-data')&&req.body?.reviewSupplied==='true'));
+    const consent=req.body?.consent===true||(req.is('multipart/form-data')&&req.body?.consent==='true');
+    if(reviewSupplied&&!consent){if(req.file)req.file.buffer.fill(0);return res.status(400).json({error:'Explicit consent is required to review supplied answers with AI.'});}
     const isAI=mode!=='import';if(isAI&&!aiConfigured){if(req.file)req.file.buffer.fill(0);return res.status(503).json({error:'AI needs Development OPENAI_API_KEY and OPENAI_MODEL configuration.'});}
     const state=beginWork(req,res,isAI);if(!state){if(req.file)req.file.buffer.fill(0);return;}
-    try{const source=req.file?await extractDocument(req.file):(req.body.source||req.body.text);const result=mode==='import'?parseTest(source,req.file?.originalname):mode==='import-ai'?await importWithAI({source,filename:req.file?.originalname}):await generate({source,prompt:req.body.prompt,count:req.body.count,types:req.body.types,difficulty:req.body.difficulty});res.json(result);}
+    try{const source=req.file?await extractDocument(req.file):(req.body.source||req.body.text);const result=mode==='import'?parseTest(source,req.file?.originalname):mode==='import-ai'?await importWithAI({source,filename:req.file?.originalname,reviewSupplied:Boolean(reviewSupplied)}):await generate({source,prompt:req.body.prompt,count:req.body.count,types:req.body.types,difficulty:req.body.difficulty});res.json(result);}
     catch(e){res.status(400).json({error:e.message||'Unable to process this material.'});}finally{state.busy=false;if(req.file)req.file.buffer.fill(0);}
   }));
-  api.post('/answer-key',wrap(async(req,res)=>{if(!aiConfigured)return res.status(503).json({error:'AI needs Development OPENAI_API_KEY and OPENAI_MODEL configuration.'});const state=beginWork(req,res,true);if(!state)return;try{const result=await completeAnswers(req.body.test);res.json(result);}catch(e){res.status(400).json({error:e.message||'Unable to determine answer keys.'});}finally{state.busy=false;}}));
+  api.post('/answer-key',wrap(async(req,res)=>{const reviewSupplied=req.body?.reviewSupplied===true;if(reviewSupplied&&req.body?.consent!==true)return res.status(400).json({error:'Explicit consent is required to review supplied answers with AI.'});if(!aiConfigured)return res.status(503).json({error:'AI needs Development OPENAI_API_KEY and OPENAI_MODEL configuration.'});const state=beginWork(req,res,true);if(!state)return;try{const result=await completeAnswers(req.body.test,{reviewSupplied});res.json(result);}catch(e){res.status(400).json({error:e.message||'Unable to determine answer keys.'});}finally{state.busy=false;}}));
   api.put('/folder-order',wrap(async(req,res)=>{
     if(!validIdList(req.body.ids,1000))return res.status(400).json({error:'Invalid folder order.'});
     if(!await store.orderFolders(req.user.id,req.body.ids))return res.status(409).json({error:'The folders changed. Refresh and try again.'});

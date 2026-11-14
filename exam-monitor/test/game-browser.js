@@ -12,7 +12,7 @@ const {chromium}=require('playwright'),{PGlite}=require('@electric-sql/pglite'),
  const sample=host.locator('.game-card').filter({hasText:'Sample Game: Easy Quiz'});
  await sample.waitFor();assert.equal(await sample.count(),1);
  assert.equal(await host.getByRole('button',{name:'Add sample game'}).count(),0);
- await host.locator('#new-game').click();await host.locator('#title').fill('Browser game');await host.locator('#questions textarea').first().fill('Which is correct?');const inputs=host.locator('.option-edit input:not([type=radio])');for(let i=0;i<4;i++)await inputs.nth(i).fill('Choice '+(i+1));await host.locator('.option-edit input[type=radio]').first().check();
+ await host.locator('#new-game').click();await host.locator('#create-manual').click();await host.locator('#title').fill('Browser game');await host.locator('#questions textarea').first().fill('Which is correct?');const inputs=host.locator('.option-edit input:not([type=radio])');for(let i=0;i<4;i++)await inputs.nth(i).fill('Choice '+(i+1));await host.locator('.option-edit input[type=radio]').first().check();
  await host.locator('#add-question').click();
  const nextQuestion=host.locator('#questions .question-card').nth(1);
  await nextQuestion.locator('textarea').first().fill('What is 1 plus 1?');

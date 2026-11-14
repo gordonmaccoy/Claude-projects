@@ -16,12 +16,14 @@ function createGameController({store,origin}){
  const host=async(s,req)=>({...game.hostView(s),joinUrl:origin(req)+'/game-player.html?session='+encodeURIComponent(s.id),displayUrl:origin(req)+'/game-display.html#'+encodeURIComponent(s.id)+'/'+s.displayToken,...(s.classroomControlKey?{classroomControlUrl:origin(req)+'/game-display.html#'+encodeURIComponent(s.id)+'/'+s.displayToken+'/'+s.classroomControlKey}:{})});
  // Bounded, expiring counters deter PIN guessing and public write flooding.
  publicApi.use(createPublicLimiter());
+ api.get('/game-folders',wrap(async(req,res)=>res.json(await store.listGameFolders(req.user.id))));
+ api.post('/game-folders',wrap(async(req,res)=>res.json(await store.createGameFolder(req.user.id,req.body?.name))));
  api.get('/games',wrap(async(req,res)=>{await store.ensureSampleGame(req.user.id,req.query.language);res.json(await store.listGames(req.user.id));}));
- api.post('/games',wrap(async(req,res)=>res.json(await store.saveGame(req.user.id,game.validateGame(req.body)))));
+ api.post('/games',wrap(async(req,res)=>res.json(await store.saveGame(req.user.id,{...game.validateGame(req.body),folderId:req.body?.folderId}))));
  api.post('/games/sample',wrap(async(req,res)=>res.json(await store.ensureSampleGame(req.user.id,req.body?.language))));
  api.post('/games/from-test',wrap(async(req,res)=>{const source=await store.getTest(req.user.id,req.body?.testId);if(!source)missing();res.json(await store.saveGame(req.user.id,game.fromTest(source,{compatibleOnly:req.body?.compatibleOnly===true})));}));
  api.get('/games/:id',wrap(async(req,res)=>res.json(await saved(req))));
- api.put('/games/:id',wrap(async(req,res)=>{await saved(req);res.json(await store.saveGame(req.user.id,{...game.validateGame(req.body),id:req.params.id},true));}));
+ api.put('/games/:id',wrap(async(req,res)=>{await saved(req);res.json(await store.saveGame(req.user.id,{...game.validateGame(req.body),folderId:req.body?.folderId,id:req.params.id},true));}));
  api.delete('/games/:id',wrap(async(req,res)=>{await saved(req);await store.deleteGame(req.user.id,req.params.id);res.json({ok:true});}));
  api.post('/games/:id/to-test',wrap(async(req,res)=>res.json(await store.saveTest(req.user.id,game.toTest(await saved(req))))));
  api.get('/game-sessions',wrap(async(req,res)=>res.json(await Promise.all((await store.listGameSessions(req.user.id)).map(s=>host(s,req))))));
