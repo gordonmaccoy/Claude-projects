@@ -204,3 +204,10 @@ Object.assign(window.examioKorean,{
  "Phone showing the Examio Call professor notification": "Examio 교수님께 문의 안내가 표시된 휴대폰",
  "Activity log showing monitoring events and the professor’s unlock and fail-score controls": "모니터링 기록 및 교수자의 잠금 해제와 실격 점수 제출 버튼"
 });
+
+Object.assign(window.examioKorean, {
+ "All Examio views can be switched between white and blue themes.": "모든 Examio 화면에서 화이트 또는 블루 테마를 선택할 수 있습니다.",
+ "White theme": "화이트 테마",
+ "Blue theme": "블루 테마",
+ "The same student quiz in blue theme": "블루 테마로 표시된 동일한 학생 퀴즈"
+});

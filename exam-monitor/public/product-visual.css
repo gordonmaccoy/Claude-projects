@@ -2,3 +2,9 @@
 @media(max-width:1000px){.student-step-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.student-step-grid .product-shot img{height:400px}.product-creation-cards article{padding:15px}.product-view-row{gap:25px}}
 @media(max-width:760px){.product-view-row,.product-authoring-layout,.product-feature-split,.product-results-grid{grid-template-columns:1fr;gap:22px}.product-view-row:nth-of-type(even)>div,.product-view-row:nth-of-type(even)>.product-shot{order:initial}.product-view-row .product-shot img{height:auto;max-height:350px}.product-view-row .product-phone img{height:350px}.product-visual-page .fp-section{padding:30px 0}.product-view-row h3{font-size:26px}.product-results-grid .product-shot img{height:auto}.product-shot{padding:8px}}
 @media(max-width:500px){.student-step-grid{grid-template-columns:1fr}.student-step-grid .product-shot img{height:400px}.student-step-heading{min-height:40px}.student-step-grid article{padding:18px}.product-visual-page .fp-hero h1{font-size:36px}}
+.product-theme-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;background:#fff;border:1px solid #d5e2eb;border-radius:16px;padding:16px;min-width:0;box-shadow:0 12px 34px #082d5b08}
+.product-theme-pair figure{margin:0;min-width:0;text-align:center}
+.product-theme-pair .product-shot{border:0;box-shadow:none;padding:0;background:transparent}
+.product-theme-pair figcaption{font-size:13px;font-weight:700;color:#082d5b;margin-top:12px}
+.product-view-row .product-theme-note{font-size:14px;color:#0758cb;margin-top:14px;line-height:1.6}
+@media(max-width:760px){.product-theme-pair{gap:10px;padding:12px}.product-view-row .product-theme-pair .product-phone img{height:auto;max-height:350px;width:100%;object-fit:contain}}
