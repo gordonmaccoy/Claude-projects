@@ -38,7 +38,7 @@ function newGameRoomName(){return 'Game: '+generateRoomName().name;}
 function newSession(ownerId,game,now=Date.now(),{requireNames=true,largeClass=false}={}){
  if(typeof largeClass!=='boolean')fail('Large class must be on or off.');
  if(typeof requireNames!=='boolean')fail('Require names must be on or off.');
- return {requireNames,id:randomUUID(),ownerId,roomName:newGameRoomName(),pin:String(randomInt(100000,1000000)),displayToken:randomBytes(24).toString('base64url'),classroomControlKey:randomBytes(24).toString('base64url'),game:validateGame({...game,largeClass}),phase:'lobby',questionIndex:-1,players:[],participants:[],recoveryRequests:[],createdAt:now,updatedAt:now,expiresAt:now+TTL,startsAt:null,deadlineAt:null,roundEndReason:null,roundEndedAt:null};
+ return {requireNames,reportVersion:1,id:randomUUID(),ownerId,roomName:newGameRoomName(),pin:String(randomInt(100000,1000000)),displayToken:randomBytes(24).toString('base64url'),classroomControlKey:randomBytes(24).toString('base64url'),game:validateGame({...game,largeClass}),phase:'lobby',questionIndex:-1,players:[],participants:[],recoveryRequests:[],createdAt:now,updatedAt:now,expiresAt:now+TTL,startsAt:null,deadlineAt:null,roundEndReason:null,roundEndedAt:null};
 }
 function active(s,now=Date.now()){if(s.phase==='closed'||s.expiresAt<=now)fail('Game has ended or expired.',410);}
 function changed(s,now){s.updatedAt=Math.max(s.updatedAt,now);s.expiresAt=Math.max(s.expiresAt,now+TTL);}
@@ -79,7 +79,7 @@ function beginQuestion(s,now){
 function finalRound(s){return s.questionIndex===s.game.questions.length-1;}
 function finalPoll(s){return finalRound(s)&&['responses-closed','reveal'].includes(s.phase);}
 function beginPodium(s,now){
- s.phase='podium';s.startsAt=null;s.deadlineAt=null;
+ s.phase='podium';s.startsAt=null;s.deadlineAt=null;s.gameCompletedAt=now;
  const placements=rankRows(s.players,'score').filter(row=>row.rank<=3);
  const ranks=[...new Set(placements.map(row=>row.rank))].sort((a,b)=>b-a);
  let at=now+(ranks[0]===1?3500:PODIUM_LEAD_MS);
@@ -88,7 +88,7 @@ function beginPodium(s,now){
 }
 function advance(s,now=Date.now()){
  active(s,now);sweep(s,now);
- if(s.phase==='lobby'){if(!s.players.length)fail('Wait for at least one player.');beginQuestion(s,now);}
+ if(s.phase==='lobby'){if(!s.players.length)fail('Wait for at least one player.');s.gameStartedAt=now;beginQuestion(s,now);}
  else if(s.phase==='media')countdown(s,now);
  else if(s.phase==='reveal'){if(finalRound(s))beginPodium(s,now);else{s.phase='leaderboard';s.scoreStartsAt=now+SCORE_LEAD_MS;}}
  else if(s.phase==='leaderboard'){
@@ -157,6 +157,31 @@ function rankRows(rows,key){
   lastScore=p[key];return {...p,rank};
  });
 }
+// Snapshot only the report fields, never the live room, keys, or individual answers.
+function completedGameReport(s){
+ if(s.reportVersion!==1||s.phase!=='podium'||!finalRound(s)||!Number.isSafeInteger(s.gameStartedAt)||!Number.isSafeInteger(s.gameCompletedAt)||!s.players.length)return null;
+ const questionCount=s.game.questions.length,participantCount=s.players.length;
+ const correctByQuestion=Array(questionCount).fill(0);
+ const percent=(correct,total)=>Math.round(100*correct/total);
+ let totalCorrect=0;
+ const participants=rankRows(s.players,'score').map(p=>{
+  let correct=0,unanswered=0;
+  s.game.questions.forEach((q,index)=>{
+   const answer=answerFor(p,q.id);
+   if(!answer)unanswered++;
+   else if(answer.correct){correct++;correctByQuestion[index]++;}
+  });
+  totalCorrect+=correct;
+  return {name:p.nickname,rank:p.rank,score:p.score,percentCorrect:percent(correct,questionCount),unanswered};
+ });
+ const questions=s.game.questions.map((q,index)=>({prompt:q.text,percentCorrect:percent(correctByQuestion[index],participantCount)}));
+ return {
+  id:randomUUID(),title:s.game.title,startedAt:s.gameStartedAt,completedAt:s.gameCompletedAt,
+  durationMs:Math.max(0,Math.min(s.roundEndedAt??s.gameCompletedAt,s.gameCompletedAt)-s.gameStartedAt),
+  participantCount,questionCount,percentCorrect:percent(totalCorrect,participantCount*questionCount),
+  participants,questions
+ };
+}
 function scoringPending(s,now){
  return s.phase==='leaderboard'&&Number.isFinite(s.scoreStartsAt)&&now<s.scoreStartsAt;
 }
@@ -213,4 +238,4 @@ function playerView(s,playerId,now=Date.now()){
   answered:!!a,answer:a?{slot:q.options.findIndex(o=>o.id===a.optionId),...(revealing?{correct:a.correct}:{}),...(pointsVisible&&scoreVisible?{points:a.points}:{})}:null};
 }
 function hostView(s,now=Date.now()){return {...publicView(s,now),displayToken:s.displayToken,...(s.classroomControlKey?{classroomControlKey:s.classroomControlKey}:{}),recoveryRequests:s.recoveryRequests.filter(r=>now-r.createdAt<5*60*1000).map(({code,nickname,createdAt})=>({code,nickname,createdAt}))};}
-module.exports={TTL,validateGame,fromTest,toTest,newGameRoomName,newSession,lobbyView,join,touch,authenticatePlayer,advance,sweep,answer,requestRecovery,approveRecovery,publicView,playerView,hostView,points};
+module.exports={TTL,validateGame,fromTest,toTest,newGameRoomName,newSession,lobbyView,join,touch,authenticatePlayer,advance,sweep,answer,requestRecovery,approveRecovery,publicView,playerView,hostView,points,completedGameReport};

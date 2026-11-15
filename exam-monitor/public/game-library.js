@@ -1,5 +1,5 @@
 (async()=>{
- const { $,el,status,professor,button,newQuestion,picture}=GameClient;let api,host,games=[],folders=[],tests=[],draft=null,editorVersion=0,importController=null,reviewController=null;const openFolders=new Map([['uncategorized',true]]);
+ const { $,el,status,professor,button,newQuestion,picture}=GameClient;let api,host,reports,games=[],folders=[],tests=[],draft=null,editorVersion=0,importController=null,reviewController=null;const openFolders=new Map([['uncategorized',true]]);
  let sessions=[],launching=false,sessionRevision=0;
  const sessionParam=()=>new URLSearchParams(location.search).get('session');
  function closeEditor(){editorVersion++;reviewController?.abort();reviewController=null;$('game-form').inert=false;$('save-game').disabled=false;$('cancel-edit').disabled=false;draft=null;$('editor').hidden=true;$('library').hidden=false;$('editor-error').textContent='';}
@@ -101,6 +101,7 @@
  }
  async function refresh(){
   const atRevision=sessionRevision;
+  const reportRefresh=reports?.refresh();
   const language=document.documentElement.lang==='ko'?'ko':'en';
   const result=await Promise.all([api('/games?language='+language),api('/game-sessions'),api('/game-folders')]);
   closeActions();games=result[0];folders=result[2];renderFolders();
@@ -110,6 +111,7 @@
   if(requested&&!sessions.some(session=>session.id===requested)){host.select(null);updateSessionUrl(null);status('That game has ended or expired.',true);}
   else if(requested&&host.id!==requested)host.select(requested,sessions.find(row=>row.id===requested));
   renderSessions();
+  await reportRefresh;
  }
  function updateSessionUrl(id){
   const url=new URL(location.href);if(id)url.searchParams.set('session',id);else url.searchParams.delete('session');
@@ -230,5 +232,15 @@
  };
  $('copy-source').onchange=copyInfo;
  $('copy-form').onsubmit=event=>{event.preventDefault();$('copy-error').textContent='';try{const source=tests.find(test=>test.id===$('copy-source').value);if(!source)throw new Error('Choose a saved quiz.');openSourceDraft(source,$('compatible-only').checked,'Copied from '+source.title);}catch(error){$('copy-error').textContent=error.message;}};
- try{api=await professor();host=GameHost.mount({api,onEnded:id=>{forgetSession(id);status('Game ended.');},onUnavailable:(id,error)=>{if([404,410].includes(error.status)){forgetSession(id);status('That game has ended or expired.',true);}else renderSessions();}});await refresh();}catch(e){status(e.message,true);$('launch-large-class').disabled=true;$('new-game').disabled=true;$('new-folder').disabled=true;$('copy-test').disabled=true;}
+ const refreshedPodiums=new Set();
+ try{api=await professor();reports=GameReports.mount({api});host=GameHost.mount({api,onPresented:view=>{
+  if(view.phase==='podium'&&view.serverNow>=(view.podiumCompleteAt??0)&&!refreshedPodiums.has(view.id)){
+   refreshedPodiums.add(view.id);void reports.refresh({announce:false});
+  }
+ },onEnded:id=>{forgetSession(id);status('Game ended.');void reports.refresh({announce:false});},onUnavailable:(id,error)=>{if([404,410].includes(error.status)){forgetSession(id);status('That game has ended or expired.',true);}else renderSessions();}});
+ api.onSessionInvalidated?.(()=>{reports.invalidate();host.select(null);location.reload();});
+ // Never cache a page snapshot with a private report displayed.
+ window.addEventListener('pagehide',event=>{if(event.persisted)reports.invalidate();});
+ window.addEventListener('pageshow',event=>{if(event.persisted)location.reload();});
+ await refresh();}catch(e){status(e.message,true);$('launch-large-class').disabled=true;$('new-game').disabled=true;$('new-folder').disabled=true;$('copy-test').disabled=true;}
 })();

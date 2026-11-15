@@ -26,3 +26,38 @@ test('game folders are scoped, game assignments atomic, and legacy records stay 
  const old={...quiz(),id:'legacy'};await db.query('INSERT INTO onscreen_v2_games(id,owner_id,data) VALUES($1,$2,$3)',['legacy','a',JSON.stringify(old)]);await require('../game-store').createGameStore(pool,{}).init();assert.equal((await store.getGame('a','legacy')).folderId,null);assert.equal((await store.listGames('a')).find(g=>g.id==='legacy').folderId,null);assert.deepEqual((await db.query("SELECT data FROM onscreen_v2_games WHERE id='legacy'")).rows[0].data,old);
  }finally{await db.close();}});
 test('account deletion removes game folders only for that owner',async()=>{const {db,pool}=await setup();try{const store=require('../store').createStore(pool);await store.init();const a=await store.createGameFolder('a','A');await store.createGameFolder('b','B');await store.saveGame('a',{...quiz(),folderId:a.id});await store.beginDeletion('a');await store.completeDeletion('a',async()=>{});assert.deepEqual(await store.listGameFolders('a'),[]);assert.equal((await db.query("SELECT id FROM onscreen_v2_game_folders WHERE owner_id='a'")).rows.length,0);assert.equal((await store.listGameFolders('b')).length,1);}finally{await db.close();}});
+
+test('podium and private report commit together, and past podium sessions are not backfilled',async()=>{
+ const {db,store}=await setup();
+ try{
+  const start=Date.now()-90000,close=start+13000,podium=close+50000;
+  const play=async (owner,{legacy=false}={})=>{
+   const session=g.newSession(owner,quiz(),start-10000);
+   if(legacy)delete session.reportVersion;
+   await store.createGameSession(session);
+   await store.mutateGame(session.id,d=>{
+    const resumeToken='z'.repeat(40);const {playerId}=g.join(d,{nickname:'Fictional',resumeToken},start-5000);
+    g.advance(d,start);g.sweep(d,start+7200);
+    g.answer(d,{playerId,resumeToken,questionIndex:0,slot:0},close);g.sweep(d,podium);
+   });
+   return session.id;
+  };
+  const id=await play('should-not-commit');
+  await db.query("ALTER TABLE onscreen_v2_game_reports ADD CONSTRAINT fake_unavailable_storage CHECK (owner_id<>'should-not-commit')");
+  await assert.rejects(store.mutateGame(id,s=>g.advance(s,podium)),/fake_unavailable_storage/);
+  assert.equal((await store.getGameSession(id)).phase,'reveal');
+  assert.deepEqual(await store.listGameReports('should-not-commit'),[]);
+  await db.query('ALTER TABLE onscreen_v2_game_reports DROP CONSTRAINT fake_unavailable_storage');
+  await store.mutateGame(id,s=>g.advance(s,podium));
+  assert.equal((await store.getGameSession(id)).phase,'podium');
+  const [report]=await store.listGameReports('should-not-commit');
+  assert.equal(report.startedAt,start);assert.equal(report.completedAt,podium);assert.equal(report.durationMs,close-start);
+  assert.notEqual(id,report.id);
+  assert.equal((await db.query("SELECT relrowsecurity FROM pg_class WHERE relname='onscreen_v2_game_reports'")).rows[0].relrowsecurity,true);
+  const other=await play('legacy',{legacy:true});
+  assert.equal((await store.getGameSession(other)).gameStartedAt,start);
+  await store.mutateGame(other,s=>g.advance(s,podium));
+  assert.equal((await store.getGameSession(other)).phase,'podium');
+  assert.deepEqual(await store.listGameReports('legacy'),[]);
+ }finally{await db.close();}
+});

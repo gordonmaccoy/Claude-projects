@@ -52,9 +52,10 @@ test('valid game room name and simultaneous claims coexist with graded route',as
  const launched=await call('/api/game-sessions',{gameId:saved.body.id,largeClass:true},true);assert.equal(launched.status,200);
  const {id,roomName,pin,displayToken}=launched.body,path='/game-api/'+id;assert.match(roomName,/^Game: [A-Za-z]+ [A-Za-z]+$/);
  assert.throws(()=>require('../rooms').roomName(roomName));
- const testName=roomName.slice(6),testSession=require('../exam').newSession('owner',null,Date.now(),{roomName:testName});
+ const testName=roomName.slice(6);assert.deepEqual((await call('/api/rooms/resolve',{roomName:testName})).body,{joinUrl:'/game-player.html?session='+id});
+ const testSession=require('../exam').newSession('owner',null,Date.now(),{roomName:testName});
  await store.createSession(testSession);
- assert.deepEqual((await call('/api/rooms/resolve',{roomName:testName})).body,{joinUrl:'/student.html?session='+testSession.id});
+ assert.equal((await call('/api/rooms/resolve',{roomName:testName})).status,409);
  const collision=game.newSession('other',quiz);collision.roomName=roomName.toUpperCase();
  const newRoom=await store.createGameSession(collision);assert.notEqual(newRoom.roomName.toLowerCase(),roomName.toLowerCase());
  assert.equal((await store.findGameRoom(roomName.toLowerCase())).id,id);
@@ -67,6 +68,7 @@ test('valid game room name and simultaneous claims coexist with graded route',as
  assert.deepEqual((await Promise.all([call(path+'/join',newP1),call(path+'/join',newP2)])).map(r=>r.status).sort(),[200,409]);
  const lobby=(await call(path+'/lobby')).body;assert.deepEqual(lobby,{largeClass:true,requireNames:true,takenAvatarIds:[avatarId(50)],phase:'lobby'});
  await call('/api/game-sessions/'+id+'/close',{},true);
+ assert.deepEqual((await call('/api/rooms/resolve',{roomName:testName})).body,{joinUrl:'/student.html?session='+testSession.id});
  assert.equal((await call('/api/rooms/resolve',{roomName})).status,404);
  assert.equal((await call('/api/game-sessions',{gameId:saved.body.id,requireNames:'false'},true)).status,400);
  const open=await call('/api/game-sessions',{gameId:saved.body.id,requireNames:false,largeClass:true},true);

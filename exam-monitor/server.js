@@ -35,12 +35,17 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
   const gameRoomResolveLimit=require('./game-routes').createPublicLimiter();
   const gameRoomPrefix=/^game\s*:\s*/i;
   const gameRoomInput=req=>typeof req.body?.roomName==='string'&&req.body.roomName.length<=100?req.body.roomName.normalize('NFKC').trim():'';
-  app.post('/api/rooms/resolve',(req,res,next)=>gameRoomPrefix.test(gameRoomInput(req))?gameRoomResolveLimit(req,res,next):next(),wrap(async(req,res)=>{
+  app.post('/api/rooms/resolve',gameRoomResolveLimit,wrap(async(req,res)=>{
     const value=gameRoomInput(req),isGame=gameRoomPrefix.test(value);
     let room;try{room=require('./rooms').roomName(isGame?value.replace(gameRoomPrefix,''):req.body?.roomName);}catch(e){return res.status(400).json({error:e.message});}
-    const session=isGame?await store.findGameRoom?.('game: '+room.key):await store.findRoom(room.key);
+    const gameSession=await store.findGameRoom?.('game: '+room.key);
+    const quizSession=isGame?null:await store.findRoom(room.key);
+    // Legacy databases can contain both room types under the same plain name.
+    // Never silently route a student into the wrong classroom.
+    if(gameSession&&quizSession)return res.status(409).json({error:'More than one active room uses that name. Scan your classroom QR code, or enter Game: before the name to join the game.'});
+    const session=gameSession||quizSession;
     if(!session)return res.status(404).json({error:'Room not found. Check the name on your classroom display.'});
-    res.json({joinUrl:(isGame?'/game-player.html':'/student.html')+'?session='+encodeURIComponent(session.id)});
+    res.json({joinUrl:(gameSession?'/game-player.html':'/student.html')+'?session='+encodeURIComponent(session.id)});
   }));
   app.use('/api', (req, res, next) => Promise.resolve().then(async () => {
     const token = /^Bearer (.+)$/.exec(req.headers.authorization || '')?.[1];

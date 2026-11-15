@@ -81,7 +81,29 @@
   const $=id=>document.getElementById(id),el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
   const status=(text,error=false)=>{$('status').textContent=text||'';$('status').classList.toggle('error',error);};
   async function json(url,body,headers,method,options){const response=await fetch(url,requestInit(body,headers,method,options));let data;try{data=await response.json();}catch{throw new Error('Unable to reach Examio. Please retry.');}if(!response.ok)throw Object.assign(new Error(data.error||'Request failed'),{status:response.status});return data;}
-  async function professor(){const config=await json('/api/config');if(!config.supabaseUrl||!config.supabaseKey)throw new Error('Sign-in is not configured.');const preferences=window.createExamioSessionPreferences(config.supabaseUrl);const auth=window.createOnScreenAuth(config.supabaseUrl,config.supabaseKey,{auth:{flowType:'pkce',persistSession:true,storage:preferences.storage}});const session=(await auth.auth.getSession()).data.session;if(!session){$('signin').hidden=false;throw new Error('Sign in to your professor account, then return to Games.');}const call=async(path,method='GET',body,options)=>{const token=(await auth.auth.getSession()).data.session?.access_token;if(!token){$('signin').hidden=false;throw Object.assign(new Error('Please sign in again.'),{status:401});}return json('/api'+path,body,{Authorization:'Bearer '+token},method,options);};call.config=Object.freeze({aiConfigured:config.aiConfigured===true,uploadMaxBytes:config.uploadMaxBytes});return call;}
+  async function professor(){
+    const config=await json('/api/config');
+    if(!config.supabaseUrl||!config.supabaseKey)throw new Error('Sign-in is not configured.');
+    const preferences=window.createExamioSessionPreferences(config.supabaseUrl);
+    const auth=window.createOnScreenAuth(config.supabaseUrl,config.supabaseKey,{auth:{flowType:'pkce',persistSession:true,storage:preferences.storage}});
+    const session=(await auth.auth.getSession()).data.session;
+    if(!session){$('signin').hidden=false;throw new Error('Sign in to your professor account, then return to Games.');}
+    const ownerId=session.user?.id;
+    let invalidated=false;
+    function sessionChanged(next){return !next||Boolean(ownerId&&next.user?.id!==ownerId);}
+    const call=async(path,method='GET',body,options)=>{
+      const active=(await auth.auth.getSession()).data.session;
+      if(invalidated||sessionChanged(active)||!active.access_token){
+        $('signin').hidden=false;throw Object.assign(new Error('Please sign in again.'),{status:401});
+      }
+      return json('/api'+path,body,{Authorization:'Bearer '+active.access_token},method,options);
+    };
+    call.onSessionInvalidated=callback=>auth.auth.onAuthStateChange?.((event,next)=>{
+      if(!invalidated&&(event==='SIGNED_OUT'||sessionChanged(next))){invalidated=true;callback();}
+    });
+    call.config=Object.freeze({aiConfigured:config.aiConfigured===true,uploadMaxBytes:config.uploadMaxBytes});
+    return call;
+  }
   function button(text,fn,cls=''){const b=el('button',text,cls);b.type='button';b.onclick=async()=>{b.disabled=true;try{await fn();}catch(e){status(e.message,true);}finally{b.disabled=false;}};return b;}
   function picture(src,alt='Question image'){if(typeof src!=='string'||!/^data:image\/(png|jpeg|webp);base64,/.test(src))return null;const img=el('img');img.src=src;img.alt=alt;img.className='question-image';return img;}
   function avatar(id, cls='player-avatar') {

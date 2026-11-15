@@ -26,6 +26,18 @@ function createGameController({store,origin}){
  api.put('/games/:id',wrap(async(req,res)=>{await saved(req);res.json(await store.saveGame(req.user.id,{...game.validateGame(req.body),folderId:req.body?.folderId,id:req.params.id},true));}));
  api.delete('/games/:id',wrap(async(req,res)=>{await saved(req);await store.deleteGame(req.user.id,req.params.id);res.json({ok:true});}));
  api.post('/games/:id/to-test',wrap(async(req,res)=>res.json(await store.saveTest(req.user.id,game.toTest(await saved(req))))));
+ api.get('/game-reports',wrap(async(req,res)=>{
+  res.set('Cache-Control','private, no-store').json(await store.listGameReports(req.user.id));
+ }));
+ api.get('/game-reports/:id',wrap(async(req,res)=>{
+  res.set('Cache-Control','private, no-store');
+  const report=await store.getGameReport(req.user.id,req.params.id);
+  if(!report)return res.status(404).json({error:'Game report not found.'});
+  res.json(report);
+ }));
+ api.post('/game-reports/delete',wrap(async(req,res)=>{
+  res.set('Cache-Control','private, no-store').json({deleted:await store.deleteGameReports(req.user.id,req.body?.ids)});
+ }));
  api.get('/game-sessions',wrap(async(req,res)=>res.json(await Promise.all((await store.listGameSessions(req.user.id)).map(s=>host(s,req))))));
  api.post('/game-sessions',wrap(async(req,res)=>{const g=await store.getGame(req.user.id,req.body?.gameId);if(!g)missing();if((await store.listGameSessions(req.user.id)).length>=3)throw Object.assign(new Error('Close an existing game before launching another.'),{status:409});let s;for(let attempt=0;attempt<5;attempt++){try{s=await store.createGameSession(game.newSession(req.user.id,g,Date.now(),{requireNames:req.body?.requireNames,largeClass:req.body?.largeClass}));break;}catch(e){if(e.code!=='23505'||attempt===4)throw e;}}res.json(await host(s,req));}));
  api.get('/game-sessions/:id',sessionWrap(async(req,res)=>{await owned(req);const session=await current(req.params.id,req.gameReceivedAt);res.json(await host(session,req));}));

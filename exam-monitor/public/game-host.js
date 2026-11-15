@@ -94,7 +94,7 @@
   if(session.classroomControlKey)tokens.push(session.classroomControlKey);
   return new URL('/game-display.html#'+tokens.map(encodeURIComponent).join('/'),origin).href;
  }
- function mount({api,onEnded=()=>{},onUnavailable=()=>{}}){
+ function mount({api,onEnded=()=>{},onUnavailable=()=>{},onPresented=()=>{}}){
   const {$,el,render}=root.GameClient;
   const panel=$('game-host-panel'),display=$('display-link'),advance=$('advance'),end=$('close-game'),
    hostStatus=$('host-status'),recovery=$('recovery'),control=root.GameClassroomControl;
@@ -129,6 +129,7 @@
      }
     }
     recovery.querySelectorAll('button').forEach(button=>{button.disabled=busy;});
+    onPresented(view);
    },
    onError(error,id,terminal){
     if(!error){if(hostStatus.classList.contains('error'))showStatus();return;}

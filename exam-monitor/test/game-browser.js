@@ -35,7 +35,7 @@ const {chromium}=require('playwright'),{PGlite}=require('@electric-sql/pglite'),
  await custom.getByRole('button',{name:'Launch Game'}).click();
  assert.equal(await host.locator('#launch-dialog #launch-large-class').isChecked(),false);await host.locator('#launch-large-class').check();
  assert.equal(await host.locator('#launch-require-names').isChecked(),true);
- const popup=host.waitForEvent('popup');await host.locator('#confirm-launch').click();const classroom=await popup;classroom.on('pageerror',e=>errors.push(e.message));await host.waitForURL('**/game-library.html?session=*');await host.locator('#active-section #game-host-panel').waitFor();assert.equal(await host.locator('#pin,#qr').count(),0);await classroom.locator('#qr').waitFor();assert.equal(await classroom.locator('#pin,#pin-row').count(),0);const roomName=await classroom.locator('#room-name').textContent();assert.match(roomName,/^Game: [A-Za-z]+ [A-Za-z]+$/);
+ const popup=host.waitForEvent('popup');await host.locator('#confirm-launch').click();const classroom=await popup;classroom.on('pageerror',e=>errors.push(e.message));await host.waitForURL('**/game-library.html?session=*');await host.locator('#active-section #game-host-panel').waitFor();assert.equal(await host.locator('#pin,#qr').count(),0);await classroom.locator('#qr').waitFor();assert.equal(await classroom.locator('#pin,#pin-row').count(),0);const roomName=await classroom.locator('#room-name').textContent();assert.match(roomName,/^[A-Za-z]+ [A-Za-z]+$/);assert.equal(await classroom.locator('a.brand').getAttribute('href'),'/');assert.equal(await classroom.locator('#join-link').evaluate(n=>getComputedStyle(n).color),'rgb(130, 195, 255)');
  await host.reload();await host.locator('#active-section #game-host-panel').waitFor();
  // A copied viewer URL cannot control the game, even from another tab in this same profile.
  assert.equal((new URL(classroom.url())).hash.split('/').length,2);
@@ -159,8 +159,28 @@ const {chromium}=require('playwright'),{PGlite}=require('@electric-sql/pglite'),
  await player.locator('.player-rank-tile[data-place="2"]').waitFor();
  await classroom.locator('.podium-step[data-place="1"] .podium-medal[data-metal="gold"]').waitFor();
  assert.equal(await classroom.locator('.podium-step[data-place="1"] .podium-names strong').textContent(),'Beta');
- assert.equal(await player.locator('.podium,.rankings').count(),0);assert.deepEqual(errors,[]);
- console.log('Game browser flow passed: avatar confirmation, three choice counts, reading, player privacy, early and timeout reveal, scores, reconnect, rank swap and podium.');
+ assert.equal(await player.locator('.podium,.rankings').count(),0);
+ const reports=host.getByRole('region',{name:'Game Reports',exact:true});
+ const report=reports.locator('details').filter({hasText:'Browser game'});
+ await report.waitFor({timeout:15000});
+ assert.equal(await report.evaluate(el=>el.open),false);
+ await report.locator('summary').click();
+ await report.getByRole('tab',{name:'Summary',exact:true}).waitFor();
+ assert.equal(await report.getByRole('tabpanel').getByText('50%',{exact:true}).count(),1);
+ await report.getByRole('tab',{name:'Participants (2)',exact:true}).click();
+ const alpha=report.getByRole('row').filter({hasText:'Alpha'});
+ assert.deepEqual((await alpha.getByRole('cell').allTextContents()).slice(0,4),['Alpha','2','33%','1']);
+ await report.getByRole('tab',{name:'Questions (3)',exact:true}).click();
+ await report.getByRole('row').filter({hasText:'Which is correct?'}).getByText('50%',{exact:true}).waitFor();
+ assert.equal(await classroom.getByRole('region',{name:'Game Reports',exact:true}).count(),0);
+ assert.equal(await player.getByRole('region',{name:'Game Reports',exact:true}).count(),0);
+ await reports.getByRole('button',{name:'Select',exact:true}).click();
+ await reports.getByRole('checkbox',{name:/Select report for Browser game/}).check();
+ host.once('dialog',dialog=>dialog.accept());
+ await reports.getByRole('button',{name:'Delete (1)',exact:true}).click();
+ await report.waitFor({state:'detached'});
+ assert.deepEqual(errors,[]);
+ console.log('Game browser flow passed: avatar confirmation, three choice counts, reading, player privacy, early and timeout reveal, scores, reconnect, rank swap, podium and report management.');
 
  }finally{if(browser)await browser.close();await runtime.close();await db.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

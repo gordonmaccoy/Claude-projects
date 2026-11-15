@@ -3,6 +3,8 @@ try{applyProfessorTheme(localStorage.getItem('exam-monitor-theme'));}catch{apply
 document.getElementById('professor-theme-toggle').onclick=()=>applyProfessorTheme(document.documentElement.dataset.theme==='dark'?'light':'dark');
 const {t}=window.examioLanguage;
 const $ = id => document.getElementById(id);
+const gameWorkspace=window.ExamioGameWorkspace.create($('game-workspace-frame'));
+const openGameTab=new URLSearchParams(location.search).get('tab')==='games';
 const els = { tbTitle: $('tb-title'), tbQuestions: $('tb-questions'), tbError: $('tb-error') };
 const socket = io();
 let resultViewVersion=0;
@@ -13,6 +15,8 @@ let accountGeneration = 0,creationVersion=0,professorTimerSnapshot=null;
 let lastWorkspaceTab = 'launch';
 let popupSessionId = null, openingDisplay = false, launching = false;
 function clearPrivateWorkspace() {
+  gameWorkspace.reset();
+  tab('launch');
   quizSharing.reset();
   closeCreation();exportsController.close();
   $('workspace-tabs').hidden=true;finishFolderDrag();if($('question-detail-dialog').open)$('question-detail-dialog').close();questionData=null;
@@ -53,6 +57,7 @@ function tab(name) {
   if(name!=='settings')lastWorkspaceTab=name;
   document.querySelectorAll('.tab').forEach(el => el.hidden = el.id !== name);
   document.querySelectorAll('[data-tab]').forEach(el => el.classList.toggle('selected', el.dataset.tab === name));
+  gameWorkspace.setActive(name==='games');
 }
 document.querySelectorAll('[data-tab]').forEach(el => el.onclick = () => { tab(el.dataset.tab); if (el.dataset.tab === 'results') refresh().catch(e => notice(e.message)); if(el.dataset.tab==='trash') refreshTrash().catch(e=>notice(e.message)); });
 function button(text, fn, className = '') { const b = document.createElement('button'); b.textContent = t(text); b.className = className; b.onclick = action(fn); return b; }
@@ -569,6 +574,7 @@ async function loadSignedInWorkspace() {
     const authSession=(await auth.auth.getSession()).data.session;
     if(registration&&await registration.resume(authSession))return;
     settings.setAccount(verified);$('account-name').textContent=account.email;$('login').hidden=true;$('workspace').hidden=false;$('workspace-tabs').hidden=false;$('signout').hidden=false;
+    if(openGameTab&&workspaceTab==='launch')tab('games');
     socket.connect();
     try {
       const onboarding=await api('/onboarding','POST',{language:window.examioLanguage.current});

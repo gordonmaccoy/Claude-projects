@@ -5,10 +5,10 @@ const views=fs.readFileSync('public/features/classroom-views.html','utf8');asser
 assert.match(views,/id="preview-carousel"/);for(const asset of ['summary-pdf.jpg','detailed-excel.png'])assert.ok(grades.includes(asset));
 for(const slug of ['monitoring','classroom-views','grading-ai','games']){const url='/features/'+slug+'.html';assert.ok(home.includes(url));const html=fs.readFileSync('public'+url,'utf8');assert.match(html,/examio-mark.svg/);assert.match(html,/<h1/);assert.match(html,/features-menu/);assert.match(html,/data-language-switch/);}
 const games=fs.readFileSync('public/features/games.html','utf8');
-assert.match(games,/href="\/game-library.html">Open Game Library/);
+assert.match(games,/href="\/professor.html\?tab=games">Open Game Library/);
 assert.match(games,/Game Mode does not create grades/);
 assert.doesNotMatch(games,/Coming soon|launch date|not available yet/i);
-assert.match(fs.readFileSync('public/professor.html','utf8'),/href="\/game-library.html" class="game-nav-link">Game Library/);
+assert.match(fs.readFileSync('public/professor.html','utf8'),/data-tab="games">Game Library/);
 assert.match(home,/Join a test or game/);
 const monitoring=fs.readFileSync('public/features/monitoring.html','utf8');assert.doesNotMatch(monitoring,/Browser-based, with clear limits/);
 });

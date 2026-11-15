@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const {PGlite}=require('@electric-sql/pglite');
 const {createStore}=require('../store');
 const {createApp}=require('../server');
-async function setup(t){const db=new PGlite();let q=Promise.resolve();const pool={async connect(){const prev=q;let release;q=new Promise(r=>release=r);await prev;return {query:(...a)=>db.query(...a),release};},async query(...a){const c=await this.connect();try{return await c.query(...a);}finally{c.release();}}};const store=createStore(pool);await store.init();const runtime=createApp({store,verifyUser:async token=>['owner','other'].includes(token)?{id:token,email:token+'@example.com'}:null,sweepInterval:0});await new Promise(r=>runtime.server.listen(0,'127.0.0.1',r));const root='http://127.0.0.1:'+runtime.server.address().port;t.after(async()=>{await runtime.close();await db.close();});const call=async(url,body,token='owner',method=body?'POST':'GET')=>{const r=await fetch(root+url,{method,headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{})},...(body?{body:JSON.stringify(body)}:{})});const text=await r.text();let data;try{data=JSON.parse(text);}catch{data={raw:text};}return {status:r.status,body:data};};return {store,call};}
+async function setup(t){const db=new PGlite();let q=Promise.resolve();const pool={async connect(){const prev=q;let release;q=new Promise(r=>release=r);await prev;return {query:(...a)=>db.query(...a),release};},async query(...a){const c=await this.connect();try{return await c.query(...a);}finally{c.release();}}};const store=createStore(pool);await store.init();const runtime=createApp({store,verifyUser:async token=>['owner','other'].includes(token)?{id:token,email:token+'@example.com'}:null,sweepInterval:0});await new Promise(r=>runtime.server.listen(0,'127.0.0.1',r));const root='http://127.0.0.1:'+runtime.server.address().port;t.after(async()=>{await runtime.close();await db.close();});const call=async(url,body,token='owner',method=body?'POST':'GET')=>{const r=await fetch(root+url,{method,headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{})},...(body?{body:JSON.stringify(body)}:{})});const text=await r.text();let data;try{data=JSON.parse(text);}catch{data={raw:text};}return {status:r.status,body:data,cacheControl:r.headers.get("cache-control")};};return {store,call,db};}
 const quiz={title:'Live review',questions:[{id:'q1',type:'mc',text:'Which?',durationSeconds:20,options:[{id:'a',text:'A'},{id:'b',text:'B'}],correctOptionId:'a'}]};
 test('game APIs isolate owners and never expose keys to player before reveal',async t=>{const {call}=await setup(t);const created=await call('/api/games',quiz);assert.equal(created.status,200);const game=created.body;assert.equal((await call('/api/games/'+game.id,null,'other')).status,404);assert.equal((await call('/api/games',null,null)).status,401);const started=await call('/api/game-sessions',{gameId:game.id});assert.equal(started.status,200);const s=started.body;assert.ok(s.displayToken);assert.ok(s.joinUrl);assert.equal((await call('/api/game-sessions/'+s.id,null,'other')).status,404);const token='x'.repeat(40);const joined=await call('/game-api/'+s.id+'/join',{nickname:'Ada',resumeToken:token},null);assert.equal(joined.status,200);assert.ok(joined.body.playerId);assert.equal(JSON.stringify(joined.body).includes('correctOptionId'),false);assert.equal((await call('/game-api/'+s.id+'/state',{playerId:joined.body.playerId,resumeToken:'y'.repeat(40)},null)).status,403);const again=await call('/game-api/'+s.id+'/join',{nickname:'Ada',resumeToken:token},null);assert.equal(again.body.playerId,joined.body.playerId);await call('/api/game-sessions/'+s.id+'/close',{});assert.equal((await call('/game-api/'+s.id+'/state',{playerId:joined.body.playerId,resumeToken:token},null)).status,404);});
 test('copy routes require explicit consent to omit unsupported test questions',async t=>{const {call,store}=await setup(t);await store.saveTest('owner',{id:'test1',title:'Mixed',questions:[quiz.questions[0],{id:'q2',type:'blank',text:'Fill',acceptedAnswers:['x'],points:1}]});assert.equal((await call('/api/games/from-test',{testId:'test1'})).status,400);const copy=await call('/api/games/from-test',{testId:'test1',compatibleOnly:true});assert.equal(copy.status,200);assert.equal(copy.body.questions.length,1);const back=await call('/api/games/'+copy.body.id+'/to-test',{});assert.equal(back.status,200);assert.notEqual(back.body.id,'test1');assert.equal(back.body.questions[0].points,1);assert.equal((await store.listSessions('owner')).length,0);});
@@ -119,3 +119,79 @@ test('simultaneous polls and stale controls cannot restart or skip a synced intr
 });
 
 test('session large-class option is per launch and leaves saved library unchanged',async t=>{const {call,store}=await setup(t);const saved=(await call('/api/games',{...quiz,largeClass:true})).body;for(const value of [undefined,false,true]){const result=await call('/api/game-sessions',{gameId:saved.id,...(value===undefined?{}:{largeClass:value})});assert.equal(result.status,200);assert.equal((await store.getGameSession(result.body.id)).game.largeClass,value===true);await call('/api/game-sessions/'+result.body.id+'/close',{});}assert.equal((await store.getGame('owner',saved.id)).largeClass,true);assert.equal((await call('/api/game-sessions',{gameId:saved.id,largeClass:'true'})).status,400);});
+
+test('completed-game reports are private snapshots and selectable deletion cannot recreate them',async t=>{
+ const {call,store}=await setup(t);
+ const saved=(await call('/api/games',quiz)).body;
+ const session=(await call('/api/game-sessions',{gameId:saved.id})).body;
+ const reports='/api/game-reports', teacher='/api/game-sessions/'+session.id;
+ const first='a'.repeat(40),second='b'.repeat(40),third='c'.repeat(40);
+ const join=async(nickname,resumeToken)=>(await call('/game-api/'+session.id+'/join',{nickname,resumeToken},null)).body;
+ const ada=await join('Ada',first),ben=await join('Ben',second);await join('Cal',third);
+ assert.equal((await call(reports,null,null)).status,401);
+ assert.deepEqual((await call(reports)).body,[]);
+ await call(teacher+'/advance',{expectedPhase:'lobby',questionIndex:-1});
+ await store.mutateGame(session.id,d=>{d.introEndsAt=Date.now()-7500;});
+ await store.mutateGame(session.id,d=>{
+  const g=require('../game');g.sweep(d,Date.now());
+  const at=d.startsAt+100;
+  g.answer(d,{playerId:ada.playerId,resumeToken:first,questionIndex:0,slot:0},at);
+  g.answer(d,{playerId:ben.playerId,resumeToken:second,questionIndex:0,slot:0},at);
+  d.deadlineAt=Date.now()-1;g.sweep(d,Date.now());d.revealAt=Date.now()-1;
+ });
+ await call('/api/games/'+saved.id,{...saved,title:'New title'},'owner','PUT');
+ assert.deepEqual((await call(reports)).body,[]);
+ const podium=await call(teacher+'/classroom-control',{expectedPhase:'reveal',questionIndex:0});
+ assert.equal(podium.body.phase,'podium');
+ const response=await call(reports), [meta]=response.body;
+ assert.equal(response.status,200);assert.equal(response.cacheControl,'private, no-store');
+ assert.deepEqual(Object.keys(meta).sort(),['completedAt','durationMs','id','participantCount','percentCorrect','questionCount','startedAt','title'].sort());
+ assert.equal(meta.title,quiz.title);assert.equal(meta.participantCount,3);assert.equal(meta.questionCount,1);assert.equal(meta.percentCorrect,67);
+ assert.ok(Number.isSafeInteger(meta.completedAt));assert.ok(Number.isSafeInteger(meta.startedAt));assert.ok(meta.durationMs>=0);
+ const detail=reports+'/'+meta.id;
+ assert.equal((await call(detail,null,'other')).status,404);
+ assert.equal((await call(detail,null,null)).status,401);
+ assert.deepEqual((await call(reports,null,'other')).body,[]);
+ const {body:snapshot,cacheControl}=await call(detail);
+ assert.equal(cacheControl,'private, no-store');
+ assert.deepEqual(snapshot.participants,[{name:'Ada',rank:1,score:1000,percentCorrect:100,unanswered:0},{name:'Ben',rank:1,score:1000,percentCorrect:100,unanswered:0},{name:'Cal',rank:3,score:0,percentCorrect:0,unanswered:1}]);
+ assert.deepEqual(snapshot.questions,[{prompt:'Which?',percentCorrect:67}]);
+ assert.deepEqual(Object.keys(snapshot).sort(),[...Object.keys(meta),'participants','questions'].sort());
+ assert.deepEqual((await call(reports+'/delete',{ids:[meta.id]},'other')).body,{deleted:0});
+ await call(teacher+'/advance',{expectedPhase:'reveal',questionIndex:0});
+ assert.equal((await call(reports)).body.length,1);
+ for(const bad of [[],[null],['bad'],{}])assert.equal((await call(reports+'/delete',{ids:bad})).status,400);
+ assert.deepEqual((await call(reports+'/delete',{ids:[meta.id,meta.id]})).body,{deleted:1});
+ await call(teacher+'/advance',{expectedPhase:'reveal',questionIndex:0});
+ assert.equal((await call(detail)).status,404);
+ assert.deepEqual((await call(reports)).body,[]);
+});
+
+test('reports survive cleared classrooms, but abandoned games do not become reports',async t=>{
+ const {call,store,db}=await setup(t);const saved=(await call('/api/games',quiz)).body;
+ const complete=async({finish,requireNames})=>{
+  const session=(await call('/api/game-sessions',{gameId:saved.id,requireNames})).body,teacher='/api/game-sessions/'+session.id;
+  await call('/game-api/'+session.id+'/join',{nickname:'Test Name',avatarId:'avatar-01',resumeToken:'t'.repeat(40)},null);
+  await call(teacher+'/advance',{expectedPhase:'lobby',questionIndex:-1});
+  if(finish){
+   await store.mutateGame(session.id,d=>{d.phase='reveal';d.roundEndedAt=Date.now();});
+   assert.equal((await call(teacher+'/advance',{expectedPhase:'reveal',questionIndex:0})).body.phase,'podium');
+  }
+  await call(teacher+'/close',{});
+  return session.id;
+ };
+ await complete({finish:false,requireNames:true});
+ assert.deepEqual((await call('/api/game-reports')).body,[]);
+ const clearedSession=await complete({finish:true,requireNames:false});
+ const [meta]=(await call('/api/game-reports')).body;
+ const {body:report}=await call('/api/game-reports/'+meta.id);
+ const avatar=require('../public/game-avatars/manifest.json').find(x=>x.id==='avatar-01');
+ assert.equal(report.participants[0].name,avatar.name);
+ assert.equal(await store.getGameSession(clearedSession),null);
+ assert.equal((await store.listSessions('owner')).length,0);
+ await store.beginDeletion('owner');
+ assert.equal(await store.getGameReport('owner',meta.id),null);
+ await store.completeDeletion('owner',async()=>{});
+ assert.deepEqual(await store.listGameReports('owner'),[]);
+ assert.deepEqual((await db.query('SELECT id FROM onscreen_v2_game_reports WHERE owner_id=$1',['owner'])).rows,[]);
+});

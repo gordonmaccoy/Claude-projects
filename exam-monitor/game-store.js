@@ -1,9 +1,11 @@
 const {randomUUID,randomInt}=require('node:crypto');
 const game=require('./game');
 const {createSampleGame,isSampleTitle}=require('./game-sample');
+const reportId=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const problem=(message,status=404)=>Object.assign(new Error(message),{status});
 function createGameStore(pool,accounts){
  const live="expires_at>$2 AND NOT EXISTS(SELECT 1 FROM onscreen_v2_accounts a WHERE a.owner_id=s.owner_id AND a.state<>'active')";
+ const visibleReport="EXISTS(SELECT 1 FROM onscreen_v2_accounts a WHERE a.owner_id=r.owner_id AND a.state='active')";
  const withFolder=data=>data?{...data,folderId:data.folderId??null}:null;
  const methods={
   async listGameFolders(ownerId){return (await pool.query("SELECT id,name FROM onscreen_v2_game_folders f WHERE owner_id=$1 AND NOT EXISTS(SELECT 1 FROM onscreen_v2_accounts a WHERE a.owner_id=f.owner_id AND a.state<>'active') ORDER BY LOWER(name),id",[ownerId])).rows;},
@@ -36,6 +38,21 @@ function createGameStore(pool,accounts){
    if(!result.rows.length)throw problem('Game not found.');return data;
   });},
   async deleteGame(ownerId,id){return accounts.withOwner(ownerId,async()=>!!(await pool.query('DELETE FROM onscreen_v2_games WHERE owner_id=$1 AND id=$2 RETURNING id',[ownerId,id])).rows.length);},
+  async listGameReports(ownerId){
+   return (await pool.query(`SELECT data-'participants'-'questions' AS data FROM onscreen_v2_game_reports r
+    WHERE owner_id=$1 AND ${visibleReport} ORDER BY completed_at DESC,id DESC`,[ownerId])).rows.map(r=>r.data);
+  },
+  async getGameReport(ownerId,id){
+   if(typeof id!=='string'||!reportId.test(id))return null;
+   return (await pool.query(`SELECT data FROM onscreen_v2_game_reports r WHERE owner_id=$1 AND id=$2 AND ${visibleReport}`,[ownerId,id])).rows[0]?.data??null;
+  },
+  async deleteGameReports(ownerId,ids){
+   if(!Array.isArray(ids)||!ids.length||ids.length>500||ids.some(id=>typeof id!=='string'||!reportId.test(id)))throw problem('Select between 1 and 500 game reports to delete.',400);
+   return accounts.withOwner(ownerId,async()=>{
+    const result=await pool.query('DELETE FROM onscreen_v2_game_reports WHERE owner_id=$1 AND id=ANY($2::text[]) RETURNING id',[ownerId,[...new Set(ids)]]);
+    return result.rows.length;
+   });
+  },
   async createGameSession(s){return accounts.withOwner(s.ownerId,async()=>{
    const active=Number((await pool.query('SELECT COUNT(*) AS count FROM onscreen_v2_game_sessions WHERE owner_id=$1 AND expires_at>$2',[s.ownerId,Date.now()])).rows[0].count);if(active>=3)throw problem('Close an existing game before launching another.',409);
    s.roomName ||= game.newGameRoomName();
@@ -50,11 +67,25 @@ function createGameStore(pool,accounts){
   async activeGameSessions(now=Date.now()){return (await pool.query("SELECT data FROM onscreen_v2_game_sessions s WHERE expires_at>$1 AND NOT EXISTS(SELECT 1 FROM onscreen_v2_accounts a WHERE a.owner_id=s.owner_id AND a.state<>'active')",[now])).rows.map(r=>r.data);},
   async mutateGame(id,fn){
    const owner=(await pool.query('SELECT owner_id FROM onscreen_v2_game_sessions WHERE id=$1',[id])).rows[0]?.owner_id;if(!owner)throw problem('Game not found or expired.');
-   return accounts.withOwner(owner,async()=>{const row=(await pool.query('SELECT data,expires_at FROM onscreen_v2_game_sessions WHERE id=$1 FOR UPDATE',[id])).rows[0];if(!row||Number(row.expires_at)<=Date.now())throw problem('Game not found or expired.',410);const session=row.data,result=await fn(session);await pool.query('UPDATE onscreen_v2_game_sessions SET data=$2,expires_at=$3 WHERE id=$1',[id,JSON.stringify(session),session.expiresAt]);return {session,result};});
+   return accounts.withOwner(owner,async()=>{
+    const row=(await pool.query('SELECT data,expires_at FROM onscreen_v2_game_sessions WHERE id=$1 FOR UPDATE',[id])).rows[0];
+    if(!row||Number(row.expires_at)<=Date.now())throw problem('Game not found or expired.',410);
+    const session=row.data,previousPhase=session.phase,result=await fn(session);
+    // Saving inside the same locked transaction prevents duplicates and guarantees
+    // a finished room and its report commit together. Never regenerate on reads.
+    const report=previousPhase!=='podium'&&game.completedGameReport(session);
+    if(report)await pool.query('INSERT INTO onscreen_v2_game_reports(id,owner_id,completed_at,data) VALUES($1,$2,$3,$4)',[report.id,owner,report.completedAt,JSON.stringify(report)]);
+    await pool.query('UPDATE onscreen_v2_game_sessions SET data=$2,expires_at=$3 WHERE id=$1',[id,JSON.stringify(session),session.expiresAt]);
+    return {session,result};
+   });
   },
   async closeGame(ownerId,id){return accounts.withOwner(ownerId,async()=>!!(await pool.query('DELETE FROM onscreen_v2_game_sessions WHERE owner_id=$1 AND id=$2 RETURNING id',[ownerId,id])).rows.length);},
   async purgeExpiredGames(now=Date.now()){await pool.query("DELETE FROM onscreen_v2_game_sessions WHERE expires_at<=$1 OR data->>'phase'='closed'",[now]);}
  };
- return {methods,async init(){await pool.query('ALTER TABLE onscreen_v2_accounts ADD COLUMN IF NOT EXISTS game_sample_initialized BOOLEAN NOT NULL DEFAULT FALSE');await pool.query('CREATE TABLE IF NOT EXISTS onscreen_v2_game_folders(id TEXT PRIMARY KEY,owner_id TEXT NOT NULL REFERENCES onscreen_v2_accounts(owner_id),name TEXT NOT NULL)');await pool.query('ALTER TABLE onscreen_v2_game_folders ENABLE ROW LEVEL SECURITY');await pool.query('CREATE UNIQUE INDEX IF NOT EXISTS onscreen_v2_game_folders_name ON onscreen_v2_game_folders(owner_id,LOWER(name))');await pool.query('CREATE TABLE IF NOT EXISTS onscreen_v2_games(id TEXT PRIMARY KEY,owner_id TEXT NOT NULL REFERENCES onscreen_v2_accounts(owner_id),data JSONB NOT NULL,updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())');await pool.query('CREATE INDEX IF NOT EXISTS onscreen_v2_games_owner ON onscreen_v2_games(owner_id)');await pool.query('CREATE TABLE IF NOT EXISTS onscreen_v2_game_sessions(id TEXT PRIMARY KEY,owner_id TEXT NOT NULL REFERENCES onscreen_v2_accounts(owner_id),pin TEXT UNIQUE NOT NULL,data JSONB NOT NULL,expires_at BIGINT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())');await pool.query("CREATE UNIQUE INDEX IF NOT EXISTS onscreen_v2_game_sessions_room_name ON onscreen_v2_game_sessions(LOWER(data->>'roomName'))");await pool.query('CREATE INDEX IF NOT EXISTS onscreen_v2_game_sessions_owner ON onscreen_v2_game_sessions(owner_id)');await pool.query('CREATE INDEX IF NOT EXISTS onscreen_v2_game_sessions_expiry ON onscreen_v2_game_sessions(expires_at)');}};
+ return {methods,async init(){await pool.query('ALTER TABLE onscreen_v2_accounts ADD COLUMN IF NOT EXISTS game_sample_initialized BOOLEAN NOT NULL DEFAULT FALSE');await pool.query('CREATE TABLE IF NOT EXISTS onscreen_v2_game_folders(id TEXT PRIMARY KEY,owner_id TEXT NOT NULL REFERENCES onscreen_v2_accounts(owner_id),name TEXT NOT NULL)');await pool.query('ALTER TABLE onscreen_v2_game_folders ENABLE ROW LEVEL SECURITY');await pool.query('CREATE UNIQUE INDEX IF NOT EXISTS onscreen_v2_game_folders_name ON onscreen_v2_game_folders(owner_id,LOWER(name))');await pool.query('CREATE TABLE IF NOT EXISTS onscreen_v2_games(id TEXT PRIMARY KEY,owner_id TEXT NOT NULL REFERENCES onscreen_v2_accounts(owner_id),data JSONB NOT NULL,updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())');await pool.query('CREATE INDEX IF NOT EXISTS onscreen_v2_games_owner ON onscreen_v2_games(owner_id)');await pool.query('CREATE TABLE IF NOT EXISTS onscreen_v2_game_sessions(id TEXT PRIMARY KEY,owner_id TEXT NOT NULL REFERENCES onscreen_v2_accounts(owner_id),pin TEXT UNIQUE NOT NULL,data JSONB NOT NULL,expires_at BIGINT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())');await pool.query("CREATE UNIQUE INDEX IF NOT EXISTS onscreen_v2_game_sessions_room_name ON onscreen_v2_game_sessions(LOWER(data->>'roomName'))");await pool.query('CREATE INDEX IF NOT EXISTS onscreen_v2_game_sessions_owner ON onscreen_v2_game_sessions(owner_id)');await pool.query('CREATE INDEX IF NOT EXISTS onscreen_v2_game_sessions_expiry ON onscreen_v2_game_sessions(expires_at)');
+  await pool.query('CREATE TABLE IF NOT EXISTS onscreen_v2_game_reports(id TEXT PRIMARY KEY,owner_id TEXT NOT NULL REFERENCES onscreen_v2_accounts(owner_id),completed_at BIGINT NOT NULL,data JSONB NOT NULL)');
+  await pool.query('ALTER TABLE onscreen_v2_game_reports ENABLE ROW LEVEL SECURITY');
+  await pool.query('CREATE INDEX IF NOT EXISTS onscreen_v2_game_reports_owner ON onscreen_v2_game_reports(owner_id,completed_at DESC,id DESC)');
+ }};
 }
 module.exports={createGameStore};

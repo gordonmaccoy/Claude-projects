@@ -16,7 +16,18 @@ const {chromium}=require('playwright'),{PGlite}=require('@electric-sql/pglite'),
  await page.locator('#tour-dialog').evaluate(el=>{if(el.open)el.close();});
  const workspaceNav=page.locator('#workspace-tabs');
  assert.deepEqual(await workspaceNav.locator('button,a').allTextContents(),['Launch Quiz','Quiz Library','Quiz Results','Game Library','Trash']);
- assert.equal(await workspaceNav.getByRole('link',{name:'Game Library'}).getAttribute('href'),'/game-library.html');
+ const workspaceUrl=page.url(),gamePanel=page.locator('#game-workspace-frame');
+ const gamesTab=workspaceNav.getByRole('button',{name:'Game Library'});
+ assert.equal(await gamePanel.getAttribute('src'),null);
+ await gamesTab.click();
+ const game=page.frameLocator('#game-workspace-frame');
+ await game.getByRole('heading',{name:'Game Library',exact:true}).waitFor();
+ assert.equal(page.url(),workspaceUrl);
+ assert.equal(await game.locator('body>header').isVisible(),false);
+ assert.equal(await page.locator('#workspace-tabs').isVisible(),true);
+ await workspaceNav.getByRole('button',{name:'Launch Quiz'}).click();
+ assert.equal(await gamePanel.isVisible(),false);
+ assert.equal(await gamePanel.getAttribute('src'),'/game-library.html?embedded=1');
  assert.ok(await workspaceNav.evaluate(nav=>{
   const trash=nav.querySelector('[data-tab="trash"]').getBoundingClientRect();
   return Math.abs(trash.right-(nav.getBoundingClientRect().right-parseFloat(getComputedStyle(nav).paddingRight)))<=2;

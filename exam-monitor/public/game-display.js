@@ -62,7 +62,7 @@
     $('join-details').hidden = !lobby;
     lobbyControls.setQr(lobby ? '/game-api/'+encodeURIComponent(id)+'/qr' : null);
     if (!lobby) return;
-    const name=typeof lobby.roomName==='string'&&lobby.roomName.trim();
+    const name=typeof lobby.roomName==='string'&&lobby.roomName.replace(/^game\s*:\s*/i,'').trim();
     $('room-name').textContent=name||'Join the game';
     const link=$('join-link'),join=GameLobbyControls.joinAddress(location);
     link.parentElement.hidden=!name;

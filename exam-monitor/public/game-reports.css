@@ -1,0 +1,47 @@
+#game-reports{margin-top:36px;padding-top:20px;border-top:1px solid var(--prof-line);color:var(--prof-text)}
+#game-reports[hidden]{display:none}
+.game-report-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.game-report-heading h2{margin:0}
+.report-actions{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}
+.report-actions button{min-height:44px}
+.report-actions button:disabled{opacity:.55;cursor:not-allowed}
+#game-report-status{color:var(--prof-muted);margin:14px 0}
+#game-report-status:empty{display:none}
+#game-report-status[data-error=true]{color:var(--prof-error)}
+#game-report-list{display:grid;gap:12px}
+.report-entry{display:flex;align-items:flex-start;gap:10px;min-width:0}
+.report-selection{display:grid;place-items:center;flex:0 0 42px;height:52px;margin:0}
+.report-selection[hidden]{display:none}
+.report-selection input{width:20px;height:20px;margin:0;accent-color:#1469d4;cursor:pointer}
+.game-library #game-reports .report-disclosure{flex:1;min-width:0;margin:0;padding:0;background:var(--prof-surface);color:var(--prof-text);border:1px solid var(--prof-line);border-radius:13px}
+.report-disclosure summary{cursor:pointer;padding:14px 16px;min-height:52px;box-sizing:border-box;border-radius:12px;overflow-wrap:anywhere}
+.report-disclosure summary::marker{color:var(--prof-link)}
+.report-disclosure summary:hover{background:var(--prof-panel)}
+.report-disclosure summary:focus-visible,.report-tabs button:focus-visible,.report-table-scroll:focus-visible,.report-tab-panel:focus-visible{outline:2px solid var(--prof-link);outline-offset:2px}
+.report-title{font-weight:700}
+.report-disclosure time{margin-inline-start:12px;color:var(--prof-muted);font-size:.88em;font-weight:500}
+.report-disclosure[open] summary{border-radius:12px 12px 0 0;border-bottom:1px solid var(--prof-line)}
+.report-detail{padding:clamp(12px,2vw,22px)}
+.report-tabs{display:flex;gap:8px;flex-wrap:wrap;border-bottom:1px solid var(--prof-line);padding-bottom:8px}
+.report-tabs button{min-height:44px;padding:8px 12px;border:1px solid transparent;border-radius:7px;font-size:.92rem}
+.game-library #game-reports .report-tabs button[aria-selected=true]{background:var(--prof-panel);color:var(--prof-link);border-color:var(--prof-line);box-shadow:inset 0 -3px var(--prof-link)}
+.report-tab-panel{margin-top:16px}
+.report-summary{display:grid;grid-template-columns:minmax(0,2fr) minmax(150px,1fr);gap:12px}
+.report-outcome,.report-counts{margin:0;padding:16px;border:1px solid var(--prof-line);border-radius:10px;background:var(--prof-panel)}
+.report-outcome{display:flex;gap:16px;align-items:center}
+.report-overall{display:grid;justify-items:center;gap:6px;font-size:.85rem;color:var(--prof-muted);text-align:center}
+.report-accuracy{white-space:nowrap;font-variant-numeric:tabular-nums}
+.report-accuracy-large{display:grid;place-items:center;width:72px;aspect-ratio:1;border-radius:50%;background:radial-gradient(closest-side,var(--prof-panel) 82%,transparent 84%),conic-gradient(var(--prof-link) var(--accuracy,0%),var(--prof-line) 0);color:var(--prof-text);font-size:1.22rem}
+.report-takeaway h4{margin:0}
+.report-takeaway p{margin:7px 0 0}
+.report-counts div{display:flex;justify-content:space-between;gap:12px;padding:7px 0}
+.report-counts div+div{border-top:1px solid var(--prof-line)}
+.report-counts dd{margin:0;font-weight:700;text-align:right}
+.report-table-scroll{overflow:auto;border-radius:8px;border:1px solid var(--prof-line)}
+.report-table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.report-table :is(th,td){padding:12px;color:var(--prof-text);text-align:left;overflow-wrap:anywhere}
+.report-table th{background:var(--prof-panel)}
+.report-table td{border-top:1px solid var(--prof-line)}
+.report-table :is(th,td):not(:first-child){text-align:right}
+.report-launch-note{color:var(--prof-muted);font-size:.9rem}
+@media(max-width:620px){.report-summary{grid-template-columns:minmax(0,1fr)}.report-table{min-width:310px}.report-disclosure time{display:block;margin:4px 0 0 17px}}

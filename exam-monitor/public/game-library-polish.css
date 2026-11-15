@@ -63,3 +63,8 @@ body:has(#library)>main{max-width:1500px;padding:28px clamp(18px,4vw,60px) 60px}
    Once inline controls are visible, the same option sits at their right edge. */
 .game-session-heading{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px 18px}
 .game-session-heading h2{margin:0}
+
+/* Visible only in the same-origin professor tab. */
+html[data-embedded-game][data-theme]:has(body.game-library),html[data-embedded-game] body.game-library{min-height:0;background:transparent}
+html[data-embedded-game] body.game-library>header{display:none}
+html[data-embedded-game] body.game-library>main{width:100%;max-width:none;padding:0 0 40px;margin:0}

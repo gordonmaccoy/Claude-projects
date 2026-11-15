@@ -97,3 +97,9 @@ test('selected player avatar has a high-contrast ring and a visible non-color se
  assert.match(css,/\[aria-pressed="true"\]\s*\{[^}]*border-color:#70f4ff[^}]*box-shadow:/);
  assert.match(css,/\[aria-pressed="true"\]::after\s*\{[^}]*content:'✓'/);
 });
+
+test('projector homepage brand and blue entry link are scoped independently of white header links',()=>{
+ const html=read('game-display.html'),css=read('game-classroom-lobby.css'),js=read('game-display.js');
+ assert.match(html,/<a class="brand" href="\/">/);assert.match(css,/\.game-display #join-link\{color:#82c3ff;/);
+ assert.ok(js.includes("lobby.roomName.replace(/^game\\s*:\\s*/i,'').trim()"));
+});
