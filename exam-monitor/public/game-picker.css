@@ -1,0 +1,9 @@
+.game-player .avatar-picker{grid-template-columns:repeat(6,minmax(0,1fr));max-height:none;overflow:visible;gap:clamp(2px,1.2vw,6px);padding:4px}
+.game-player .avatar-picker button{position:relative;min-width:0;padding:2px;aspect-ratio:1}
+.game-player .avatar-picker button.is-taken{opacity:1;background:#283e58;border-color:#526a84;cursor:not-allowed}
+.game-player .avatar-picker button.is-taken img{opacity:.28;filter:grayscale(1)}
+.game-player .avatar-picker button.is-taken::after{position:absolute;inset:0;display:grid;place-items:center;content:'×';font-size:clamp(1.4rem,6vw,2rem);font-weight:900;color:#fff;text-shadow:0 2px 4px #091c33}
+#avatar-pages{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:8px;color:#e7f2ff;font-size:.85rem}
+#avatar-pages button{width:36px;height:36px;padding:0;background:#1e486b;color:#f2f8ff;border:1px solid #6991b4;font-size:1.35rem;line-height:1}
+#avatar-pages button:disabled{opacity:.42}
+.avatar-choice{font-size:.88rem;color:#c8def5;min-height:1.1rem;margin:.65rem 0 0}

@@ -215,3 +215,23 @@ Object.assign(window.examioKorean, {
 Object.assign(window.examioKorean, {"Project the room name & QR code for login. Class activity can be displayed publicly or hidden. Teachers choose.":"로그인할 수 있도록 교실 이름과 QR 코드를 띄우세요. 교실 활동의 공개 여부는 교사가 선택합니다.","Students answer on phone, tablet, or laptop. No apps to install.":"학생은 휴대폰, 태블릿 또는 노트북으로 답합니다. 앱을 설치할 필요가 없습니다."});
 
 Object.assign(window.examioKorean,{"PDF summary":"PDF 요약","Detailed Excel results":"상세 Excel 결과"});
+
+Object.assign(window.examioKorean,{
+ "Play a classroom quiz together.":"강의실에서 함께 퀴즈를 즐기세요.",
+ "LIVE QUIZ GAMES":"실시간 퀴즈 게임",
+ "Bring a little friendly competition to class.":"수업에 즐거운 선의의 경쟁을 더해 보세요.",
+ "Bring a little friendly competition to class. | Examio":"수업에 즐거운 선의의 경쟁을 더해 보세요. | Examio",
+ "Run a teacher-led live quiz. Students join from their browsers, choose an avatar and answer timed questions together.":"교수자 주도로 실시간 퀴즈를 진행하세요. 학생들은 브라우저에서 참여해 캐릭터를 고르고 제한 시간 안에 문제를 풉니다.",
+ "Open Game Library":"게임 라이브러리 열기",
+ "Illustration of a classroom quiz game":"강의실 퀴즈 게임을 보여 주는 그림",
+ "Game Mode":"게임 모드",
+ "How Game Mode works":"게임 모드 이용 방법",
+ "Create a game from scratch or adapt a saved test. Launch it from the Game Library, share the join QR code or room name, and lead the class through each question and the final podium.":"새 게임을 만들거나 저장된 시험을 변환하세요. 게임 라이브러리에서 실행해 참여 QR 코드나 강의실 이름을 공유하고, 각 문제부터 최종 시상까지 진행하세요.",
+ "Keep games separate from graded tests.":"게임은 채점 시험과 별도로 관리하세요.",
+ "Teacher controls":"교수자 진행 컨트롤",
+ "Choose when to start questions, show scores and reveal the podium.":"문제를 시작하고 점수와 최종 순위를 공개할 시점을 정하세요.",
+ "Quick browser join":"브라우저에서 바로 참여",
+ "Students enter from a phone or computer and pick a character. No app install is needed.":"학생들은 휴대폰이나 컴퓨터로 참여해 캐릭터를 고릅니다. 앱 설치가 필요 없습니다.",
+ "No grade record":"성적에 반영되지 않음",
+ "Game Mode does not create grades or alter your saved tests.":"게임 모드는 성적을 생성하거나 저장된 시험을 변경하지 않습니다."
+});

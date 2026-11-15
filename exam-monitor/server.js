@@ -32,11 +32,15 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
   const wrap = fn => (req, res, next) => Promise.resolve(fn(req, res)).catch(next);
   app.get('/health', wrap(async (req, res) => { await store.activeSessions(); res.json({ ok: true }); }));
   app.get('/api/config', (req, res) => res.json({ supabaseUrl: config.url || '', supabaseKey: config.key || '',uploadMaxBytes:MAX_BYTES,aiConfigured,exportEmailConfigured:exportMailer.configured }));
-  app.post('/api/rooms/resolve',wrap(async(req,res)=>{
-    let room;try{room=require('./rooms').roomName(req.body?.roomName);}catch(e){return res.status(400).json({error:e.message});}
-    const session=await store.findRoom(room.key);
+  const gameRoomResolveLimit=require('./game-routes').createPublicLimiter();
+  const gameRoomPrefix=/^game\s*:\s*/i;
+  const gameRoomInput=req=>typeof req.body?.roomName==='string'&&req.body.roomName.length<=100?req.body.roomName.normalize('NFKC').trim():'';
+  app.post('/api/rooms/resolve',(req,res,next)=>gameRoomPrefix.test(gameRoomInput(req))?gameRoomResolveLimit(req,res,next):next(),wrap(async(req,res)=>{
+    const value=gameRoomInput(req),isGame=gameRoomPrefix.test(value);
+    let room;try{room=require('./rooms').roomName(isGame?value.replace(gameRoomPrefix,''):req.body?.roomName);}catch(e){return res.status(400).json({error:e.message});}
+    const session=isGame?await store.findGameRoom?.('game: '+room.key):await store.findRoom(room.key);
     if(!session)return res.status(404).json({error:'Room not found. Check the name on your classroom display.'});
-    res.json({joinUrl:'/student.html?session='+encodeURIComponent(session.id)});
+    res.json({joinUrl:(isGame?'/game-player.html':'/student.html')+'?session='+encodeURIComponent(session.id)});
   }));
   app.use('/api', (req, res, next) => Promise.resolve().then(async () => {
     const token = /^Bearer (.+)$/.exec(req.headers.authorization || '')?.[1];
@@ -128,12 +132,15 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
     state.busy=true;work.set(key,state);return state;
   }
   for(const mode of ['import','generate','import-ai'])api.post('/'+mode,upload,wrap(async(req,res)=>{
+    const reviewSupplied=mode==='import-ai'&&(req.body?.reviewSupplied===true||(req.is('multipart/form-data')&&req.body?.reviewSupplied==='true'));
+    const consent=req.body?.consent===true||(req.is('multipart/form-data')&&req.body?.consent==='true');
+    if(reviewSupplied&&!consent){if(req.file)req.file.buffer.fill(0);return res.status(400).json({error:'Explicit consent is required to review supplied answers with AI.'});}
     const isAI=mode!=='import';if(isAI&&!aiConfigured){if(req.file)req.file.buffer.fill(0);return res.status(503).json({error:'AI needs Development OPENAI_API_KEY and OPENAI_MODEL configuration.'});}
     const state=beginWork(req,res,isAI);if(!state){if(req.file)req.file.buffer.fill(0);return;}
-    try{const source=req.file?await extractDocument(req.file):(req.body.source||req.body.text);const result=mode==='import'?parseTest(source,req.file?.originalname):mode==='import-ai'?await importWithAI({source,filename:req.file?.originalname}):await generate({source,prompt:req.body.prompt,count:req.body.count,types:req.body.types,difficulty:req.body.difficulty});res.json(result);}
+    try{const source=req.file?await extractDocument(req.file):(req.body.source||req.body.text);const result=mode==='import'?parseTest(source,req.file?.originalname):mode==='import-ai'?await importWithAI({source,filename:req.file?.originalname,reviewSupplied:Boolean(reviewSupplied)}):await generate({source,prompt:req.body.prompt,count:req.body.count,types:req.body.types,difficulty:req.body.difficulty});res.json(result);}
     catch(e){res.status(400).json({error:e.message||'Unable to process this material.'});}finally{state.busy=false;if(req.file)req.file.buffer.fill(0);}
   }));
-  api.post('/answer-key',wrap(async(req,res)=>{if(!aiConfigured)return res.status(503).json({error:'AI needs Development OPENAI_API_KEY and OPENAI_MODEL configuration.'});const state=beginWork(req,res,true);if(!state)return;try{const result=await completeAnswers(req.body.test);res.json(result);}catch(e){res.status(400).json({error:e.message||'Unable to determine answer keys.'});}finally{state.busy=false;}}));
+  api.post('/answer-key',wrap(async(req,res)=>{const reviewSupplied=req.body?.reviewSupplied===true;if(reviewSupplied&&req.body?.consent!==true)return res.status(400).json({error:'Explicit consent is required to review supplied answers with AI.'});if(!aiConfigured)return res.status(503).json({error:'AI needs Development OPENAI_API_KEY and OPENAI_MODEL configuration.'});const state=beginWork(req,res,true);if(!state)return;try{const result=await completeAnswers(req.body.test,{reviewSupplied});res.json(result);}catch(e){res.status(400).json({error:e.message||'Unable to determine answer keys.'});}finally{state.busy=false;}}));
   api.put('/folder-order',wrap(async(req,res)=>{
     if(!validIdList(req.body.ids,1000))return res.status(400).json({error:'Invalid folder order.'});
     if(!await store.orderFolders(req.user.id,req.body.ids))return res.status(409).json({error:'The folders changed. Refresh and try again.'});
@@ -264,6 +271,9 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
     try{res.json(await exportMailer.send({session,user:req.user,email:req.user.email,detail:req.body.detail,requestId:req.body.requestId}));}
     catch(error){res.status(error.status||502).json({error:error.message});}
   }));
+  const gameController=require('./game-routes').createGameController({store,origin});
+  api.use(gameController.api);
+  app.use('/game-api',gameController.publicApi);
   app.use('/api', api);
   app.get('/session-language/:id',wrap(async(req,res)=>{
     const session=/^[A-F0-9]{12}$/.test(req.params.id)?await store.getSession(req.params.id):null;
@@ -392,11 +402,13 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
     finally { sweeping = false; }
   }
   const timer = sweepInterval ? setInterval(tick, sweepInterval) : null;
+  let gameSweeping=false;
+  const gameTimer=sweepInterval?setInterval(async()=>{if(gameSweeping)return;gameSweeping=true;try{await gameController.tick();}catch(error){console.error('Game storage unavailable:',error.message);}finally{gameSweeping=false;}},sweepInterval):null;
   const purgeTrash=()=>store.purgeExpiredTrash().catch(()=>console.error('Trash cleanup failed'));
   const trashTimer=sweepInterval?setInterval(purgeTrash,60*60*1000):null;
   if(trashTimer) void purgeTrash();
   const settingsTimer = sweepInterval ? setInterval(()=>settingsController.runJobs().catch(()=>console.error('Support background retry failed')),60000) : null;
-  return { app, server, io, tick, runSettingsJobs:()=>settingsController.runJobs(), close: async () => { if (timer) clearInterval(timer);if(settingsTimer)clearInterval(settingsTimer);if(trashTimer)clearInterval(trashTimer); await new Promise(resolve => io.close(resolve)); } };
+  return { app, server, io, tick, runSettingsJobs:()=>settingsController.runJobs(), close: async () => { if (timer) clearInterval(timer);if(gameTimer)clearInterval(gameTimer);if(settingsTimer)clearInterval(settingsTimer);if(trashTimer)clearInterval(trashTimer); await new Promise(resolve => io.close(resolve)); } };
 }
 async function main() {
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required. Configure PostgreSQL for this deployment.');
