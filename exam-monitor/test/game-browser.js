@@ -129,6 +129,8 @@ const {chromium}=require('playwright'),{PGlite}=require('@electric-sql/pglite'),
  assert.equal(await scores().isVisible(),false);
  await player.locator('#stage [data-result=correct]').waitFor();await other.locator('#stage [data-result=wrong]').waitFor();
  await classroom.locator('#stage[data-phase=reveal]').waitFor();
+ const pollWidth=(await classroom.locator('.vote-panel').boundingBox()).width;
+ assert.ok(pollWidth>classroom.viewportSize().width*.7,'projector poll fills most of the display');
  assert.deepEqual(await classroom.locator('.vote-count').allTextContents(),['1','1','0','0']);
  assert.match(await player.locator('#score').textContent(),/^0\b/);
  assert.equal(await player.locator('.round-earned').count(),0);

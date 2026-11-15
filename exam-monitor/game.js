@@ -3,7 +3,7 @@ const {validateTest}=require('./exam');
 const {generateRoomName}=require('./rooms');
 const avatarNames=new Map(require('./public/game-avatars/manifest.json').map(({id,name})=>[id,name]));
 const TTL=24*60*60*1000,READING_MS=5000,SCORE_LEAD_MS=1200,SCORE_DURATION_MS=1020;
-const PODIUM_LEAD_MS=1900,PODIUM_SPACING_MS=3600,PODIUM_WINNER_HOLD_MS=4000;
+const PODIUM_LEAD_MS=1900,PODIUM_SPACING_MS=3600,PODIUM_WINNER_HOLD_MS=5000;
 const INTRO_MS=2200,RESPONSE_PAUSE_MS=3800;
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
 const hash=value=>createHash('sha256').update(value).digest('hex');
@@ -83,7 +83,7 @@ function beginPodium(s,now){
  const placements=rankRows(s.players,'score').filter(row=>row.rank<=3);
  const ranks=[...new Set(placements.map(row=>row.rank))].sort((a,b)=>b-a);
  let at=now+(ranks[0]===1?3500:PODIUM_LEAD_MS);
- s.podiumSchedule=ranks.map((rank,i)=>{if(i)at+=rank===1?4500:PODIUM_SPACING_MS;return {rank,at};});
+ s.podiumSchedule=ranks.map((rank,i)=>{if(i)at+=rank===1?5200:PODIUM_SPACING_MS;return {rank,at};});
  s.podiumCompleteAt=(s.podiumSchedule.at(-1)?.at??now)+PODIUM_WINNER_HOLD_MS;
 }
 function advance(s,now=Date.now()){

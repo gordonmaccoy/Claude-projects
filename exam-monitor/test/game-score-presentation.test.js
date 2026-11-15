@@ -155,12 +155,12 @@ test('server gives each occupied place its own beat and holds the winner before 
  s.phase='leaderboard';s.questionIndex=0;s.scoreStartsAt=1000;
  g.advance(s,4000);
  const v=g.publicView(s,4000);
- assert.deepEqual(v.podiumSchedule,[{rank:3,at:5900},{rank:2,at:9500},{rank:1,at:14000}]);
- assert.equal(v.podiumCompleteAt,18000);
- assert.equal(g.publicView(s,17999).leaderboard.length,3);
- assert.equal(g.publicView(s,18000).leaderboard.length,4);
- assert.equal(g.playerView(s,s.players[3].id,17999).rank,undefined);
- assert.equal(g.playerView(s,s.players[3].id,18000).rank,4);
+ assert.deepEqual(v.podiumSchedule,[{rank:3,at:5900},{rank:2,at:9500},{rank:1,at:14700}]);
+ assert.equal(v.podiumCompleteAt,19700);
+ assert.equal(g.publicView(s,19699).leaderboard.length,3);
+ assert.equal(g.publicView(s,19700).leaderboard.length,4);
+ assert.equal(g.playerView(s,s.players[3].id,19699).rank,undefined);
+ assert.equal(g.playerView(s,s.players[3].id,19700).rank,4);
 });
 
 test('podium riser faces give each revealed player a name, medal and score',()=>{
@@ -206,4 +206,28 @@ test('post-podium standings are ordered, independently scrollable and omit all r
  control.onclick();motion.at(3000);motion.at(8500);
  assert.equal(viewport.scrollTop,180);assert.equal(control.textContent,'Replay scroll');
  control.onclick();assert.equal(viewport.scrollTop,0);
+});
+test('overflow podium ties remain named after the ceremony, without repeating podium names',()=>{
+ const row=(id,rank,score)=>({id,nickname:'Player '+id,rank,score});
+ const first=[row('A',1,1000),row('B',2,0),row('C',2,0),row('D',2,0),row('E',2,0)];
+ const allTie=['A','B','C','D','E'].map(id=>row(id,1,0));
+ const goldTie=['A','B','C','D'].map(id=>row(id,1,1000)).concat(row('E',5,0));
+ for(const [leaderboard,overflow,places] of [[first,['E'],['2']],[allTie,['D','E'],['1','1']],[goldTie,['E','D'],['5','1']]]){
+  const x=fixture({reduced:true}),base={...common,phase:'podium',podiumCompleteAt:5100,leaderboard};
+  x.render({...base,serverNow:5000});
+  assert.equal(x.stage.querySelector('.final-standings'),null);
+  x.render({...base,serverNow:5200});
+  const names=x.stage.querySelectorAll('.podium-names').flatMap(list=>list.querySelectorAll('strong'));
+  const rest=x.stage.querySelectorAll('.standings-row');
+  assert.deepEqual(rest.map(n=>n.querySelector('strong').textContent),overflow.map(id=>'Player '+id));
+  assert.deepEqual(rest.map(n=>n.dataset.place),places);
+  assert.deepEqual([...names,...rest.map(n=>n.querySelector('strong'))].map(n=>n.textContent).sort(),leaderboard.map(p=>p.nickname).sort());
+ }
+});
+
+test('classroom vote view reserves more stage space without enlarging professor or phone polls',()=>{
+ const css=fs.readFileSync(require.resolve('../public/game-stage.css'),'utf8');
+ assert.match(css,/\.game-display #stage\[data-phase=reveal\] \.vote-panel\s*\{[^}]*max-width:min\(100%,88vw,1560px\)/);
+ assert.match(css,/\.game-display #stage\[data-phase=reveal\] \.vote-row\s*\{[^}]*font-size:clamp\(1\.2rem,2\.8vw,2\.2rem\)/);
+ assert.match(css,/\.game-display #stage\[data-phase=reveal\] \.vote-track\s*\{[^}]*height:clamp\(10px,1\.6dvh,19px\)/);
 });

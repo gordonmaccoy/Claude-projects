@@ -10,14 +10,14 @@
  const showSounds=Object.freeze({
   gong:{url:'/game-sounds/responses-closed.mp3',duration:3.25,level:.85},
   fanfare:{url:'/game-sounds/gold-fanfare.mp3',duration:2.85,level:.66},
-  cheer:{url:'/game-sounds/podium-cheering.mp3',duration:3.2,level:.72}
+  cheer:{url:'/game-sounds/podium-cheering.mp3',duration:4.8,level:.72}
  });
  function podiumSoundEvents(placements){
   const events=[];
   for(const {rank,startIn} of placements){
    if(rank===1&&startIn>=3000)events.push({kind:'fanfare',startIn:startIn-3000,duration:2.85});
    else if(rank===1&&startIn>=900)events.push({kind:'fanfare',startIn:0,duration:(startIn-120)/1000});
-   events.push({kind:'cheer',startIn,duration:rank===1?3.2:1.35,rank});
+   events.push({kind:'cheer',startIn,duration:rank===1?4.8:2.025,rank});
   }
   return events.sort((a,b)=>a.startIn-b.startIn);
  }
@@ -122,9 +122,9 @@
    closeTimer=setTimeout(stop,Math.ceil(tail*1000));
   }
   function overlay(kind,delay=0){if(!bus)return;const t=ctx.currentTime+Math.max(.015,delay/1000);if(kind==='gong')gong(t);else fanfare(kind,t);}
-  function cheer(t,isWinner){
+  function cheer(t,duration){
    // Distant crowd: a rolling mid-frequency bed, layered hand claps, and a few whoops.
-   const count=isWinner?35:25;
+   const count=Math.max(1,Math.floor((duration-.42)/.05));
    for(let i=0;i<count;i++){
     const time=t+i*.05+Math.random()*.028;
     const n=ctx.createBufferSource(),filter=ctx.createBiquadFilter(),g=ctx.createGain();
@@ -155,22 +155,25 @@
    for(const {kind,rank,startIn,duration} of podiumSoundEvents(placements)){
     const t=origin+Math.max(.015,startIn/1000);
     if(sample(kind,t,duration))continue;
-    if(kind==='cheer')cheer(t,rank===1);
+    if(kind==='cheer')cheer(t,duration);
     else if(duration>=2.7)royalFanfare(t);
     else fanfare('lead',t);
    }
-   const tail=Math.max(...placements.map(x=>x.startIn))+(finale?3350:1800);
-   closeTimer=setTimeout(stop,tail);
+   const tail=Math.max(...podiumSoundEvents(placements).map(x=>x.startIn+x.duration*1000))+50;
+   closeTimer=setTimeout(()=>{if(activeKey===key)stop();},tail);
   }
   return {resume:()=>ctx.resume(),volume:v=>master.gain.setTargetAtTime(v,ctx.currentTime,.02),question,lobby,scoreboard,podium,cue,overlay,stop,dispose(){assetRequests.abort();stop();ctx.close();}};
  }
  function create({button,slider},env={}){
   const now=env.now||Date.now;let storage=env.storage;if(storage===undefined)try{storage=root.localStorage;}catch{}let prefs={volume:.35};try{prefs={...prefs,...JSON.parse(storage?.getItem('examio-game-audio')||'{}')};}catch{}
   let volume=Number.isFinite(Number(prefs.volume))?Math.max(0,Math.min(1,Number(prefs.volume))):.35,muted=prefs.muted===true,enabled=false,activating=false,engine=null,view=null,received=0,session=null,pick=shuffleBag(),selected=new Map(),lastCue=null,destroyed=false,mode=null;
+  const later=env.setTimeout||setTimeout,cancel=env.clearTimeout||clearTimeout;let musicTimer=null;
+  function clearMusicTimer(){if(musicTimer!==null)cancel(musicTimer);musicTimer=null;}
   function label(){button.textContent=enabled?'Mute sound':muted?'Unmute sound':'Enable sound';button.setAttribute('aria-pressed',String(enabled));}
   function save(){try{storage?.setItem('examio-game-audio',JSON.stringify({volume,muted}));}catch{}}
   function sync(cue,gong=false){
-   if(!engine)return;
+   clearMusicTimer();
+   if(destroyed||!engine)return;
    if(!enabled||volume===0){if(mode)engine.stop();mode=null;return;}
    engine.volume(volume);if(!view)return;
    if(view.phase==='lobby'){
@@ -193,6 +196,16 @@
    }
    if(view.phase==='podium'&&Array.isArray(view.podiumSchedule)&&engine.podium){
     const key=view.id+':podium:'+view.questionIndex;
+    // A response sent before the local completion timer may arrive afterward.
+    if(mode===key+':music')return;
+    if(Number.isFinite(view.podiumCompleteAt)&&Number.isFinite(view.serverNow)){
+     const remaining=view.podiumCompleteAt-(view.serverNow+Math.max(0,now()-received));
+     if(remaining<=0&&engine.scoreboard){
+      if(mode!==key+':music'){mode=key+':music';engine.scoreboard(mode,null);}
+      return;
+     }
+     if(remaining>0)musicTimer=later(()=>sync(),remaining);
+    }
     if(mode!==key){mode=key;const future=futurePodiumCues(view,received,now());engine.podium(key,future,future.some(x=>x.rank===1));}
     return;
    }
@@ -203,7 +216,7 @@
   label();slider.min='0';slider.max='100';slider.step='1';slider.value=String(Math.round(volume*100));
   button.addEventListener('click',async()=>{
    if(destroyed||activating)return;
-   if(enabled){enabled=false;muted=true;mode=null;engine?.stop();save();label();return;}
+   if(enabled){clearMusicTimer();enabled=false;muted=true;mode=null;engine?.stop();save();label();return;}
    activating=true;
    try{if(!engine)engine=(env.engine||webEngine)();await engine.resume();if(destroyed)return;enabled=true;muted=false;save();label();sync();}
    catch{enabled=false;button.textContent='Sound unavailable';button.setAttribute('aria-pressed','false');}
@@ -218,7 +231,7 @@
     const key=next.id+':'+next.questionIndex+':'+cue;if(lastCue===key)cue=null;else lastCue=key;
    }else cue=null;
    view=next;received=now();sync(cue,gong);
-  },stop(){destroyed=true;if(engine?.dispose)engine.dispose();else engine?.stop();enabled=false;label();}};
+  },stop(){clearMusicTimer();destroyed=true;if(engine?.dispose)engine.dispose();else engine?.stop();enabled=false;label();}};
  }
  const api={create,tracks,shuffleBag,windowFor,isStaleView,scoreSoundWindow,futurePodiumCues,showSounds,podiumSoundEvents};if(typeof module!=='undefined'&&module.exports)module.exports=api;root.GameAudio=api;
 })(typeof window==='undefined'?globalThis:window);

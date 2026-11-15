@@ -300,6 +300,7 @@
   function podiumComplete(view){
     return view.serverNow>=(view.podiumCompleteAt??view.podiumSchedule?.at(-1)?.at??0);
   }
+  const podiumNameLimit=3;
   function podium(stage,view,previous) {
     const ceremony=el('div',undefined,'podium podium-risers');
     const winners=(view.leaderboard||[]).filter(p=>p.rank<=3);
@@ -334,31 +335,39 @@
       const medal=el('span',String(rank),'podium-medal');medal.dataset.metal={1:'gold',2:'silver',3:'bronze'}[rank];
       medal.setAttribute('aria-hidden','true');base.append(medal);
       const names=el('ul',undefined,'podium-names');
-      for(const p of groupWinners.slice(0,3)){
+      for(const p of groupWinners.slice(0,podiumNameLimit)){
         const entry=el('article',undefined,'podium-person');
         entry.append(avatar(p.avatarId,'player-avatar feature-avatar'));people.append(entry);
         const label=el('li');label.append(el('strong',p.nickname),el('span',pointsText(p.score),'podium-total'));names.append(label);
       }
-      if(groupWinners.length>3)names.append(el('li','+'+(groupWinners.length-3)+' tied','podium-total'));
+      if(groupWinners.length>podiumNameLimit)names.append(el('li','+'+(groupWinners.length-podiumNameLimit)+' tied','podium-total'));
       base.append(names);
       group.append(people,base);ceremony.append(group);
     }
     stage.append(ceremony);
   }
   function standingsCredits(view){
-    const rows=(view.leaderboard||[]).filter(row=>row.rank>=4).sort((a,b)=>a.rank-b.rank);
-    if(!rows.length)return null;
+    const leaderboard=view.leaderboard||[];
+    const rows=leaderboard.filter(row=>row.rank>=4).sort((a,b)=>a.rank-b.rank);
+    const ties=[1,2,3].flatMap(rank=>leaderboard.filter(row=>row.rank===rank).slice(podiumNameLimit));
+    if(!rows.length&&!ties.length)return null;
     const credits=el('section',undefined,'final-standings');
     const heading=el('div',undefined,'standings-header');heading.append(el('h3','Class standings'));
     const viewport=el('div',undefined,'standings-list');viewport.tabIndex=0;viewport.setAttribute('tabindex','0');
-    viewport.setAttribute('role','region');viewport.setAttribute('aria-label','Class standings, fourth place onward');
-    const list=el('ol');
-    for(const p of rows){
-      const row=el('li',undefined,'standings-row');row.dataset.place=String(p.rank);
-      row.append(el('span','#'+p.rank,'standings-place'),el('strong',p.nickname),el('span',pointsText(p.score),'standings-score'));
-      list.append(row);
-    }
-    viewport.append(list);credits.append(heading,viewport);
+    viewport.setAttribute('role','region');
+    viewport.setAttribute('aria-label',ties.length?'Class standings and additional podium ties':'Class standings, fourth place onward');
+    const makeList=entries=>{
+      const list=el('ol');
+      for(const p of entries){
+        const row=el('li',undefined,'standings-row');row.dataset.place=String(p.rank);
+        row.append(el('span','#'+p.rank,'standings-place'),el('strong',p.nickname),el('span',pointsText(p.score),'standings-score'));
+        list.append(row);
+      }
+      return list;
+    };
+    if(rows.length)viewport.append(makeList(rows));
+    if(ties.length)viewport.append(el('h4','Additional podium ties','standings-ties-heading'),makeList(ties));
+    credits.append(heading,viewport);
     if(!reduced()&&root.requestAnimationFrame){
       const button=el('button','Pause scroll','standings-play');button.type='button';heading.append(button);
       let running,startedAt,pixels,epoch=0;

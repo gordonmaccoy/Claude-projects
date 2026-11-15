@@ -98,6 +98,31 @@
 .animated-chart .vote-fill{animation:vote-fill-in .45s cubic-bezier(.18,.6,.3,1) both}
 @keyframes vote-fill-in{from{transform:scaleX(0)}to{transform:scaleX(1)}}
 @media(max-width:480px){.vote-answer{font-size:.9em}.vote-key{font-size:.7em}}
+/* Classroom projection: roughly double the desktop panel width, with
+   viewport-height caps so the fifth choice still fits on shorter displays. */
+.game-display #stage[data-phase=reveal] .vote-panel{
+  max-width:min(100%,88vw,1560px);
+  margin:clamp(10px,2dvh,24px) auto 8px;
+  padding:clamp(12px,2.25vw,34px);
+}
+.game-display #stage[data-phase=reveal] .vote-heading h3{font-size:clamp(1.35rem,3vw,2.9rem)}
+.game-display #stage[data-phase=reveal] .vote-heading>span{font-size:clamp(.95rem,1.75vw,1.65rem)}
+.game-display #stage[data-phase=reveal] .vote-row{
+  gap:clamp(8px,1.8vw,28px);
+  padding:clamp(5px,1.05dvh,15px) 0;
+  font-size:clamp(1.2rem,2.8vw,2.2rem);
+}
+.game-display #stage[data-phase=reveal] :is(.vote-letter,.vote-count){
+  font-size:clamp(1.05rem,min(2.55vw,4.6dvh),2.05rem);
+}
+.game-display #stage[data-phase=reveal] .vote-track{height:clamp(10px,1.6dvh,19px)}
+.game-display #stage[data-phase=reveal] .vote-answer .question-image{
+  max-height:clamp(38px,9dvh,78px);max-width:min(100%,162px);
+}
+@media (max-height:780px){
+  .game-display #stage[data-phase=reveal]>.question-text{margin:.45em 0}
+  .game-display #stage[data-phase=reveal]>.question-image{max-height:min(20dvh,168px);margin:8px auto}
+}
 .rankings li{position:relative;transform-origin:center}
 .game-display .rankings .points{flex-shrink:0}
 .game-display .rankings li{border:1px solid #6e95bd56;border-radius:14px;padding:clamp(7px,1.4vw,16px);margin-bottom:6px;background:#173755}
@@ -275,6 +300,7 @@
 #stage .standings-play{padding:6px 10px;font-size:.82rem;line-height:1.1}
 .standings-list{max-height:clamp(114px,25dvh,240px);overflow:auto;overscroll-behavior:contain;scrollbar-width:thin}
 .standings-list ol{margin:0;padding:0;list-style:none}
+.standings-ties-heading{margin:0;padding:8px 12px;font-size:.9rem;border-bottom:1px solid #426887}
 .standings-row{display:grid;grid-template-columns:3.3ch minmax(0,1fr) max-content;align-items:center;gap:8px;padding:8px 12px;line-height:1.25;border-bottom:1px solid #365778;overflow-wrap:anywhere}
 .standings-place{font-weight:800}
 .standings-score{color:#c4def5;font-variant-numeric:tabular-nums;font-size:.89em;white-space:nowrap}
