@@ -41,7 +41,7 @@ window.examioStudentSecurity=function({document,window,root,button,status,report
   try{await document.documentElement.requestFullscreen();status.textContent='';}
   catch{status.textContent=t('Fullscreen could not be opened. You can continue or try again.');}
  });
- return {update(view){
+ return {syncFullscreen(){if(enabled('fullscreen'))report(document.fullscreenElement?'fullscreen-entered':'fullscreen-exit');},update(view){
   const wasFocus=enabled('focusVisibility'),wasFullscreen=enabled('fullscreen');
   active=view?.phase==='running'&&!view.failed&&!view.result&&!view.completed&&!view.terminal;
   testActive=active&&view.mode==='test';policy=view?.security||{};

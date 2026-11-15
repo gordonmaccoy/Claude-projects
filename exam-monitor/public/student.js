@@ -63,7 +63,7 @@ initializeStudentLanguage();
 socket.on('connect',async()=> {
   clearTimeout(reconnectTimer);
   const resumeToken=savedToken();
-  if(resumeToken) await join({resumeToken});
+  if(resumeToken){await join({resumeToken});securityGuard.syncFullscreen();}
   else setConnected(true);
 });
 socket.on('disconnect',()=> {

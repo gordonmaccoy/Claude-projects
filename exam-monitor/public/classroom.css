@@ -27,3 +27,5 @@
 .class-activity-hint{font-size:11px;max-width:240px;color:var(--examio-muted);line-height:1.4}
 [data-theme=dark] .class-activity-switch input:checked+.class-switch-track{background:white;border-color:white}
 [data-theme=dark] .class-activity-switch input:checked+.class-switch-track::after{background:#0758cb}
+
+.student .student-fullscreen{color:#fff;font-size:13px;font-weight:600;white-space:nowrap;margin-left:auto}

@@ -28,3 +28,5 @@ test('master off still auto-submits at deadline and completes calculators withou
 const {s,id,st}=setup({enabled:false});s.durationMinutes=1;exam.start(s,2000);st.draft={q0:'a'};exam.sweep(s,62000);assert.equal(st.submission.originalScore,1);assert.deepEqual(st.events,[]);
 const calc=exam.newSession('p',null,1000,{security:{enabled:false}}),joined=exam.join(calc,{name:'Kim',number:'1'},1000);exam.completeCalculator(calc,joined.studentId,2000);assert.deepEqual(calc.students[0].events,[]);assert.equal(exam.publicView(calc).students[0].status,'completed');
 });
+
+test('fullscreen presence is public without affecting activity or failure on exit',()=>{const {s,id,st}=setup({fullscreen:true});exam.start(s,2000);exam.securityEvent(s,id,'fullscreen-entered',2100);assert.equal(exam.publicView(s,2100).students[0].fullscreen,true);exam.securityEvent(s,id,'fullscreen-exit',2200);const view=exam.publicView(s,2200).students[0];assert.equal(view.fullscreen,false);assert.equal(view.status,'green');assert.equal(exam.isFailed(st),false);assert.equal(st.visible,true);});

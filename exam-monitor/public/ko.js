@@ -591,3 +591,5 @@ Object.assign(window.examioKorean, {
 });
 
 Object.assign(window.examioKorean,{"Your message has been sent. We\'ll reply soon.":"메시지가 전송되었습니다. 곧 답변드리겠습니다.","We’ll reply to your sign-in email. Please don’t include student records or passwords.":"로그인 이메일로 답변드립니다. 학생 기록이나 비밀번호는 포함하지 마세요."});
+
+Object.assign(window.examioKorean,{"Full Screen":"전체 화면"});
