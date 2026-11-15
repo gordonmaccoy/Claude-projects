@@ -8,7 +8,7 @@ const games=fs.readFileSync('public/features/games.html','utf8');
 assert.match(games,/href="\/game-library.html">Open Game Library/);
 assert.match(games,/Game Mode does not create grades/);
 assert.doesNotMatch(games,/Coming soon|launch date|not available yet/i);
-assert.match(fs.readFileSync('public/professor.html','utf8'),/href="\/game-library.html" class="game-nav-link">Games/);
+assert.match(fs.readFileSync('public/professor.html','utf8'),/href="\/game-library.html" class="game-nav-link">Game Library/);
 assert.match(home,/Join a test or game/);
 const monitoring=fs.readFileSync('public/features/monitoring.html','utf8');assert.doesNotMatch(monitoring,/Browser-based, with clear limits/);
 });

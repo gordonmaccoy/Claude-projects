@@ -14,13 +14,12 @@ test('large class is a launch-only choice, unchecked by default and sent per ses
  const dialog=html.match(/<dialog id="launch-dialog"[\s\S]*?<\/dialog>/)?.[0];
  const section=html.slice(html.indexOf('id="active-section"'),html.indexOf('id="editor"'));
  assert.ok(dialog);
- assert.doesNotMatch(dialog,/id="launch-large-class"/);
- assert.match(section,/<label[^>]*><input type="checkbox" id="launch-large-class"><span>Select for large Class \(More than 30 students\)<\/span><\/label>/);
+ assert.match(dialog,/id="launch-large-class"/);
+ assert.doesNotMatch(section,/id="launch-large-class"/);
+ assert.match(dialog,/31–50 players/);
  assert.doesNotMatch(html,/id="(?:create-)?large-class(?:-hint)?"/);
- assert.doesNotMatch(html,/Adds 20 more avatar choices|Use for 31–50 players/);
  assert.match(js,/\$\('launch-large-class'\)\.checked=false/);
- assert.match(js,/host\.id\?\$\('game-host-toolbar'\):\$\('game-next-launch'\)/);
- assert.match(js,/slot\.append\(setting\)/);
+ assert.doesNotMatch(js,/slot\.append\(setting\)/);
  assert.match(js,/largeClass=\$\('launch-large-class'\)\.checked/);
  assert.match(js,/api\('\/game-sessions','POST',\{gameId,requireNames,largeClass\}\)/);
  assert.doesNotMatch(js,/creationOptions\.largeClass|\$\('large-class'\)/);

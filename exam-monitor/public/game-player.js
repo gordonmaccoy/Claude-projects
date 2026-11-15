@@ -35,7 +35,8 @@
    b.classList.toggle('is-taken',isTaken);
   }
   $('avatar-pages').hidden=!large||!isOpen;
-  const pageLabel=(pickerPage+1)+' / 2';
+  const pageLabel='Page '+(pickerPage+1)+' of 2';
+  $('avatar-range').textContent=large?'Characters '+(start+1)+'–'+end+' of 50':'Choose from 30 characters';
   if($('avatar-page-label').textContent!==pageLabel)$('avatar-page-label').textContent=pageLabel;
   $('avatar-prev').disabled=pickerPage===0;$('avatar-next').disabled=pickerPage===1;
   const size=large?50:30,full=GameAvatars.ids.slice(0,size).filter(a=>taken.has(a)).length>=size;

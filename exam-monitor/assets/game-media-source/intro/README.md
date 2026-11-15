@@ -1,17 +1,11 @@
-# Original Examio numbered round introductions
+# Examio numbered introductions
 
-25 original 1024×576 WebP images, named question-1.webp through question-25.webp.
-Intended public paths: /game-intro/question-N.webp.
+The active round artwork is created from original geometry in Pillow, using
+the installed DejaVu font outlines noted in FONT-LICENSE.txt. No fonts are
+redistributed with the artwork. Broad themes are documented in ../README.md.
 
-Created programmatically for this task using original geometric arrangements,
-gradients, decorative marks, and numerals. No external artwork, logos, characters,
-third-party brand elements, or network inputs were used.
-
-Numeral font: DejaVu Sans Bold, installed as
-/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf.
-DejaVu modifications are public domain; underlying Bitstream Vera font license
-permits use and distribution. The installed font copyright/license is included
-as FONT-LICENSE.txt. Font binary is not redistributed in this bundle.
-
-Rebuild: python generate.py (Pillow). Only the 25 question-*.webp files need to be
-served; manifest.json, source, contact sheet, and license are provenance artifacts.
+To reproduce the set, run make_cards_1_8.py, make_cards_9_16.py,
+make_fifteen.py and make_cards_17_25.py, then collect their WebP outputs in
+public/game-intro. The two range scripts skip question 15; it is generated
+by its own script. The older generate.py and manifest.json describe the first,
+uniform fallback pack, not this set.

@@ -78,6 +78,7 @@
    closeActions();launchTarget=game;
    $('launch-title').textContent=game.title;
    $('launch-require-names').checked=true;
+   $('launch-large-class').checked=false;
    launchDialog.showModal();
    $('launch-require-names').focus();
   };
@@ -115,9 +116,6 @@
   history.replaceState(null,'',url);
  }
  function renderSessions(){
-  const setting=$('launch-large-class').closest('label');
-  const slot=host.id?$('game-host-toolbar'):$('game-next-launch');
-  if(setting.parentNode!==slot)slot.append(setting);
   const items=$('active-games');items.replaceChildren();
   for(const session of sessions){
    const url=new URL(location.href);url.searchParams.set('session',session.id);

@@ -31,8 +31,9 @@ const {chromium}=require('playwright'),{PGlite}=require('@electric-sql/pglite'),
  await lastQuestion.locator('.option-edit input[type=radio]').first().check();
  await host.locator('#save-game').click();
  const custom=host.locator('.game-card').filter({hasText:'Browser game'});
- assert.equal(await host.locator('#active-section #launch-large-class').isChecked(),false);await host.locator('#launch-large-class').check();
+ assert.equal(await host.locator('#active-section #launch-large-class').count(),0);
  await custom.getByRole('button',{name:'Launch Game'}).click();
+ assert.equal(await host.locator('#launch-dialog #launch-large-class').isChecked(),false);await host.locator('#launch-large-class').check();
  assert.equal(await host.locator('#launch-require-names').isChecked(),true);
  const popup=host.waitForEvent('popup');await host.locator('#confirm-launch').click();const classroom=await popup;classroom.on('pageerror',e=>errors.push(e.message));await host.waitForURL('**/game-library.html?session=*');await host.locator('#active-section #game-host-panel').waitFor();assert.equal(await host.locator('#pin,#qr').count(),0);await classroom.locator('#qr').waitFor();assert.equal(await classroom.locator('#pin,#pin-row').count(),0);const roomName=await classroom.locator('#room-name').textContent();assert.match(roomName,/^Game: [A-Za-z]+ [A-Za-z]+$/);
  await host.reload();await host.locator('#active-section #game-host-panel').waitFor();

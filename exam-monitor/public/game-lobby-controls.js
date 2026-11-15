@@ -43,7 +43,14 @@
     });
     return {setQr,closeSound};
   }
-  const api={create};
+  function joinAddress(location){
+    if(['examio.io','www.examio.io'].includes(location.hostname)){
+      return {label:'www.examio.io',href:'https://www.examio.io/'};
+    }
+    if(location.hostname==='claude-projects-development.up.railway.app')return {label:'Examio Development',href:'/'};
+    return {label:location.host||'Examio',href:'/'};
+  }
+  const api={create,joinAddress};
   if(typeof module==='object'&&module.exports)module.exports=api;
   else root.GameLobbyControls=api;
 })(globalThis);

@@ -64,8 +64,10 @@
     if (!lobby) return;
     const name=typeof lobby.roomName==='string'&&lobby.roomName.trim();
     $('room-name').textContent=name||'Join the game';
-    $('join-link').parentElement.hidden=!name;
-    $('join-link').textContent=location.host;
+    const link=$('join-link'),join=GameLobbyControls.joinAddress(location);
+    link.parentElement.hidden=!name;
+    link.textContent=join.label;
+    link.href=join.href;
     $('room-instructions').textContent=name?'Enter this room name to join.':'Scan the QR code to join.';
   }
   function applyView(next) {

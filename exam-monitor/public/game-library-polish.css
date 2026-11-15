@@ -63,7 +63,3 @@ body:has(#library)>main{max-width:1500px;padding:28px clamp(18px,4vw,60px) 60px}
    Once inline controls are visible, the same option sits at their right edge. */
 .game-session-heading{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px 18px}
 .game-session-heading h2{margin:0}
-#game-next-launch:empty{display:none}
-#game-host-toolbar>.large-class-option{margin:0 0 0 auto}
-#game-next-launch>.large-class-option{margin:0}
-#game-next-launch .large-class-option span,#game-host-toolbar .large-class-option span{overflow-wrap:anywhere}

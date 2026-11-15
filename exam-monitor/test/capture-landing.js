@@ -59,7 +59,7 @@ async function main(){
     await display.locator('#qr').evaluate((img,code)=>img.src='data:image/svg+xml;base64,'+btoa(code),code);
     await display.evaluate(()=>document.fonts.ready);await display.screenshot({path:path.join(out,'classroom-preview.png')});
     const professor=await desktop.newPage();await professor.goto(base+'/professor.html');
-    await professor.getByRole('button',{name:'Results',exact:true}).click();
+    await professor.getByRole('button',{name:'Quiz Results',exact:true}).click();
     await professor.getByRole('button',{name:'View results',exact:true}).click();
     await professor.locator('#result-details-tab').click();await professor.locator('.answer-grid tbody tr').nth(14).waitFor();
     assert.ok(await professor.locator('.answer-correct').count()>0);assert.ok(await professor.locator('.answer-incorrect').count()>0);

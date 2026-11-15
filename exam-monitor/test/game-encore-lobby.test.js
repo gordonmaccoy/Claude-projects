@@ -81,3 +81,19 @@ test('opening sound controls never bypasses a saved mute',()=>{
   n.ui.closeSound();
   assert.equal(n.soundPanel.hidden,true);
 });
+
+test('projector uses the public Examio address only for public rooms',()=>{
+ const {joinAddress}=require('../public/game-lobby-controls');
+ const publicJoin={label:'www.examio.io',href:'https://www.examio.io/'};
+ assert.deepEqual(joinAddress({hostname:'examio.io'}),publicJoin);
+ assert.deepEqual(joinAddress({hostname:'www.examio.io'}),publicJoin);
+ assert.deepEqual(joinAddress({hostname:'claude-projects-development.up.railway.app'}),{label:'Examio Development',href:'/'});
+ assert.deepEqual(joinAddress({hostname:'localhost',host:'localhost:9876'}),{label:'localhost:9876',href:'/'});
+ assert.match(read('game-display.js'),/joinAddress\(location\)/);
+});
+
+test('selected player avatar has a high-contrast ring and a visible non-color selection marker',()=>{
+ const css=read('game-picker.css');
+ assert.match(css,/\[aria-pressed="true"\]\s*\{[^}]*border-color:#70f4ff[^}]*box-shadow:/);
+ assert.match(css,/\[aria-pressed="true"\]::after\s*\{[^}]*content:'✓'/);
+});

@@ -72,8 +72,8 @@ test('response-closed gong rings once from the closing phase and never restarts 
  tick('reveal',4000,closed);
  assert.deepEqual(named('cue'),[['cue','gong']]);
  tick('question',8000,{questionIndex:1,startsAt:7000,deadlineAt:9000});
- tick('reveal',11500,{questionIndex:1,roundEndedAt:9000,roundEndReason:'timeout',revealAt:11500});
- assert.equal(named('cue').length,1);
+ tick('reveal',12850,{questionIndex:1,roundEndedAt:9000,roundEndReason:'timeout',revealAt:12800});
+ assert.equal(named('cue').length,2);
  ctl.stop();
 });
 test('explicit mute persists without assuming a first-time visitor has unlocked sound',async()=>{
@@ -84,4 +84,57 @@ test('explicit mute persists without assuming a first-time visitor has unlocked 
  assert.equal(saved,undefined);await button.click();await button.click();
  assert.equal(JSON.parse(saved).muted,true);
  await button.click();assert.equal(JSON.parse(saved).muted,false);ctl.stop();
+});
+
+
+test('projector catches up once from a recently closed real reveal, but not on reload, expiry or unmute',async()=>{
+ const {ctl,button,tick,named}=testController();await button.click();
+ const count=()=>named('cue').filter(c=>c[1]==='gong').length;
+ const close={roundEndedAt:5000,roundEndReason:'timeout',revealAt:8800};
+ tick('reveal',8815,close);assert.equal(count(),0,'opening a projector on the closed round is quiet');
+ const next={roundEndedAt:15000,roundEndReason:'all-answered',revealAt:18800,questionIndex:1};
+ tick('intro',14000,{questionIndex:1});
+ tick('reveal',18900,next);
+ tick('reveal',19000,next);
+ assert.equal(count(),1,'a missed close phase still rings once');
+ tick('question',24000,{questionIndex:2,deadlineAt:25000});
+ tick('leaderboard',35000,{roundEndedAt:25000,roundEndReason:'timeout',revealAt:28800,questionIndex:2});
+ assert.equal(count(),1,'an old closed round does not interrupt the present');
+ tick('countdown',40000,{questionIndex:3,startsAt:42000,deadlineAt:47000});
+ await button.click();tick('responses-closed',47300,{questionIndex:3,roundEndedAt:47000,roundEndReason:'timeout',revealAt:50800});
+ await button.click();tick('reveal',50820,{questionIndex:3,roundEndedAt:47000,roundEndReason:'timeout',revealAt:50800});
+ assert.equal(count(),1,'muting a round consumes the event and unmuting does not replay');ctl.stop();
+});
+
+test('decoded gong strike survives scoreboard handoff but still obeys explicit mute',async()=>{
+ const voices=[];const events=[];const param=()=>({value:0,setValueAtTime(){},cancelScheduledValues(){},linearRampToValueAtTime(){},exponentialRampToValueAtTime(){},setTargetAtTime(){}});
+ const source=()=>{const node={frequency:param(),connect(){},disconnect(){},start(){},stop(){this.stops=(this.stops||0)+1;}};voices.push(node);return node;};
+ const sample={tag:'gong',duration:3.25};
+ let ctx;
+ class Context{
+  constructor(){ctx=this;this.currentTime=10;this.sampleRate=100;this.destination={};}
+  createGain(){return {gain:param(),connect(){},disconnect(){}};}
+  createDynamicsCompressor(){return {connect(){}};}createBuffer(){return {getChannelData:()=>new Float32Array(25)};}
+  createOscillator(){return source();}createBufferSource(){return source();}createBiquadFilter(){return {frequency:param(),connect(){},disconnect(){}};}
+  decodeAudioData(){return Promise.resolve(sample);}
+  resume(){return Promise.resolve();}close(){return Promise.resolve();}
+ }
+ const vm=require('node:vm'),fs=require('node:fs');
+ const root={AudioContext:Context,document:{},fetch:async()=>({ok:true,arrayBuffer:async()=>new ArrayBuffer(0)}),AbortController,
+   setTimeout:(f,t)=>{const timer={f,t};events.push(timer);return timer;},clearTimeout(){},
+   setInterval:()=>99,clearInterval(){},Math};
+ root.window=root;vm.runInNewContext(fs.readFileSync(require.resolve('../public/game-audio'),'utf8'),root);
+ const button={setAttribute(){},addEventListener(_e,f){this.click=f;}},slider={addEventListener(){}};
+ const ctl=root.GameAudio.create({button,slider},{now:()=>0,storage:null});
+ await button.click();await new Promise(resolve=>setImmediate(resolve));
+ const view={id:'live',questionIndex:0,startsAt:5000,deadlineAt:10000};
+ ctl.update({...view,phase:'question',serverNow:9800});
+ const end={...view,roundEndedAt:10000,roundEndReason:'timeout',revealAt:13800};
+ ctx.currentTime=10.15;ctl.update({...end,phase:'reveal',serverNow:13900});
+ const hits=()=>voices.filter(x=>x.buffer===sample);
+ assert.equal(hits().length,1,'a fully decoded clip, not just synthetic fallback, starts');
+ assert.equal(hits()[0].stops,1,'only the original scheduled end');
+ ctl.update({...end,phase:'leaderboard',serverNow:14000,scoreStartsAt:15200});
+ assert.equal(hits()[0].stops,1,'replacing the music bus cannot stop the gong');
+ await button.click();assert.equal(hits()[0].stops,2,'manual mute still stops the gong immediately');ctl.stop();
 });

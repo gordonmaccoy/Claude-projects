@@ -1,9 +1,21 @@
 .game-player .avatar-picker{grid-template-columns:repeat(6,minmax(0,1fr));max-height:none;overflow:visible;gap:clamp(2px,1.2vw,6px);padding:4px}
 .game-player .avatar-picker button{position:relative;min-width:0;padding:2px;aspect-ratio:1}
+.game-player .avatar-picker button[aria-pressed="true"]{
+  border-color:#70f4ff;
+  box-shadow:0 0 0 2px #0e3392,0 0 0 4px #70f4ff,0 0 13px 3px #36c7ffaf;
+  z-index:1;
+}
+.game-player .avatar-picker button[aria-pressed="true"]::after{
+  content:'✓';position:absolute;top:1px;right:1px;min-width:1.15rem;min-height:1.15rem;
+  display:grid;place-items:center;border:1px solid #034a73;border-radius:50%;
+  background:#70f4ff;color:#052d54;font-size:.82rem;font-weight:900;line-height:1;pointer-events:none;
+}
 .game-player .avatar-picker button.is-taken{opacity:1;background:#283e58;border-color:#526a84;cursor:not-allowed}
 .game-player .avatar-picker button.is-taken img{opacity:.28;filter:grayscale(1)}
 .game-player .avatar-picker button.is-taken::after{position:absolute;inset:0;display:grid;place-items:center;content:'×';font-size:clamp(1.4rem,6vw,2rem);font-weight:900;color:#fff;text-shadow:0 2px 4px #091c33}
-#avatar-pages{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:8px;color:#e7f2ff;font-size:.85rem}
-#avatar-pages button{width:36px;height:36px;padding:0;background:#1e486b;color:#f2f8ff;border:1px solid #6991b4;font-size:1.35rem;line-height:1}
+#avatar-pages{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px;margin:12px 0;padding:8px;background:#142f49;border:1px solid #6991b4;border-radius:10px;color:#e7f2ff;font-size:.9rem}
+#avatar-pages button{min-width:90px;min-height:44px;padding:8px 10px;background:#225d8d;color:#fff;border:1px solid #8ebee5;font-size:.95rem;line-height:1.2;font-weight:750}
 #avatar-pages button:disabled{opacity:.42}
 .avatar-choice{font-size:.88rem;color:#c8def5;min-height:1.1rem;margin:.65rem 0 0}
+
+.avatar-range{margin:0 0 8px;color:#e7f2ff;font-size:.92rem;font-weight:700}

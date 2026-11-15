@@ -101,8 +101,8 @@ async function simulatePhone({record={},largeClass=true,requireNames=true,takenA
 test('phone pages lazily load 30 then 20 thumbnails and a mid-preview claim cannot be confirmed',async()=>{
  const phone=await simulatePhone(),{$,images}=phone;
  assert.equal($('avatar-picker').children.length,30);assert.equal(images.length,30);
- assert.equal($('avatar-pages').hidden,false);assert.equal($('avatar-prev').disabled,true);
- $('avatar-next').onclick();assert.equal($('avatar-picker').children.length,20);assert.equal(images.length,50);
+ assert.equal($('avatar-pages').hidden,false);assert.equal($('avatar-prev').disabled,true);assert.equal($('avatar-range').textContent,'Characters 1–30 of 50');assert.equal($('avatar-page-label').textContent,'Page 1 of 2');
+ $('avatar-next').onclick();assert.equal($('avatar-picker').children.length,20);assert.equal(images.length,50);assert.equal($('avatar-range').textContent,'Characters 31–50 of 50');assert.equal($('avatar-page-label').textContent,'Page 2 of 2');
  const first=$('avatar-picker').children[0];assert.equal(first.dataset.avatar,avatarId(31));
  first.onclick();assert.equal($('avatar-preview-image').src,'feature-'+avatarId(31));assert.equal($('avatar-preview-confirm').disabled,false);
  phone.setLobby({largeClass:true,takenAvatarIds:[avatarId(31)],phase:'lobby'});await phone.poll();

@@ -14,6 +14,16 @@ const {chromium}=require('playwright'),{PGlite}=require('@electric-sql/pglite'),
  await page.route('**/auth-client.js',route=>route.fulfill({contentType:'text/javascript',body:`window.createOnScreenAuth=()=>({auth:{onAuthStateChange(){return {data:{subscription:{unsubscribe(){}}}}},async getSession(){return {data:{session:{access_token:'verified-test-token',user:{id:'${owner}',email:'teacher@example.com'}}}}}}});`}));
  await page.goto('http://127.0.0.1:'+runtime.server.address().port+'/professor.html');await page.locator('#workspace:not([hidden])').waitFor();await page.waitForFunction(()=>document.querySelector('#launch-tests .card'));
  await page.locator('#tour-dialog').evaluate(el=>{if(el.open)el.close();});
+ const workspaceNav=page.locator('#workspace-tabs');
+ assert.deepEqual(await workspaceNav.locator('button,a').allTextContents(),['Launch Quiz','Quiz Library','Quiz Results','Game Library','Trash']);
+ assert.equal(await workspaceNav.getByRole('link',{name:'Game Library'}).getAttribute('href'),'/game-library.html');
+ assert.ok(await workspaceNav.evaluate(nav=>{
+  const trash=nav.querySelector('[data-tab="trash"]').getBoundingClientRect();
+  return Math.abs(trash.right-(nav.getBoundingClientRect().right-parseFloat(getComputedStyle(nav).paddingRight)))<=2;
+ }));
+ await page.setViewportSize({width:390,height:844});
+ assert.ok(await workspaceNav.evaluate(nav=>nav.scrollWidth<=nav.clientWidth&&nav.querySelector('[data-tab="trash"]').offsetTop>nav.querySelector('[data-tab="launch"]').offsetTop));
+ await page.setViewportSize({width:1280,height:720});
  assert.equal(await page.locator('#calculator-card').evaluate(el=>el.tagName==='DETAILS'&&!el.open),true);assert.equal(await page.evaluate(()=>!!(document.querySelector('#launch-tests').compareDocumentPosition(document.querySelector('#calculator-card'))&Node.DOCUMENT_POSITION_FOLLOWING)),true);
  await page.evaluate(()=>{document.body.style.minHeight='2400px';window.scrollTo(0,600);});assert.equal(await page.locator('#professor-navigation').evaluate(el=>getComputedStyle(el).position),'sticky');assert.ok((await page.locator('#workspace-tabs').boundingBox()).y>=0);await page.evaluate(()=>window.scrollTo(0,0));
  await page.locator('#professor-theme-toggle').click();assert.equal(await page.locator('#calculator-card').evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(255, 255, 255)');assert.equal(await page.locator('#active-sessions button').first().evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(255, 255, 255)');assert.equal(await page.locator('#launch-tests .folder').first().evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(255, 255, 255)');

@@ -8,7 +8,7 @@
   {name:'Final Chase',bpm:168,root:43,wave:'sawtooth',notes:[0,3,7,10,12,10,7,3,5,8,12,15,14,10,7,2],bass:[0,3,5,7],hat:1}
  ];
  const showSounds=Object.freeze({
-  gong:{url:'/game-sounds/responses-closed.mp3',duration:3.25,level:.85},
+  gong:{url:'/game-sounds/responses-closed.mp3',duration:3.25,level:1},
   fanfare:{url:'/game-sounds/gold-fanfare.mp3',duration:2.85,level:.66},
   cheer:{url:'/game-sounds/podium-cheering.mp3',duration:4.8,level:.72}
  });
@@ -42,45 +42,57 @@
   if(next.serverNow<previous.serverNow||next.questionIndex<previous.questionIndex)return true;
   return next.questionIndex===previous.questionIndex&&phaseOrder.indexOf(next.phase)<phaseOrder.indexOf(previous.phase);
  }
+ const activeRoundPhases=['intro','countdown','question'];
  function freshGong(previous,next){
-  return Boolean(previous&&next.id===previous.id&&previous.questionIndex===next.questionIndex&&
-    ['countdown','question'].includes(previous.phase)&&(next.phase==='responses-closed'||
-      !Number.isFinite(next.revealAt)&&['reveal','leaderboard'].includes(next.phase))&&
-    ['timeout','all-answered'].includes(next.roundEndReason)&&Number.isFinite(next.roundEndedAt)&&
-    next.serverNow>=next.roundEndedAt&&next.serverNow-next.roundEndedAt<=3500);
+  if(!previous||next.id!==previous.id||previous.questionIndex!==next.questionIndex||
+    !activeRoundPhases.includes(previous.phase)||!['responses-closed','reveal','leaderboard'].includes(next.phase)||
+    !['timeout','all-answered'].includes(next.roundEndReason)||!Number.isFinite(next.roundEndedAt)||
+    !Number.isFinite(next.serverNow))return false;
+  const elapsed=next.serverNow-next.roundEndedAt;
+  // A delayed poll may first see the vote chart, just after the 3.8s close scene.
+  // Give that transition one polling interval of grace, but never replay an old close.
+  const grace=Number.isFinite(next.revealAt)?Math.max(3500,Math.min(5000,next.revealAt-next.roundEndedAt+1000)):3500;
+  return elapsed>=0&&elapsed<=grace;
  }
  function webEngine(){
   const Audio=root.AudioContext||root.webkitAudioContext;if(!Audio)throw new Error('Sound is not supported by this browser.');
   const ctx=new Audio(),master=ctx.createGain(),compressor=ctx.createDynamicsCompressor();master.gain.value=.35;master.connect(compressor);compressor.connect(ctx.destination);
-  let bus=null,timer=null,closeTimer=null,nodes=new Set(),activeKey=null;
+  let bus=null,timer=null,closeTimer=null,activeKey=null,gongBus=null,gongTimer=null;
+  const nodes=new Set(),gongNodes=new Set();
   const buffers=new Map(), assetRequests=new AbortController();
   if(root.document&&root.fetch&&ctx.decodeAudioData)for(const [kind,{url}] of Object.entries(showSounds)){
    root.fetch(url,{signal:assetRequests.signal}).then(r=>{if(!r.ok)throw new Error('Audio clip unavailable');return r.arrayBuffer();})
     .then(data=>ctx.decodeAudioData(data)).then(buffer=>buffers.set(kind,buffer)).catch(()=>{});
   }
   const noise=ctx.createBuffer(1,Math.ceil(ctx.sampleRate*.25),ctx.sampleRate);const samples=noise.getChannelData(0);for(let i=0;i<samples.length;i++)samples[i]=Math.random()*2-1;
-  function stop(){clearInterval(timer);clearTimeout(closeTimer);timer=null;closeTimer=null;activeKey=null;if(bus){bus.gain.cancelScheduledValues(ctx.currentTime);bus.gain.setValueAtTime(0,ctx.currentTime);bus.disconnect();bus=null;}for(const n of nodes){try{n.stop();n.disconnect();}catch{}}nodes.clear();}
-  function source(n,g,start,end){n.connect(g);g.connect(bus);nodes.add(n);n.onended=()=>{nodes.delete(n);n.disconnect();g.disconnect();};n.start(start);n.stop(end);}
-  function sample(kind,t,duration=showSounds[kind].duration){
+  function silence(output,voices){
+   if(output){output.gain.cancelScheduledValues(ctx.currentTime);output.gain.setValueAtTime(0,ctx.currentTime);output.disconnect();}
+   for(const n of voices){try{n.stop();n.disconnect();}catch{}}voices.clear();
+  }
+  function stopMusic(){clearInterval(timer);clearTimeout(closeTimer);timer=null;closeTimer=null;activeKey=null;silence(bus,nodes);bus=null;}
+  function stopGong(){clearTimeout(gongTimer);gongTimer=null;silence(gongBus,gongNodes);gongBus=null;}
+  function stop(){stopMusic();stopGong();}
+  function source(n,g,start,end,output=bus,voices=nodes){n.connect(g);g.connect(output);voices.add(n);n.onended=()=>{voices.delete(n);n.disconnect();g.disconnect();};n.start(start);n.stop(end);}
+  function sample(kind,t,duration=showSounds[kind].duration,output=bus,voices=nodes){
    const buffer=buffers.get(kind);if(!buffer)return false;
    const n=ctx.createBufferSource(),g=ctx.createGain(),level=showSounds[kind].level,end=t+Math.min(duration,buffer.duration);
    n.buffer=buffer;g.gain.setValueAtTime(level,t);g.gain.setValueAtTime(level,Math.max(t,end-.25));g.gain.linearRampToValueAtTime(0,end);
-   source(n,g,t,end);return true;
+   source(n,g,t,end,output,voices);return true;
   }
-  function tone(midi,t,duration,level,wave='triangle',attack=.008){const o=ctx.createOscillator(),g=ctx.createGain();o.type=wave;o.frequency.value=440*2**((midi-69)/12);g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(level,t+attack);g.gain.exponentialRampToValueAtTime(.0001,t+duration);source(o,g,t,t+duration+.01);}
+  function tone(midi,t,duration,level,wave='triangle',attack=.008,output=bus,voices=nodes){const o=ctx.createOscillator(),g=ctx.createGain();o.type=wave;o.frequency.value=440*2**((midi-69)/12);g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(level,t+attack);g.gain.exponentialRampToValueAtTime(.0001,t+duration);source(o,g,t,t+duration+.01,output,voices);}
   function kick(t){const o=ctx.createOscillator(),g=ctx.createGain();o.frequency.setValueAtTime(145,t);o.frequency.exponentialRampToValueAtTime(42,t+.14);g.gain.setValueAtTime(.7,t);g.gain.exponentialRampToValueAtTime(.0001,t+.22);source(o,g,t,t+.23);}
   function hiss(t,snare){const n=ctx.createBufferSource(),g=ctx.createGain(),filter=ctx.createBiquadFilter();n.buffer=noise;filter.type='highpass';filter.frequency.value=snare?1300:6500;n.connect(filter);filter.connect(g);g.connect(bus);nodes.add(n);n.onended=()=>{nodes.delete(n);n.disconnect();filter.disconnect();g.disconnect();};g.gain.setValueAtTime(snare?.2:.07,t);g.gain.exponentialRampToValueAtTime(.0001,t+(snare?.14:.045));n.start(t);n.stop(t+(snare?.15:.05));}
   function question(key,index,window,elapsed){
-   if(activeKey===key)return;stop();activeKey=key;bus=ctx.createGain();bus.connect(master);
+   if(activeKey===key)return;stopMusic();activeKey=key;bus=ctx.createGain();bus.connect(master);
    const start=ctx.currentTime+window.startIn/1000,end=ctx.currentTime+window.endIn/1000;
    // Audio-thread automation enforces silence at deadline even if JS timers stall.
    bus.gain.setValueAtTime(0,ctx.currentTime);bus.gain.setValueAtTime(.8,start);bus.gain.setValueAtTime(0,end);
    const track=tracks[index],step=60/track.bpm/4,origin=start-Math.max(0,elapsed)/1000;let cursor=Math.max(0,Math.ceil((ctx.currentTime-origin)/step));
-   function schedule(){if(!bus||ctx.currentTime>=end){stop();return;}while(origin+cursor*step<Math.min(end,ctx.currentTime+.16)){const t=origin+cursor*step,n=cursor%16,bar=Math.floor(cursor/16)%4;if(t>=ctx.currentTime&&t>=start){tone(track.root+12+track.notes[n],t,step*.8,.09,track.wave);if(n%4===0){kick(t);tone(track.root+track.bass[bar],t,step*3.2,.26,'triangle');}if(n%8===4)hiss(t,true);if(n%track.hat===0)hiss(t,false);if(n===0)for(const interval of [0,3,7])tone(track.root+24+track.bass[bar]+interval,t,step*12,.018,'sine');}cursor++;}}
-   schedule();timer=setInterval(schedule,25);closeTimer=setTimeout(stop,window.endIn+30);
+   function schedule(){if(!bus||ctx.currentTime>=end){stopMusic();return;}while(origin+cursor*step<Math.min(end,ctx.currentTime+.16)){const t=origin+cursor*step,n=cursor%16,bar=Math.floor(cursor/16)%4;if(t>=ctx.currentTime&&t>=start){tone(track.root+12+track.notes[n],t,step*.8,.09,track.wave);if(n%4===0){kick(t);tone(track.root+track.bass[bar],t,step*3.2,.26,'triangle');}if(n%8===4)hiss(t,true);if(n%track.hat===0)hiss(t,false);if(n===0)for(const interval of [0,3,7])tone(track.root+24+track.bass[bar]+interval,t,step*12,.018,'sine');}cursor++;}}
+   schedule();timer=setInterval(schedule,25);closeTimer=setTimeout(stopMusic,window.endIn+30);
   }
   function loop(key,score,window){
-   if(activeKey===key)return;stop();activeKey=key;bus=ctx.createGain();bus.gain.value=.7;bus.connect(master);
+   if(activeKey===key)return;stopMusic();activeKey=key;bus=ctx.createGain();bus.gain.value=.7;bus.connect(master);
    const chords=score?[[48,55,59,64],[43,50,57,62],[45,52,60,64],[41,48,57,60]]
     :[[48,55,60,64],[50,57,62,65],[45,52,57,60],[43,50,58,62]];
    const main=score?[[72,,76,,79,,,76],[74,,,77,79,,,77],[72,,76,,,81,,79],[72,,,76,77,,,74]]
@@ -106,22 +118,23 @@
   function scoreboard(key,window){loop(key,true,window);}
   function fanfare(kind,t){const notes=kind==='podium'?[60,64,67,72,67,72,76,79]:[67,71,74,79];notes.forEach((n,i)=>{tone(n,t+i*.12,.32,.16,'triangle');tone(n-12,t+i*.12,.35,.07,'sine');});return notes.length*.12+.5;}
   function gong(t){
-   if(sample('gong',t))return showSounds.gong.duration;
+   stopGong();gongBus=ctx.createGain();gongBus.gain.value=1;gongBus.connect(master);
+   const sampled=sample('gong',t,showSounds.gong.duration,gongBus,gongNodes);
+   if(sampled){gongTimer=setTimeout(stopGong,(t-ctx.currentTime+showSounds.gong.duration)*1000+45);return;}
    // A mallet strike, longer low bronze resonance and a brighter, brief shimmer.
    [[36,.34,2.42],[43.23,.23,2.25],[50.71,.15,1.74],[56.48,.14,1.32],[63.14,.11,1.09],[72.37,.075,.47],[80.92,.055,.20]]
-    .forEach(([pitch,level,length],i)=>tone(pitch,t,length,level,'sine',i===0?.038:.012));
-   return 2.47;
+    .forEach(([pitch,level,length],i)=>tone(pitch,t,length,level,'sine',i===0?.038:.012,gongBus,gongNodes));
+   gongTimer=setTimeout(stopGong,(t-ctx.currentTime+2.47)*1000);
   }
   function cue(kind,followup){
-   stop();bus=ctx.createGain();bus.gain.value=.8;bus.connect(master);const t=ctx.currentTime+.015;
-   let tail;
-   if(kind==='gong'){
-    tail=gong(t)+.04;
-    if(followup)tail=Math.max(tail,.42+fanfare(followup,t+.42));
-   }else tail=fanfare(kind,t);
-   closeTimer=setTimeout(stop,Math.ceil(tail*1000));
+   stopMusic();const t=ctx.currentTime+.015;
+   if(kind==='gong')gong(t);
+   if(kind==='gong'&&!followup)return;
+   bus=ctx.createGain();bus.gain.value=.8;bus.connect(master);
+   const wait=kind==='gong'?.42:0,tail=wait+fanfare(followup||kind,t+wait);
+   closeTimer=setTimeout(stopMusic,Math.ceil(tail*1000));
   }
-  function overlay(kind,delay=0){if(!bus)return;const t=ctx.currentTime+Math.max(.015,delay/1000);if(kind==='gong')gong(t);else fanfare(kind,t);}
+  function overlay(kind,delay=0){const t=ctx.currentTime+Math.max(.015,delay/1000);if(kind==='gong')gong(t);else if(bus)fanfare(kind,t);}
   function cheer(t,duration){
    // Distant crowd: a rolling mid-frequency bed, layered hand claps, and a few whoops.
    const count=Math.max(1,Math.floor((duration-.42)/.05));
@@ -149,7 +162,7 @@
    for(const note of [48,55,60,64])tone(note,t+1.66,.87,.074,'triangle',.07);
   }
   function podium(key,placements,finale){
-   if(activeKey===key)return;stop();activeKey=key;bus=ctx.createGain();bus.gain.value=.78;bus.connect(master);
+   if(activeKey===key)return;stopMusic();activeKey=key;bus=ctx.createGain();bus.gain.value=.78;bus.connect(master);
    if(!placements.length)return;
    const origin=ctx.currentTime;
    for(const {kind,rank,startIn,duration} of podiumSoundEvents(placements)){
@@ -160,7 +173,7 @@
     else fanfare('lead',t);
    }
    const tail=Math.max(...podiumSoundEvents(placements).map(x=>x.startIn+x.duration*1000))+50;
-   closeTimer=setTimeout(()=>{if(activeKey===key)stop();},tail);
+   closeTimer=setTimeout(()=>{if(activeKey===key)stopMusic();},tail);
   }
   return {resume:()=>ctx.resume(),volume:v=>master.gain.setTargetAtTime(v,ctx.currentTime,.02),question,lobby,scoreboard,podium,cue,overlay,stop,dispose(){assetRequests.abort();stop();ctx.close();}};
  }
@@ -226,6 +239,8 @@
   return {canAutoEnable:()=>!enabled&&!activating&&!destroyed&&!muted&&volume>0,update(next,cue){
    if(destroyed||isStaleView(next,view))return;
    if(next.id!==session){session=next.id;pick=shuffleBag();selected=new Map();lastCue=null;mode=null;engine?.stop();}
+   if(view&&next.id===view.id&&next.questionIndex!==view.questionIndex&&
+     ['responses-closed','reveal','leaderboard','podium'].includes(view.phase)){mode=null;engine?.stop();}
    const gong=freshGong(view,next);
    if((cue==='lead'&&next.phase==='leaderboard')||(cue==='podium'&&next.phase==='podium')){
     const key=next.id+':'+next.questionIndex+':'+cue;if(lastCue===key)cue=null;else lastCue=key;

@@ -1,16 +1,23 @@
-const {existsSync, statSync} = require('node:fs');
+const {existsSync, readFileSync} = require('node:fs');
 const {join} = require('node:path');
+const {createHash} = require('node:crypto');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const client = require('../public/game-client');
 const audio = require('../public/game-audio');
 
-test('question intros use the original ordinal artwork, with a numeric fallback after question 25', () => {
+test('question intros use the numbered artwork, with a numeric fallback after question 25', () => {
+  const digests=new Set();
   for (let i = 0; i < 25; i++) {
     const asset = client.introArtwork({phase:'intro',questionIndex:i});
     assert.equal(asset, '/game-intro/question-' + (i + 1) + '.webp');
-    assert.ok(statSync(join(__dirname, '../public', asset)).size < 120000);
+    const bytes=readFileSync(join(__dirname, '../public', asset));
+    assert.ok(bytes.length < 120000);
+    assert.equal(bytes.toString('ascii',0,4),'RIFF');
+    assert.equal(bytes.toString('ascii',8,12),'WEBP');
+    digests.add(createHash('sha256').update(bytes).digest('hex'));
   }
+  assert.equal(digests.size,25,'every ordinal uses distinct artwork');
   assert.equal(client.introArtwork({phase:'intro',questionIndex:25}), null);
   assert.equal(client.introArtwork({phase:'question',questionIndex:1}), null);
 });
@@ -23,7 +30,7 @@ test('real audio files are matched to round gong, pre-gold fanfare, and every re
   assert.deepEqual(audio.podiumSoundEvents([{rank:1,startIn:170}]).map(e=>[e.kind,e.startIn]), [['cheer',170]]);
   assert.ok(audio.showSounds.gong.duration * 1000 < 3800);
 });
-test('classroom audio plays decoded original clips at round close and on the live podium schedule', async () => {
+test('classroom audio plays decoded local clips at round close and on the live podium schedule', async () => {
   const played=[],originalFetch=global.fetch,originalDocument=global.document,originalAudio=global.AudioContext;
   const param=()=>({value:0,setValueAtTime(){},cancelScheduledValues(){},setTargetAtTime(){},linearRampToValueAtTime(){}});
   class Context {
