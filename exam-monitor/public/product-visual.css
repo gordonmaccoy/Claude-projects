@@ -8,3 +8,5 @@
 .product-theme-pair figcaption{font-size:13px;font-weight:700;color:#082d5b;margin-top:12px}
 .product-view-row .product-theme-note{font-size:14px;color:#0758cb;margin-top:14px;line-height:1.6}
 @media(max-width:760px){.product-theme-pair{gap:10px;padding:12px}.product-view-row .product-theme-pair .product-phone img{height:auto;max-height:350px;width:100%;object-fit:contain}}
+
+.export-preview-pair{display:grid;grid-template-columns:1fr 1.5fr;gap:16px;align-items:center;min-width:0}.export-preview-pair figure{margin:0;min-width:0}.export-preview-pair figcaption{text-align:center;font-weight:700;font-size:14px;margin-top:12px}.export-preview-pair img{width:100%;height:auto}.product-visual-page .fp-hero .preview{overflow:hidden;width:100%;min-width:0}.product-visual-page .fp-hero .preview-heading{display:none}.product-visual-page .fp-hero .carousel{height:440px}.product-visual-page .fp-hero .preview-card{width:65%;max-width:370px}@media(max-width:600px){.export-preview-pair{grid-template-columns:1fr}.product-visual-page .fp-hero .carousel{height:360px}}

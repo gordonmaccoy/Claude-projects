@@ -213,3 +213,5 @@ Object.assign(window.examioKorean, {
 });
 
 Object.assign(window.examioKorean, {"Project the room name & QR code for login. Class activity can be displayed publicly or hidden. Teachers choose.":"로그인할 수 있도록 교실 이름과 QR 코드를 띄우세요. 교실 활동의 공개 여부는 교사가 선택합니다.","Students answer on phone, tablet, or laptop. No apps to install.":"학생은 휴대폰, 태블릿 또는 노트북으로 답합니다. 앱을 설치할 필요가 없습니다."});
+
+Object.assign(window.examioKorean,{"PDF summary":"PDF 요약","Detailed Excel results":"상세 Excel 결과"});
