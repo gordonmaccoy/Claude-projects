@@ -3,7 +3,7 @@
  let sessions=[],launching=false,sessionRevision=0;
  const sessionParam=()=>new URLSearchParams(location.search).get('session');
  function closeEditor(){editorVersion++;reviewController?.abort();reviewController=null;$('game-form').inert=false;$('save-game').disabled=false;$('cancel-edit').disabled=false;draft=null;$('editor').hidden=true;$('library').hidden=false;$('editor-error').textContent='';}
- function edit(game){editorVersion++;reviewController?.abort();$('review-game-ai').disabled=!api?.config?.aiConfigured;$('review-game-ai').title=api?.config?.aiConfigured?'':'AI checking is not configured.';$('draft-review').hidden=true;$('draft-review').textContent='';draft=game?structuredClone(game):{title:'',folderId:null,questions:[newQuestion()]};$('title').value=draft.title;$('large-class').checked=draft.largeClass===true;renderFolderOptions();$('editor-heading').textContent=draft.id?'Edit game':'Create a game';$('library').hidden=true;$('editor').hidden=false;renderQuestions();$('title').focus();}
+ function edit(game){editorVersion++;reviewController?.abort();$('review-game-ai').disabled=!api?.config?.aiConfigured;$('review-game-ai').title=api?.config?.aiConfigured?'':'AI checking is not configured.';$('draft-review').hidden=true;$('draft-review').textContent='';draft=game?structuredClone(game):{title:'',folderId:null,questions:[newQuestion()]};$('title').value=draft.title;renderFolderOptions();$('editor-heading').textContent=draft.id?'Edit game':'Create a game';$('library').hidden=true;$('editor').hidden=false;renderQuestions();$('title').focus();}
  function renderFolderOptions(){
   const select=$('game-folder');select.replaceChildren();const uncategorized=el('option','Uncategorized Games');uncategorized.value='';select.append(uncategorized);
   for(const folder of folders){const option=el('option',folder.name);option.value=folder.id;select.append(option);}
@@ -56,18 +56,19 @@
  $('launch-form').onsubmit=async event=>{
   event.preventDefault();
   if(launching||!launchTarget)return;
-  const gameId=launchTarget.id,requireNames=$('launch-require-names').checked;
-  launching=true;launchDialog.close();
+  const gameId=launchTarget.id,requireNames=$('launch-require-names').checked,largeClass=$('launch-large-class').checked;
+  launching=true;$('launch-large-class').disabled=true;launchDialog.close();
   const display=window.open('about:blank','_blank','popup,width=1280,height=800');if(display)display.opener=null;
   try{
-   const session=await api('/game-sessions','POST',{gameId,requireNames});
+   const session=await api('/game-sessions','POST',{gameId,requireNames,largeClass});
+   $('launch-large-class').checked=false;
    sessionRevision++;sessions=[...sessions.filter(s=>s.id!==session.id),session];
    selectSession(session.id,true);
    const url=GameHost.displayHref(session);
    if(display&&!display.closed&&url)display.location.replace(url);
    else {display?.close();host.showStatus('Game ready. Use Open classroom display to show the game on your projector.');}
   }catch(error){display?.close();status(error.message,true);}
-  finally{launching=false;}
+  finally{launching=false;$('launch-large-class').disabled=false;}
  };
  function gameActions(game,card){
   const actions=el('div',undefined,'game-card-actions');
@@ -114,7 +115,9 @@
   history.replaceState(null,'',url);
  }
  function renderSessions(){
-  $('active-section').hidden=!sessions.length&&!host.id;
+  const setting=$('launch-large-class').closest('label');
+  const slot=host.id?$('game-host-toolbar'):$('game-next-launch');
+  if(setting.parentNode!==slot)slot.append(setting);
   const items=$('active-games');items.replaceChildren();
   for(const session of sessions){
    const url=new URL(location.href);url.searchParams.set('session',session.id);
@@ -154,7 +157,8 @@
   event.preventDefault();
   if(!draft||$('save-game').disabled)return;
   const version=editorVersion;
-  const formDraft={...structuredClone(draft),title:$('title').value.trim(),folderId:$('game-folder').value||null,largeClass:$('large-class').checked};
+  const formDraft={...structuredClone(draft),title:$('title').value.trim(),folderId:$('game-folder').value||null};
+  delete formDraft.largeClass; // Historical library settings no longer control a launched room.
   const missing=formDraft.questions.findIndex(q=>!q.correctOptionId||q.answerKeyConflict);
   if(missing>=0){
    $('questions').children[missing].scrollIntoView({block:'center',behavior:'smooth'});
@@ -172,10 +176,10 @@
   finally{if(version===editorVersion){$('game-form').inert=false;$('save-game').disabled=false;$('cancel-edit').disabled=false;$('review-game-ai').disabled=!api.config?.aiConfigured;}}
  };
  // Creation is a draft-only workflow. Only the editor's Save game persists it.
- let creationVersion=0,importMode='file',creationOptions={title:'',folderId:null,largeClass:false};
+ let creationVersion=0,importMode='file',creationOptions={title:'',folderId:null};
  function fillCreationFolders(){const select=$('create-folder');select.replaceChildren();const first=el('option','Uncategorized Games');first.value='';select.append(first);for(const folder of folders){const option=el('option',folder.name);option.value=folder.id;select.append(option);}}
- function openCreation(){creationVersion++;closeActions();fillCreationFolders();$('create-title').value='';$('create-folder').value='';$('create-large-class').checked=false;creationOptions={title:'',folderId:null,largeClass:false};$('create-dialog').showModal();$('create-title').focus();}
- function captureCreation(){if(!$('create-title').reportValidity())return false;creationOptions={title:$('create-title').value.trim(),folderId:$('create-folder').value||null,largeClass:$('create-large-class').checked};return true;}
+ function openCreation(){creationVersion++;closeActions();fillCreationFolders();$('create-title').value='';$('create-folder').value='';creationOptions={title:'',folderId:null};$('create-dialog').showModal();$('create-title').focus();}
+ function captureCreation(){if(!$('create-title').reportValidity())return false;creationOptions={title:$('create-title').value.trim(),folderId:$('create-folder').value||null};return true;}
  function cancelCreation(){creationVersion++;importController?.abort();for(const id of ['create-dialog','copy-dialog','import-dialog'])if($(id).open)$(id).close();$('new-game').focus();}
  function backToCreation(){creationVersion++;importController?.abort();for(const id of ['copy-dialog','import-dialog'])if($(id).open)$(id).close();$('create-dialog').showModal();}
  for(const id of ['create-close','create-cancel','copy-cancel','import-cancel'])$(id).onclick=cancelCreation;
@@ -191,7 +195,7 @@
   $('draft-review').textContent=[sourceLabel+'. '+result.draft.questions.length+' questions prepared as an unsaved draft.',omitted+' question(s) omitted because they are not compatible with Games.',unresolved+' question(s) need a correct answer selected.',...warnings.filter(w=>typeof w==='string'),'Review every question and answer before saving. The original is unchanged.'].join(' ');
   $('draft-review').hidden=false;
  }
- $('create-manual').onclick=()=>{if(!captureCreation())return;$('create-dialog').close();edit({title:creationOptions.title||'Untitled game',folderId:creationOptions.folderId,largeClass:creationOptions.largeClass,questions:[newQuestion()]});};
+ $('create-manual').onclick=()=>{if(!captureCreation())return;$('create-dialog').close();edit({title:creationOptions.title||'Untitled game',folderId:creationOptions.folderId,questions:[newQuestion()]});};
  function openImport(mode){if(!captureCreation())return;creationVersion++;importMode=mode;$('create-dialog').close();$('import-form').reset();$('import-use-ai').disabled=!api.config?.aiConfigured;$('import-use-ai').checked=Boolean(api.config?.aiConfigured);updateImportAI();$('import-error').textContent='';$('prepare-import').disabled=false;$('prepare-import').textContent='Prepare editable draft';$('import-heading').textContent=mode==='file'?'Upload a game':'Copy-paste questions';$('import-file-label').hidden=mode!=='file';$('import-source-label').hidden=mode!=='paste';$('game-import-file').required=mode==='file';$('game-import-source').required=mode==='paste';$('import-dialog').showModal();$(mode==='file'?'game-import-file':'game-import-source').focus();}
  function updateImportAI(){const enabled=$('import-use-ai').checked;$('import-consent-label').hidden=!enabled;$('import-ai-consent').required=enabled;$('import-ai-note').textContent=api.config?.aiConfigured?'AI proposes answer keys and flags uncertainty. You make the final decision.':'AI checking is unavailable. Basic import is available.';}
  $('import-use-ai').onchange=updateImportAI;
@@ -228,5 +232,5 @@
  };
  $('copy-source').onchange=copyInfo;
  $('copy-form').onsubmit=event=>{event.preventDefault();$('copy-error').textContent='';try{const source=tests.find(test=>test.id===$('copy-source').value);if(!source)throw new Error('Choose a saved quiz.');openSourceDraft(source,$('compatible-only').checked,'Copied from '+source.title);}catch(error){$('copy-error').textContent=error.message;}};
- try{api=await professor();host=GameHost.mount({api,onEnded:id=>{forgetSession(id);status('Game ended.');},onUnavailable:(id,error)=>{if([404,410].includes(error.status)){forgetSession(id);status('That game has ended or expired.',true);}}});await refresh();}catch(e){status(e.message,true);$('new-game').disabled=true;$('new-folder').disabled=true;$('copy-test').disabled=true;}
+ try{api=await professor();host=GameHost.mount({api,onEnded:id=>{forgetSession(id);status('Game ended.');},onUnavailable:(id,error)=>{if([404,410].includes(error.status)){forgetSession(id);status('That game has ended or expired.',true);}else renderSessions();}});await refresh();}catch(e){status(e.message,true);$('launch-large-class').disabled=true;$('new-game').disabled=true;$('new-folder').disabled=true;$('copy-test').disabled=true;}
 })();

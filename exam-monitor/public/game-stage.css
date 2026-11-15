@@ -247,3 +247,39 @@
 @media (prefers-reduced-motion:reduce){
   .game-scene,.game-scene::after,.game-scene-flare{animation:none}
 }
+
+/* The podium face, not a floating caption, holds the placement and score. */
+#stage .podium-block{
+ min-height:calc(var(--rise) + 48px);height:auto;display:grid;align-content:start;justify-items:center;
+ grid-template-columns:minmax(0,1fr);gap:5px;padding:7px 6px 8px;letter-spacing:0;text-transform:none
+}
+#stage .podium-medal{
+ display:grid;place-items:center;width:clamp(30px,4.5vw,62px);aspect-ratio:1;border:2px solid #fff9d3;
+ border-radius:50%;color:#172742;font-size:clamp(1rem,3vw,2.2rem);line-height:1;font-weight:900;
+ box-shadow:inset 0 0 0 2px #2b272c36,0 3px 10px #0007;
+}
+#stage .podium-medal[data-metal=gold]{background:linear-gradient(130deg,#fff0a7,#ffc136 55%,#e89029)}
+#stage .podium-medal[data-metal=silver]{background:linear-gradient(130deg,#f7fbff,#d4e2ef 55%,#91adc3)}
+#stage .podium-medal[data-metal=bronze]{background:linear-gradient(130deg,#ffe0ad,#efa06c 55%,#d37950)}
+#stage .podium-names{list-style:none;margin:0;padding:0;max-width:100%;color:#fff;line-height:1.2;overflow-wrap:anywhere}
+#stage .podium-names li+li{margin-top:.25em}
+#stage .podium-names li>strong,#stage .podium-names .podium-total{display:block}
+#stage .podium-names li>strong{font-weight:800;font-size:clamp(.82rem,2.35vw,2rem)}
+#stage .podium-names .podium-total{color:#e2efff;font-size:clamp(.72rem,1.5vw,1.13rem);font-weight:700}
+#stage .final-standings{
+ position:relative;z-index:1;max-width:760px;margin:clamp(15px,3vh,26px) auto 0;
+ border:1px solid #527eaa;border-radius:14px;background:#102b46;color:#eff7ff;text-align:left
+}
+.standings-header{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;border-bottom:1px solid #426887}
+.standings-header h3{margin:0;font-size:clamp(1rem,2vw,1.35rem)}
+#stage .standings-play{padding:6px 10px;font-size:.82rem;line-height:1.1}
+.standings-list{max-height:clamp(114px,25dvh,240px);overflow:auto;overscroll-behavior:contain;scrollbar-width:thin}
+.standings-list ol{margin:0;padding:0;list-style:none}
+.standings-row{display:grid;grid-template-columns:3.3ch minmax(0,1fr) max-content;align-items:center;gap:8px;padding:8px 12px;line-height:1.25;border-bottom:1px solid #365778;overflow-wrap:anywhere}
+.standings-place{font-weight:800}
+.standings-score{color:#c4def5;font-variant-numeric:tabular-nums;font-size:.89em;white-space:nowrap}
+.player-rank-tile[data-place="1"]{border-color:#ffd052}
+.player-rank-tile[data-place="2"]{border-color:#bed8eb}
+.player-rank-tile[data-place="3"]{border-color:#eda272}
+@media(prefers-reduced-motion:reduce){.standings-list{scroll-behavior:auto}}
+[data-theme=light] .game-host-panel #stage .podium-names .podium-total{color:#e2efff}

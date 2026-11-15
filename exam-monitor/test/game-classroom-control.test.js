@@ -6,6 +6,7 @@ test('classroom exposes the existing teacher transition only when phase can adva
   assert.equal(actionLabel({...view,phase}),label);
  }
  assert.equal(actionLabel({...view,phase:'leaderboard',questionIndex:1}),'Show Podium');
+ assert.equal(actionLabel({...view,phase:'reveal',finalRound:true}),'Show Podium');
  for(const phase of ['intro','countdown','question','responses-closed','podium','closed'])assert.equal(actionLabel({...view,phase}),null);
 });
 test('relay ignores unknown senders and stale game phases and calls only the owner action',async()=>{

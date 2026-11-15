@@ -22,14 +22,13 @@ test('complete game round, duplicate answers, device recovery and restart preser
  assert.equal((await call('/api/game-sessions/'+s.id+'/recover',{code,playerId:p.playerId},'other')).status,404);
  assert.equal((await call('/api/game-sessions/'+s.id+'/recover',{code,playerId:p.playerId})).status,200);
  assert.equal((await call('/game-api/'+s.id+'/state',{playerId:p.playerId,resumeToken:first},null)).status,403);
- const restored=await call('/game-api/'+s.id+'/join',{nickname:'Ada',resumeToken:newToken},null);assert.equal(restored.body.view.score,0);assert.equal(restored.body.view.answer.points,undefined);assert.equal(restored.body.playerId,p.playerId);
+ const restored=await call('/game-api/'+s.id+'/join',{nickname:'Ada',resumeToken:newToken},null);assert.equal(restored.body.view.score,undefined);assert.equal(restored.body.view.answer.points,undefined);assert.equal(restored.body.playerId,p.playerId);
  await store.mutateGame(s.id,d=>{d.revealAt=Date.now()-1;});
- const lb=await call('/api/game-sessions/'+s.id+'/advance',{expectedPhase:'reveal',questionIndex:0});assert.equal(lb.body.phase,'leaderboard');assert.equal(lb.body.leaderboard[0].score,0);assert.ok(lb.body.scoreStartsAt>=lb.body.serverNow);
- await store.mutateGame(s.id,d=>{d.scoreStartsAt=Date.now()-3000;});
- const released=await call('/game-api/'+s.id+'/state',{playerId:p.playerId,resumeToken:newToken},null);
- assert.equal(released.body.score,score);assert.equal(released.body.previousScore,0);
- const duplicate=await call('/api/game-sessions/'+s.id+'/advance',{expectedPhase:'reveal',questionIndex:0});assert.equal(duplicate.body.phase,'leaderboard');
- const podium=await call('/api/game-sessions/'+s.id+'/advance',{expectedPhase:'leaderboard',questionIndex:0});assert.equal(podium.body.phase,'podium');assert.equal((await store.listSessions('owner')).length,0);
+ const podium=await call('/api/game-sessions/'+s.id+'/advance',{expectedPhase:'reveal',questionIndex:0});assert.equal(podium.body.phase,'podium');assert.deepEqual(podium.body.leaderboard,[]);
+ const pending=await call('/game-api/'+s.id+'/state',{playerId:p.playerId,resumeToken:newToken},null);assert.equal(pending.body.score,undefined);assert.equal(pending.body.rank,undefined);
+ const duplicate=await call('/api/game-sessions/'+s.id+'/advance',{expectedPhase:'reveal',questionIndex:0});assert.equal(duplicate.body.phase,'podium');assert.deepEqual(duplicate.body.podiumSchedule,podium.body.podiumSchedule);
+ await store.mutateGame(s.id,d=>{d.podiumSchedule=d.podiumSchedule.map(x=>({...x,at:Date.now()-1}));d.podiumCompleteAt=Date.now()-1;});
+ const released=await call('/game-api/'+s.id+'/state',{playerId:p.playerId,resumeToken:newToken},null);assert.equal(released.body.score,score);assert.equal(released.body.rank,1);assert.equal((await store.listSessions('owner')).length,0);
 });
 test('passive player polling does not rewrite durable game snapshots or extend expiry',async t=>{const {call,store}=await setup(t);const g=(await call('/api/games',quiz)).body,s=(await call('/api/game-sessions',{gameId:g.id})).body;const token='z'.repeat(40);const p=(await call('/game-api/'+s.id+'/join',{nickname:'Zed',resumeToken:token},null)).body;const before=await store.getGameSession(s.id);let writes=0;const original=store.mutateGame;store.mutateGame=(...args)=>{writes++;return original(...args);};for(let i=0;i<5;i++){const state=await call('/game-api/'+s.id+'/state',{playerId:p.playerId,resumeToken:token},null);assert.equal(state.status,200);assert.equal(state.body.players,undefined);assert.equal(state.body.nickname,"Zed");}assert.equal(writes,0);assert.equal((await store.getGameSession(s.id)).expiresAt,before.expiresAt);});
 test('twenty-player class accepts concurrent answers once without changing academic results',async t=>{const {call,store}=await setup(t);const g=(await call('/api/games',quiz)).body,s=(await call('/api/game-sessions',{gameId:g.id})).body;const players=await Promise.all(Array.from({length:20},async(_,i)=>{const resumeToken=String(i).padStart(40,'t');const response=await call('/game-api/'+s.id+'/join',{nickname:'Player '+i,resumeToken,avatarId:'avatar-'+String(i+1).padStart(2,'0')},null);assert.equal(response.status,200);return {playerId:response.body.playerId,resumeToken};}));await call('/api/game-sessions/'+s.id+'/advance',{expectedPhase:'lobby',questionIndex:-1});await store.mutateGame(s.id,d=>{d.introEndsAt=Date.now()-6000;});await Promise.all(players.map(async(p,i)=>{const answer={...p,questionIndex:0,slot:i%2};const replies=await Promise.all([call('/game-api/'+s.id+'/answer',answer,null),call('/game-api/'+s.id+'/answer',answer,null)]);assert.ok(replies.every(r=>r.status===200));}));const state=await store.getGameSession(s.id);assert.equal(state.phase,'responses-closed');assert.equal(state.players.filter(p=>p.score>0).length,10);assert.ok(state.players.every(p=>Object.keys(p.answers).length===1&&p.score<=1000));assert.equal((await store.listSessions('owner')).length,0);});
@@ -76,7 +75,7 @@ test('player routes expose only ordinal controller slots, including after reconn
  const closed=await call(base+'/display',{displayToken:s.displayToken},null);assert.equal(closed.body.question,null);
  await store.mutateGame(s.id,d=>{d.revealAt=Date.now()-1;});
  const resumed=await call(base+'/join',{nickname:'Phone owner',resumeToken},null);
- assert.equal(resumed.body.view.score,0);assert.equal(resumed.body.view.answer.correct,true);assert.equal(resumed.body.view.question,null);
+ assert.equal(resumed.body.view.score,undefined);assert.equal(resumed.body.view.answer.correct,true);assert.equal(resumed.body.view.question,null);
  for(const state of [reading.body,open.body,accepted.body.view,resumed.body.view]){
   const payload=JSON.stringify(state);
   for(const secret of [q.id,q.text,q.correctOptionId,q.options[0].text,'Private classmate','correctOptionId'])assert.equal(payload.includes(secret),false);
@@ -118,3 +117,5 @@ test('simultaneous polls and stale controls cannot restart or skip a synced intr
  assert.deepEqual(poll.body.question.counts,{a:0,b:0});
  assert.equal(phonePoll.body.question,null);
 });
+
+test('session large-class option is per launch and leaves saved library unchanged',async t=>{const {call,store}=await setup(t);const saved=(await call('/api/games',{...quiz,largeClass:true})).body;for(const value of [undefined,false,true]){const result=await call('/api/game-sessions',{gameId:saved.id,...(value===undefined?{}:{largeClass:value})});assert.equal(result.status,200);assert.equal((await store.getGameSession(result.body.id)).game.largeClass,value===true);await call('/api/game-sessions/'+result.body.id+'/close',{});}assert.equal((await store.getGame('owner',saved.id)).largeClass,true);assert.equal((await call('/api/game-sessions',{gameId:saved.id,largeClass:'true'})).status,400);});

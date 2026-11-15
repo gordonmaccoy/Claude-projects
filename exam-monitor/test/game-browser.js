@@ -12,7 +12,7 @@ const {chromium}=require('playwright'),{PGlite}=require('@electric-sql/pglite'),
  const sample=host.locator('.game-card').filter({hasText:'Sample Game: Easy Quiz'});
  await sample.waitFor();assert.equal(await sample.count(),1);
  assert.equal(await host.getByRole('button',{name:'Add sample game'}).count(),0);
- await host.locator('#new-game').click();await host.locator('#create-title').fill('Browser game');await host.locator('#create-large-class').check();await host.locator('#create-manual').click();assert.equal(await host.locator('#large-class').isChecked(),true);await host.locator('#title').fill('Browser game');await host.locator('#questions textarea').first().fill('Which is correct?');const inputs=host.locator('.option-edit input:not([type=radio])');for(let i=0;i<4;i++)await inputs.nth(i).fill('Choice '+(i+1));await host.locator('.option-edit input[type=radio]').first().check();
+ await host.locator('#new-game').click();await host.locator('#create-title').fill('Browser game');await host.locator('#create-manual').click();await host.locator('#title').fill('Browser game');await host.locator('#questions textarea').first().fill('Which is correct?');const inputs=host.locator('.option-edit input:not([type=radio])');for(let i=0;i<4;i++)await inputs.nth(i).fill('Choice '+(i+1));await host.locator('.option-edit input[type=radio]').first().check();
  await host.locator('#add-question').click();
  const nextQuestion=host.locator('#questions .question-card').nth(1);
  await nextQuestion.locator('textarea').first().fill('What is 1 plus 1?');
@@ -31,6 +31,7 @@ const {chromium}=require('playwright'),{PGlite}=require('@electric-sql/pglite'),
  await lastQuestion.locator('.option-edit input[type=radio]').first().check();
  await host.locator('#save-game').click();
  const custom=host.locator('.game-card').filter({hasText:'Browser game'});
+ assert.equal(await host.locator('#active-section #launch-large-class').isChecked(),false);await host.locator('#launch-large-class').check();
  await custom.getByRole('button',{name:'Launch Game'}).click();
  assert.equal(await host.locator('#launch-require-names').isChecked(),true);
  const popup=host.waitForEvent('popup');await host.locator('#confirm-launch').click();const classroom=await popup;classroom.on('pageerror',e=>errors.push(e.message));await host.waitForURL('**/game-library.html?session=*');await host.locator('#active-section #game-host-panel').waitFor();assert.equal(await host.locator('#pin,#qr').count(),0);await classroom.locator('#qr').waitFor();assert.equal(await classroom.locator('#pin,#pin-row').count(),0);const roomName=await classroom.locator('#room-name').textContent();assert.match(roomName,/^Game: [A-Za-z]+ [A-Za-z]+$/);
@@ -98,6 +99,8 @@ const {chromium}=require('playwright'),{PGlite}=require('@electric-sql/pglite'),
   const intro=number===1?'Get ready!':'Get ready for question '+number+'!';
   for(const page of [classroom,player]){
    await page.locator('#stage[data-phase=intro]').getByRole('heading',{name:intro,exact:true}).waitFor();
+   const art=page.locator('#stage .intro-artwork img');
+   assert.equal(await art.getAttribute('src'),'/game-intro/question-'+number+'.webp');
    assert.equal(await page.locator('#stage .choice').count(),0);
   }
   await classroom.locator('#stage[data-phase=countdown]').getByText(prompt,{exact:true}).waitFor();
@@ -144,9 +147,15 @@ const {chromium}=require('playwright'),{PGlite}=require('@electric-sql/pglite'),
  await scores().click();await classroom.locator('#stage[data-phase=leaderboard]').waitFor();
  await next().click();await round('Choose the first answer.',2,'First',3);
  await other.locator('button.choice').first().click();await player.locator('button.choice').nth(1).click();
- await scores().click();await player.getByText('Your place: #2').waitFor();
- await classroom.getByRole('button',{name:'Show Podium',exact:true}).click();await player.locator('.player-rank-tile[data-place="2"]').waitFor();
- await classroom.locator('.podium-step[data-place="1"] .player-avatar').waitFor();
+ await closedHeading.waitFor();
+ await classroom.locator('#stage[data-phase=reveal]').waitFor();
+ await player.locator('#stage [data-result=wrong]').waitFor();
+ assert.equal(await scores().isVisible(),false);
+ assert.equal(await player.locator('#score').isVisible(),false);
+ await classroom.getByRole('button',{name:'Show Podium',exact:true}).click();
+ await player.locator('.player-rank-tile[data-place="2"]').waitFor();
+ await classroom.locator('.podium-step[data-place="1"] .podium-medal[data-metal="gold"]').waitFor();
+ assert.equal(await classroom.locator('.podium-step[data-place="1"] .podium-names strong').textContent(),'Beta');
  assert.equal(await player.locator('.podium,.rankings').count(),0);assert.deepEqual(errors,[]);
  console.log('Game browser flow passed: avatar confirmation, three choice counts, reading, player privacy, early and timeout reveal, scores, reconnect, rank swap and podium.');
 

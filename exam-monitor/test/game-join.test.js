@@ -5,16 +5,16 @@ const quiz={title:'Review',questions:[{id:'q',type:'mc',text:'Which?',options:[{
 const token=i=>String(i).padStart(43,'x');
 const avatarId=i=>'avatar-'+String(i).padStart(2,'0');
 const player=i=>({nickname:'Player '+i,resumeToken:token(i),avatarId:avatarId(i)});
-test('large class is a strict per-game boolean and a launch snapshot',()=>{
+test('large class is a strict boolean and explicitly selected per launch',()=>{
  assert.equal(game.validateGame(quiz).largeClass,false);
  assert.equal(game.validateGame({...quiz,largeClass:true}).largeClass,true);
  assert.throws(()=>game.validateGame({...quiz,largeClass:'true'}),/large class/i);
- const input={...quiz,largeClass:true},s=game.newSession('owner',input);input.largeClass=false;
+ const input={...quiz,largeClass:true},s=game.newSession('owner',input,Date.now(),{largeClass:true});input.largeClass=false;
  assert.equal(game.lobbyView(s).largeClass,true);assert.equal(game.lobbyView(s).takenAvatarIds.length,0);
 });
 test('base and large lobbies assign only allowed, exclusive picks and preserve rejoin when full',()=>{
  for(const size of [30,50]){
-  const s=game.newSession('owner',{...quiz,largeClass:size===50});
+  const s=game.newSession('owner',quiz,Date.now(),{largeClass:size===50});
   assert.throws(()=>game.join(s,player(size+1)),/avatar/i);
   const first=game.join(s,player(1));
   assert.throws(()=>game.join(s,{...player(2),avatarId:avatarId(1)}),e=>e.status===409);
@@ -27,7 +27,7 @@ test('base and large lobbies assign only allowed, exclusive picks and preserve r
  }
 });
 test('old lobby data is not rewritten and existing reconnects keep their assigned avatar',()=>{
- const s=game.newSession('owner',{...quiz,largeClass:true});
+ const s=game.newSession('owner',quiz,Date.now(),{largeClass:true});
  const p=game.join(s,player(36));delete s.game.largeClass;delete s.roomName;delete s.requireNames;
  assert.equal(game.lobbyView(s).requireNames,true);
  assert.equal(game.join(s,player(36)).playerId,p.playerId);
@@ -49,7 +49,7 @@ test('valid game room name and simultaneous claims coexist with graded route',as
  t.after(async()=>{await runtime.close();await db.close();});
  const call=async(path,body,auth)=>{const r=await fetch(base+path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json',...(auth?{Authorization:'Bearer owner'}:{})},body:body?JSON.stringify(body):undefined});return {status:r.status,body:await r.json()};};
  const saved=await call('/api/games',{...quiz,largeClass:true},true);assert.equal(saved.body.largeClass,true);
- const launched=await call('/api/game-sessions',{gameId:saved.body.id},true);assert.equal(launched.status,200);
+ const launched=await call('/api/game-sessions',{gameId:saved.body.id,largeClass:true},true);assert.equal(launched.status,200);
  const {id,roomName,pin,displayToken}=launched.body,path='/game-api/'+id;assert.match(roomName,/^Game: [A-Za-z]+ [A-Za-z]+$/);
  assert.throws(()=>require('../rooms').roomName(roomName));
  const testName=roomName.slice(6),testSession=require('../exam').newSession('owner',null,Date.now(),{roomName:testName});
@@ -69,7 +69,7 @@ test('valid game room name and simultaneous claims coexist with graded route',as
  await call('/api/game-sessions/'+id+'/close',{},true);
  assert.equal((await call('/api/rooms/resolve',{roomName})).status,404);
  assert.equal((await call('/api/game-sessions',{gameId:saved.body.id,requireNames:'false'},true)).status,400);
- const open=await call('/api/game-sessions',{gameId:saved.body.id,requireNames:false},true);
+ const open=await call('/api/game-sessions',{gameId:saved.body.id,requireNames:false,largeClass:true},true);
  assert.equal(open.status,200);
  assert.equal((await call('/game-api/'+open.body.id+'/lobby')).body.requireNames,false);
  const nameless=await call('/game-api/'+open.body.id+'/join',{avatarId:avatarId(50),resumeToken:token(3)});

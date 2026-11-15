@@ -35,9 +35,10 @@ function fromTest(test,{compatibleOnly=false}={}){
 }
 function toTest(game){const source=validateGame(game);return {id:randomUUID(),title:source.title,folderId:null,questions:source.questions.map(q=>{const ids=new Map(q.options.map(o=>[o.id,randomUUID()]));const {durationSeconds,media,...rest}=q;return {...rest,id:randomUUID(),points:1,options:q.options.map(o=>({...o,id:ids.get(o.id)})),correctOptionId:ids.get(q.correctOptionId)};})};}
 function newGameRoomName(){return 'Game: '+generateRoomName().name;}
-function newSession(ownerId,game,now=Date.now(),{requireNames=true}={}){
+function newSession(ownerId,game,now=Date.now(),{requireNames=true,largeClass=false}={}){
+ if(typeof largeClass!=='boolean')fail('Large class must be on or off.');
  if(typeof requireNames!=='boolean')fail('Require names must be on or off.');
- return {requireNames,id:randomUUID(),ownerId,roomName:newGameRoomName(),pin:String(randomInt(100000,1000000)),displayToken:randomBytes(24).toString('base64url'),classroomControlKey:randomBytes(24).toString('base64url'),game:validateGame(game),phase:'lobby',questionIndex:-1,players:[],participants:[],recoveryRequests:[],createdAt:now,updatedAt:now,expiresAt:now+TTL,startsAt:null,deadlineAt:null,roundEndReason:null,roundEndedAt:null};
+ return {requireNames,id:randomUUID(),ownerId,roomName:newGameRoomName(),pin:String(randomInt(100000,1000000)),displayToken:randomBytes(24).toString('base64url'),classroomControlKey:randomBytes(24).toString('base64url'),game:validateGame({...game,largeClass}),phase:'lobby',questionIndex:-1,players:[],participants:[],recoveryRequests:[],createdAt:now,updatedAt:now,expiresAt:now+TTL,startsAt:null,deadlineAt:null,roundEndReason:null,roundEndedAt:null};
 }
 function active(s,now=Date.now()){if(s.phase==='closed'||s.expiresAt<=now)fail('Game has ended or expired.',410);}
 function changed(s,now){s.updatedAt=Math.max(s.updatedAt,now);s.expiresAt=Math.max(s.expiresAt,now+TTL);}
@@ -75,18 +76,25 @@ function beginQuestion(s,now){
  s.scoreStartsAt=null;s.roundEndReason=null;s.roundEndedAt=null;s.revealAt=null;
  s.startsAt=null;s.deadlineAt=null;s.participants=[];
 }
+function finalRound(s){return s.questionIndex===s.game.questions.length-1;}
+function finalPoll(s){return finalRound(s)&&['responses-closed','reveal'].includes(s.phase);}
+function beginPodium(s,now){
+ s.phase='podium';s.startsAt=null;s.deadlineAt=null;
+ const placements=rankRows(s.players,'score').filter(row=>row.rank<=3);
+ const ranks=[...new Set(placements.map(row=>row.rank))].sort((a,b)=>b-a);
+ let at=now+(ranks[0]===1?3500:PODIUM_LEAD_MS);
+ s.podiumSchedule=ranks.map((rank,i)=>{if(i)at+=rank===1?4500:PODIUM_SPACING_MS;return {rank,at};});
+ s.podiumCompleteAt=(s.podiumSchedule.at(-1)?.at??now)+PODIUM_WINNER_HOLD_MS;
+}
 function advance(s,now=Date.now()){
  active(s,now);sweep(s,now);
  if(s.phase==='lobby'){if(!s.players.length)fail('Wait for at least one player.');beginQuestion(s,now);}
  else if(s.phase==='media')countdown(s,now);
- else if(s.phase==='reveal'){s.phase='leaderboard';s.scoreStartsAt=now+SCORE_LEAD_MS;}
+ else if(s.phase==='reveal'){if(finalRound(s))beginPodium(s,now);else{s.phase='leaderboard';s.scoreStartsAt=now+SCORE_LEAD_MS;}}
  else if(s.phase==='leaderboard'){
   if(Number.isFinite(s.scoreStartsAt)&&now<s.scoreStartsAt+SCORE_DURATION_MS)fail('Wait for the score reveal to finish.');
-  if(s.questionIndex+1>=s.game.questions.length){s.phase='podium';s.startsAt=null;s.deadlineAt=null;
-  const placements=rankRows(s.players,'score').filter(row=>row.rank<=3);
-  s.podiumSchedule=[...new Set(placements.map(row=>row.rank))].sort((a,b)=>b-a)
-   .map((rank,i)=>({rank,at:now+PODIUM_LEAD_MS+i*PODIUM_SPACING_MS}));
-  s.podiumCompleteAt=(s.podiumSchedule.at(-1)?.at??now)+PODIUM_WINNER_HOLD_MS;}else beginQuestion(s,now);}
+  if(finalRound(s))beginPodium(s,now);else beginQuestion(s,now);
+ }
  else fail('Wait for the current question to finish.');changed(s,now);
 }
 function sweep(s,now=Date.now()){
@@ -167,7 +175,7 @@ function standings(s,now){
  return {rows,leaderboard:rankRows(rows,'score').map(p=>previousRanks?{...p,previousRank:previousRanks.get(p.id)}:p)};
 }
 function roundView(s,now){
- return {id:s.id,phase:s.phase,questionIndex:s.questionIndex,questionCount:s.game.questions.length,startsAt:s.startsAt,deadlineAt:s.deadlineAt,serverNow:now,introEndsAt:s.phase==='intro'?s.introEndsAt:null,revealAt:s.revealAt??null,roundEndReason:s.roundEndReason??null,roundEndedAt:s.roundEndedAt??null,scoreStartsAt:s.phase==='leaderboard'?s.scoreStartsAt??null:null,
+ return {id:s.id,phase:s.phase,finalRound:finalRound(s),questionIndex:s.questionIndex,questionCount:s.game.questions.length,startsAt:s.startsAt,deadlineAt:s.deadlineAt,serverNow:now,introEndsAt:s.phase==='intro'?s.introEndsAt:null,revealAt:s.revealAt??null,roundEndReason:s.roundEndReason??null,roundEndedAt:s.roundEndedAt??null,scoreStartsAt:s.phase==='leaderboard'?s.scoreStartsAt??null:null,
   scoreEndsAt:s.phase==='leaderboard'&&Number.isFinite(s.scoreStartsAt)?s.scoreStartsAt+SCORE_DURATION_MS:null};
 }
 function publicView(s,now=Date.now()){
@@ -186,7 +194,7 @@ function publicView(s,now=Date.now()){
  const showingAll=!podium||now>=podiumRevealAt(s,4);
  const visible=showingAll?leaderboard:leaderboard.filter(p=>p.rank<=3&&now>=podiumRevealAt(s,p.rank));
  return {...roundView(s,now),...(podium?{podiumSchedule:schedule,podiumCompleteAt:podiumRevealAt(s,4)}:{}),pin:s.pin,roomName:s.roomName??null,title:s.game.title,
-  players:showingAll?rows:visible,leaderboard:visible,question,media:s.phase==='media'&&q?.media?{...q.media}:null};
+  players:finalPoll(s)?rows.map(({score,...p})=>p):showingAll?rows:visible,leaderboard:finalPoll(s)?[]:visible,question,media:s.phase==='media'&&q?.media?{...q.media}:null};
 }
 function playerView(s,playerId,now=Date.now()){
  const p=s.players.find(p=>p.id===playerId);if(!p)fail('Player not found.',404);
@@ -196,10 +204,13 @@ function playerView(s,playerId,now=Date.now()){
  const pointsVisible=(s.phase==='leaderboard'&&!scoringPending(s,now))||s.phase==='podium';
  const previous=s.phase==='leaderboard'&&pointsVisible?{previousScore:rank.previousScore,previousRank:rank.previousRank}:{};
  const rankRevealAt=s.phase==='podium'?podiumRevealAt(s,rank.rank):0;
- const rankField=now>=rankRevealAt?{rank:rank.rank}:{};
+ const scoreVisible=!finalPoll(s)&&now>=rankRevealAt;
+ const rankField=scoreVisible?{rank:rank.rank,score:rank.score}:{};
+ // Poll a public ceremony boundary, never encode this player's unrevealed place in a timestamp.
+ const nextRankCheck=s.phase==='podium'&&!scoreVisible?((s.podiumSchedule||[]).find(place=>place.at>now)?.at??s.podiumCompleteAt):null;
  return {...roundView(s,now),question:q&&s.phase==='question'?{slotCount:q.options.length}:null,
-  ...rankField,...(rankRevealAt?{rankRevealAt}:{}),playerId:p.id,nickname:p.nickname,avatarId:p.avatarId||'avatar-01',score:rank.score,...previous,
-  answered:!!a,answer:a?{slot:q.options.findIndex(o=>o.id===a.optionId),...(revealing?{correct:a.correct}:{}),...(pointsVisible?{points:a.points}:{})}:null};
+  ...rankField,...(nextRankCheck?{rankRevealAt:nextRankCheck}:{}),playerId:p.id,nickname:p.nickname,avatarId:p.avatarId||'avatar-01',...previous,
+  answered:!!a,answer:a?{slot:q.options.findIndex(o=>o.id===a.optionId),...(revealing?{correct:a.correct}:{}),...(pointsVisible&&scoreVisible?{points:a.points}:{})}:null};
 }
 function hostView(s,now=Date.now()){return {...publicView(s,now),displayToken:s.displayToken,...(s.classroomControlKey?{classroomControlKey:s.classroomControlKey}:{}),recoveryRequests:s.recoveryRequests.filter(r=>now-r.createdAt<5*60*1000).map(({code,nickname,createdAt})=>({code,nickname,createdAt}))};}
 module.exports={TTL,validateGame,fromTest,toTest,newGameRoomName,newSession,lobbyView,join,touch,authenticatePlayer,advance,sweep,answer,requestRecovery,approveRecovery,publicView,playerView,hostView,points};

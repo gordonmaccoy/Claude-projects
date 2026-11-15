@@ -9,13 +9,21 @@ test('Game Library contains inline host controls under Games in progress and no 
  assert.match(html,/id="game-theme-toggle"/);
  for(const file of ['game-player.html','game-display.html'])assert.doesNotMatch(read(file),/id="game-theme-toggle"/);
 });
-test('professor editor and creation dialog have off-by-default Large class controls',()=>{
- const html=read('game-library.html');
- for(const id of ['create-large-class','large-class']){
-  const input=html.match(new RegExp('<input[^>]*id="'+id+'"[^>]*>'))?.[0];
-  assert.ok(input,id);assert.match(input,/type="checkbox"/);assert.doesNotMatch(input,/\bchecked\b/);
- }
- assert.match(html,/31–50/);
+test('large class is a launch-only choice, unchecked by default and sent per session',()=>{
+ const html=read('game-library.html'),js=read('game-library.js');
+ const dialog=html.match(/<dialog id="launch-dialog"[\s\S]*?<\/dialog>/)?.[0];
+ const section=html.slice(html.indexOf('id="active-section"'),html.indexOf('id="editor"'));
+ assert.ok(dialog);
+ assert.doesNotMatch(dialog,/id="launch-large-class"/);
+ assert.match(section,/<label[^>]*><input type="checkbox" id="launch-large-class"><span>Select for large Class \(More than 30 students\)<\/span><\/label>/);
+ assert.doesNotMatch(html,/id="(?:create-)?large-class(?:-hint)?"/);
+ assert.doesNotMatch(html,/Adds 20 more avatar choices|Use for 31–50 players/);
+ assert.match(js,/\$\('launch-large-class'\)\.checked=false/);
+ assert.match(js,/host\.id\?\$\('game-host-toolbar'\):\$\('game-next-launch'\)/);
+ assert.match(js,/slot\.append\(setting\)/);
+ assert.match(js,/largeClass=\$\('launch-large-class'\)\.checked/);
+ assert.match(js,/api\('\/game-sessions','POST',\{gameId,requireNames,largeClass\}\)/);
+ assert.doesNotMatch(js,/creationOptions\.largeClass|\$\('large-class'\)/);
 });
 test('projector lobby shows room name, current site home and QR as a separate presentation layout',()=>{
  const html=read('game-display.html');

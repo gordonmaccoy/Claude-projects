@@ -1,0 +1,20 @@
+#stage .illustrated-intro{width:min(100%,66rem);gap:clamp(.55rem,2vw,2rem)}
+.intro-heading{display:grid;gap:.42rem}
+.intro-artwork{
+  position:relative;display:grid;place-items:center;
+  inline-size:min(34vw,340px);block-size:clamp(100px,31dvh,330px);
+  max-inline-size:100%;filter:drop-shadow(0 6px 25px #071829ab);
+  animation:examio-intro-bounce 900ms cubic-bezier(.18,.7,.2,1) var(--scene-elapsed,0ms) both;
+}
+.intro-artwork img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;border-radius:clamp(8px,1.5vw,20px)}
+.intro-number-fallback{font-weight:900;line-height:1;font-size:clamp(5rem,16vmin,14rem);color:#ffdb73;text-shadow:0 5px #9a6525,0 8px 28px #55371c}
+.game-player .intro-artwork{inline-size:min(52vw,240px);block-size:clamp(72px,25dvh,210px)}
+@media (min-width:750px){
+  .game-display #stage .illustrated-intro{grid-template-columns:minmax(0,1fr) auto;text-align:left}
+}
+@keyframes examio-intro-bounce{
+  0%{opacity:0;transform:translateY(16px) scale(.67) rotate(-7deg)}
+  54%{opacity:1;transform:translateY(-5px) scale(1.055) rotate(3deg)}
+  100%{opacity:1;transform:none}
+}
+@media (prefers-reduced-motion:reduce){.intro-artwork{animation:none}}

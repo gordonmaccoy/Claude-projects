@@ -29,6 +29,7 @@ function fixture({reduced=false}={}){
   querySelector(selector){return this.querySelectorAll(selector)[0]||null;}
   getBoundingClientRect(){return {top:(this.parent?.children.indexOf(this)??0)*46};}
   animate(...args){this.animation=args;}
+  addEventListener(type,fn){(this.listeners??={})[type]=fn;}
  }
  const stage=new Node('section'),phase=new Node('p'),score=new Node('strong');
  stage.root=phase.root=score.root=true;
@@ -93,7 +94,7 @@ test('podium participants reveal by tier and first place alone triggers confetti
  assert.equal(x.stage.querySelectorAll('.podium-person').length,3);
  assert.equal(x.stage.querySelector('.podium-person').querySelector('img').src,'/sharp.webp');
  assert.ok(x.stage.querySelector('.podium-confetti'));assert.ok(x.stage.querySelector('.winner-spotlight'));
- assert.ok(x.stage.querySelector('.rankings'));
+ assert.equal(x.stage.querySelector('.rankings'),null);
  phone.render({...c,serverNow:9300,score:999},{answer});
  assert.match(phone.stage.textContent,/Watch the classroom podium/);
  phone.render({...c,serverNow:9510,rank:1,score:999},{answer});
@@ -140,8 +141,9 @@ test('projector ceremony starts dark, then raises exactly one occupied tier at a
  assert.match(x.stage.textContent,/First place/);
  assert.ok(x.stage.querySelector('.podium-confetti'));
  assert.equal(x.stage.querySelector('.rankings'),null);
- x.render({...v,serverNow:16200,leaderboard:[row(1),row(2),row(3)]});
- assert.ok(x.stage.querySelector('.rankings'),'same rows still cause final standings to appear after winner beat');
+ x.render({...v,serverNow:16200,leaderboard:[row(1),row(2),row(3),row(4),row(5)]});
+ assert.ok(x.stage.querySelector('.final-standings'),'the rest of the class becomes visible only after winner beat');
+ assert.deepEqual(x.stage.querySelectorAll('.standings-row').map(n=>n.dataset.place),['4','5']);
  assert.equal(x.stage.querySelector('.podium-confetti'),null);
 });
 
@@ -153,10 +155,55 @@ test('server gives each occupied place its own beat and holds the winner before 
  s.phase='leaderboard';s.questionIndex=0;s.scoreStartsAt=1000;
  g.advance(s,4000);
  const v=g.publicView(s,4000);
- assert.deepEqual(v.podiumSchedule,[{rank:3,at:5900},{rank:2,at:9500},{rank:1,at:13100}]);
- assert.equal(v.podiumCompleteAt,17100);
- assert.equal(g.publicView(s,17099).leaderboard.length,3);
- assert.equal(g.publicView(s,17100).leaderboard.length,4);
- assert.equal(g.playerView(s,s.players[3].id,17099).rank,undefined);
- assert.equal(g.playerView(s,s.players[3].id,17100).rank,4);
+ assert.deepEqual(v.podiumSchedule,[{rank:3,at:5900},{rank:2,at:9500},{rank:1,at:14000}]);
+ assert.equal(v.podiumCompleteAt,18000);
+ assert.equal(g.publicView(s,17999).leaderboard.length,3);
+ assert.equal(g.publicView(s,18000).leaderboard.length,4);
+ assert.equal(g.playerView(s,s.players[3].id,17999).rank,undefined);
+ assert.equal(g.playerView(s,s.players[3].id,18000).rank,4);
+});
+
+test('podium riser faces give each revealed player a name, medal and score',()=>{
+ const x=fixture();
+ const c={...common,phase:'podium',podiumSchedule:[{rank:3,at:5000}],serverNow:5350};
+ x.render({...c,leaderboard:[{id:'p',rank:3,nickname:'Quiz Otter',score:840}]});
+ const riser=x.stage.querySelector('.podium-block');
+ assert.match(riser.textContent,/Quiz Otter.*840 pts/);
+ assert.equal(riser.querySelector('.podium-medal').dataset.metal,'bronze');
+ assert.deepEqual(x.stage.querySelectorAll('.points'),[]);
+});
+
+test('a final answer without scores leaves no stale or reconstructed phone score',()=>{
+ const phone=fixture(),answer=()=>{};
+ phone.render({...common,phase:'reveal',serverNow:1500,score:1234,answer:{correct:true}},{answer});
+ assert.match(phone.score.textContent,/1,234 pts/);
+ phone.render({...common,phase:'reveal',finalRound:true,serverNow:1550,answer:{correct:true}},{answer});
+ assert.equal(phone.score.textContent,'');
+ assert.doesNotMatch(phone.stage.textContent,/pts|\d[,]\d{3}/);
+ assert.match(phone.stage.textContent,/Watch the classroom podium/);
+ phone.render({...common,phase:'podium',finalRound:true,serverNow:1600,rank:1,podiumSchedule:[]},{answer});
+ assert.doesNotMatch(phone.stage.textContent,/0 pts|1,234/);
+});
+
+test('post-podium standings are ordered, independently scrollable and omit all revealed tiers',()=>{
+ const motion=fixture(),rest=fixture({reduced:true});
+ const rows=[{id:'first',rank:1,nickname:'Gold',score:500},{id:'fourthA',rank:4,nickname:'Tie A',score:300},{id:'fourthB',rank:4,nickname:'Tie B',score:300},{id:'last',rank:6,nickname:'Last',score:200}];
+ const c={...common,phase:'podium',serverNow:5500,podiumCompleteAt:5100,leaderboard:rows};
+ for(const x of [motion,rest]){
+  x.render(c);
+  const list=x.stage.querySelector('.standings-list');assert.equal(list.attributes.tabindex,'0');
+  assert.deepEqual(list.querySelectorAll('.standings-row').map(n=>n.dataset.place),['4','4','6']);
+  assert.match(list.textContent,/Tie A.*Tie B.*Last/);
+  assert.doesNotMatch(list.textContent,/Gold/);
+ }
+ const control=motion.stage.querySelector('.standings-play'),viewport=motion.stage.querySelector('.standings-list');
+ assert.ok(control);assert.equal(rest.stage.querySelector('.standings-play'),null);
+ viewport.scrollHeight=350;viewport.clientHeight=170;viewport.scrollTop=0;
+ motion.at(10);assert.equal(viewport.scrollTop,0);
+ motion.at(1860);assert.equal(viewport.scrollTop,47);
+ viewport.listeners.wheel();motion.at(2860);assert.equal(viewport.scrollTop,47);
+ assert.equal(control.textContent,'Resume scroll');
+ control.onclick();motion.at(3000);motion.at(8500);
+ assert.equal(viewport.scrollTop,180);assert.equal(control.textContent,'Replay scroll');
+ control.onclick();assert.equal(viewport.scrollTop,0);
 });
