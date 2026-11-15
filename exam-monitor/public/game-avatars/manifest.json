@@ -178,5 +178,75 @@
     "id": "avatar-36",
     "name": "Cocoa Hedgehog",
     "image": "/game-avatars/avatar-36.webp"
+  },
+  {
+    "id": "avatar-37",
+    "name": "Goggle Raccoon",
+    "image": "/game-avatars/avatar-37.webp"
+  },
+  {
+    "id": "avatar-38",
+    "name": "Violet Lightning",
+    "image": "/game-avatars/avatar-38.webp"
+  },
+  {
+    "id": "avatar-39",
+    "name": "Teal Elephant",
+    "image": "/game-avatars/avatar-39.webp"
+  },
+  {
+    "id": "avatar-40",
+    "name": "Orange Pufferfish",
+    "image": "/game-avatars/avatar-40.webp"
+  },
+  {
+    "id": "avatar-41",
+    "name": "Astronaut Moon",
+    "image": "/game-avatars/avatar-41.webp"
+  },
+  {
+    "id": "avatar-42",
+    "name": "Sport Crocodile",
+    "image": "/game-avatars/avatar-42.webp"
+  },
+  {
+    "id": "avatar-43",
+    "name": "Strawberry Toast",
+    "image": "/game-avatars/avatar-43.webp"
+  },
+  {
+    "id": "avatar-44",
+    "name": "Golden-Horn Ram",
+    "image": "/game-avatars/avatar-44.webp"
+  },
+  {
+    "id": "avatar-45",
+    "name": "Mint Alien",
+    "image": "/game-avatars/avatar-45.webp"
+  },
+  {
+    "id": "avatar-46",
+    "name": "Crimson Ladybug",
+    "image": "/game-avatars/avatar-46.webp"
+  },
+  {
+    "id": "avatar-47",
+    "name": "Blue Bow Tie Hippo",
+    "image": "/game-avatars/avatar-47.webp"
+  },
+  {
+    "id": "avatar-48",
+    "name": "Super Frog",
+    "image": "/game-avatars/avatar-48.webp"
+  },
+  {
+    "id": "avatar-49",
+    "name": "Tangerine Gecko",
+    "image": "/game-avatars/avatar-49.webp"
+  },
+  {
+    "id": "avatar-50",
+    "name": "Golden Lion Cub",
+    "image": "/game-avatars/avatar-50.webp"
   }
 ]

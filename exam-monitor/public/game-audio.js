@@ -9,6 +9,19 @@
  ];
  function shuffleBag(random=Math.random){let bag=[],last;return ()=>{if(!bag.length){bag=[0,1,2,3];for(let i=3;i>0;i--){const j=Math.floor(random()*(i+1));[bag[i],bag[j]]=[bag[j],bag[i]];}if(bag[bag.length-1]===last)[bag[0],bag[bag.length-1]]=[bag[bag.length-1],bag[0]];}return last=bag.pop();};}
  function windowFor(view,received,now){if(!view||!['countdown','question'].includes(view.phase)||![view.startsAt,view.deadlineAt,view.serverNow].every(Number.isFinite))return null;const serverNow=view.serverNow+Math.max(0,now-received);if(view.deadlineAt<=serverNow||view.deadlineAt<=view.startsAt)return null;return {startIn:Math.max(0,view.startsAt-serverNow),endIn:view.deadlineAt-serverNow};}
+ const SCORE_MS=root.GameClient?.SCORE_DURATION_MS??1020;
+ function scoreSoundWindow(view,received,now){
+  if(view?.phase!=='leaderboard'||![view.scoreStartsAt,view.serverNow].every(Number.isFinite))return null;
+  const delta=view.scoreStartsAt-(view.serverNow+Math.max(0,now-received));
+  if(delta<=-SCORE_MS)return null;
+  return {startIn:Math.max(0,delta),elapsed:Math.max(0,-delta),endIn:delta+SCORE_MS};
+ }
+ function futurePodiumCues(view,received,now){
+  if(view?.phase!=='podium'||!Number.isFinite(view.serverNow)||!Array.isArray(view.podiumSchedule))return [];
+  const serverNow=view.serverNow+Math.max(0,now-received);
+  return view.podiumSchedule.filter(x=>Number.isFinite(x.at)&&x.at>=serverNow&&[1,2,3].includes(x.rank))
+   .map(x=>({rank:x.rank,startIn:x.at-serverNow}));
+ }
  const phaseOrder=['lobby','media','countdown','question','reveal','leaderboard','podium','closed'];
  function isStaleView(next,previous){
   if(!previous||next.id!==previous.id||!Number.isFinite(next.serverNow)||!Number.isFinite(previous.serverNow))return false;
@@ -40,32 +53,62 @@
    function schedule(){if(!bus||ctx.currentTime>=end){stop();return;}while(origin+cursor*step<Math.min(end,ctx.currentTime+.16)){const t=origin+cursor*step,n=cursor%16,bar=Math.floor(cursor/16)%4;if(t>=ctx.currentTime&&t>=start){tone(track.root+12+track.notes[n],t,step*.8,.09,track.wave);if(n%4===0){kick(t);tone(track.root+track.bass[bar],t,step*3.2,.26,'triangle');}if(n%8===4)hiss(t,true);if(n%track.hat===0)hiss(t,false);if(n===0)for(const interval of [0,3,7])tone(track.root+24+track.bass[bar]+interval,t,step*12,.018,'sine');}cursor++;}}
    schedule();timer=setInterval(schedule,25);closeTimer=setTimeout(stop,window.endIn+30);
   }
-  function lobby(key){
-   if(activeKey===key)return;stop();activeKey=key;bus=ctx.createGain();bus.gain.value=.74;bus.connect(master);
-   // An eight-bar original nylon-key style loop, leaving space for classroom conversation.
-   const chords=[[48,55,59,64],[45,52,59,60],[41,48,57,64],[43,50,57,62],[48,55,60,64],[40,47,55,62],[41,48,55,60],[43,50,53,59]];
-   const melody=[[72,,76,,,74,71,],[72,,,69,71,,,67],[69,,72,,76,,,72],[74,,,69,,67,,],[72,,76,,79,,,76],[74,,,71,,67,69,],[72,,,69,67,,,65],[67,,71,,,74,71,]];
-   const step=60/84/2,origin=ctx.currentTime+.03;let cursor=0;
+  function loop(key,score,window){
+   if(activeKey===key)return;stop();activeKey=key;bus=ctx.createGain();bus.gain.value=.7;bus.connect(master);
+   const chords=score?[[48,55,59,64],[43,50,57,62],[45,52,60,64],[41,48,57,60]]
+    :[[48,55,60,64],[50,57,62,65],[45,52,57,60],[43,50,58,62]];
+   const main=score?[[72,,76,,79,,,76],[74,,,77,79,,,77],[72,,76,,,81,,79],[72,,,76,77,,,74]]
+    :[[72,76,79,,84,79,76,74],[74,,77,81,84,,81,77],[72,76,81,84,,81,79,76],[74,,77,,82,79,77,74]];
+   const step=60/(score?104:128)/2,origin=ctx.currentTime+.025;let cursor=0;
    function schedule(){cursor=Math.max(cursor,Math.ceil((ctx.currentTime-origin)/step));while(origin+cursor*step<ctx.currentTime+.16){const t=origin+cursor*step,n=cursor%8,bar=Math.floor(cursor/8)%chords.length,c=chords[bar];if(t>=ctx.currentTime){
-    if(n===0){tone(c[0],t,step*7.7,.09,'sine',.065);for(const note of c.slice(1))tone(note,t,step*7.5,.026,'sine',.15);}
-    if(n===2||n===6)tone(c[n===2?1:2],t,step*2.1,.045,'triangle',.023);
-    const note=melody[bar][n];if(note)tone(note,t,step*2.6,.056,'triangle',.032);
+    if(n%4===0){kick(t);tone(c[0],t,step*2.9,.16,'triangle');}
+    if(n===2||n===6)hiss(t,true);else if(!score||n%2===0)hiss(t,false);
+    if(n===1||n===5)for(const note of c.slice(1))tone(note,t,step*1.3,.025,'triangle',.02);
+    const note=main[bar][n];if(note)tone(note,t,step*(score?1.8:1.2),score?.045:.08,'triangle');
    }cursor++;}}
    schedule();timer=setInterval(schedule,25);
+   if(window){
+    const start=ctx.currentTime+(window.startIn-window.elapsed)/1000;
+    for(let i=0;i<16;i++){
+     const t=start+i*.063;if(t<ctx.currentTime+.007)continue;
+     const pitch=84+[0,5,7,10,12,10,14,17][i%8];
+     tone(pitch,t,.075,.075,'square',.004);tone(pitch-12,t,.055,.055,'triangle',.004);
+    }
+   }
   }
+  function lobby(key){loop(key,false);}
+  function scoreboard(key,window){loop(key,true,window);}
   function fanfare(kind,t){const notes=kind==='podium'?[60,64,67,72,67,72,76,79]:[67,71,74,79];notes.forEach((n,i)=>{tone(n,t+i*.12,.32,.16,'triangle');tone(n-12,t+i*.12,.35,.07,'sine');});return notes.length*.12+.5;}
+  function gong(t){
+   // Inharmonic partials give a struck metal onset and warmly decaying body.
+   [[38,.26,1.3],[45.3,.16,1.01],[52.8,.12,.9],[59.2,.08,.64],[64.9,.055,.48],[72.4,.045,.24],[81.1,.024,.15]].forEach(([pitch,level,length])=>tone(pitch,t,length,level,'sine',.006));
+  }
   function cue(kind,followup){
    stop();bus=ctx.createGain();bus.gain.value=.8;bus.connect(master);const t=ctx.currentTime+.015;
    let tail;
    if(kind==='gong'){
-    // Detuned, inharmonic partials give a struck metal onset and warm decaying body.
-    [[38,.26,1.3],[45.3,.16,1.01],[52.8,.12,.9],[59.2,.08,.64],[64.9,.055,.48],[72.4,.045,.24],[81.1,.024,.15]].forEach(([pitch,level,length])=>tone(pitch,t,length,level,'sine',.006));
-    tail=1.36;
+    gong(t);tail=1.36;
     if(followup)tail=Math.max(tail,.42+fanfare(followup,t+.42));
    }else tail=fanfare(kind,t);
    closeTimer=setTimeout(stop,Math.ceil(tail*1000));
   }
-  return {resume:()=>ctx.resume(),volume:v=>master.gain.setTargetAtTime(v,ctx.currentTime,.02),question,lobby,cue,stop,dispose(){stop();ctx.close();}};
+  function overlay(kind,delay=0){if(!bus)return;const t=ctx.currentTime+Math.max(.015,delay/1000);if(kind==='gong')gong(t);else fanfare(kind,t);}
+  function podium(key,placements,finale){
+   if(activeKey===key)return;stop();activeKey=key;bus=ctx.createGain();bus.gain.value=.78;bus.connect(master);
+   if(!placements.length)return;
+   const origin=ctx.currentTime;
+   for(const {rank,startIn} of placements){
+    const t=origin+Math.max(.015,startIn/1000);
+    for(let i=0;i<(rank===1?27:17);i++){
+     hiss(t+i*.047+Math.random()*.036,i%3===0);
+    }
+    const notes=rank===3?[64,67,72]:rank===2?[65,69,74]:[60,67,72,76,79,84];
+    notes.forEach((note,i)=>{tone(note,t+i*.112,.39,rank===1?.16:.10,'triangle');if(rank===1)tone(note-12,t+i*.112,.52,.09,'sine');});
+   }
+   const tail=Math.max(...placements.map(x=>x.startIn))+(finale?1900:1500);
+   closeTimer=setTimeout(stop,tail);
+  }
+  return {resume:()=>ctx.resume(),volume:v=>master.gain.setTargetAtTime(v,ctx.currentTime,.02),question,lobby,scoreboard,podium,cue,overlay,stop,dispose(){stop();ctx.close();}};
  }
  function create({button,slider},env={}){
   const now=env.now||Date.now;let storage=env.storage;if(storage===undefined)try{storage=root.localStorage;}catch{}let prefs={volume:.35};try{prefs={...prefs,...JSON.parse(storage?.getItem('examio-game-audio')||'{}')};}catch{}
@@ -87,6 +130,18 @@
     if(mode!==key){mode=key;engine.question(key,selected.get(key),window,Math.max(0,view.serverNow+now()-received-view.startsAt));}
     return;
    }
+   if(view.phase==='leaderboard'&&Number.isFinite(view.scoreStartsAt)&&engine.scoreboard){
+    const key=view.id+':scores:'+view.questionIndex, sound=scoreSoundWindow(view,received,now());
+    if(mode!==key){mode=key;engine.scoreboard(key,sound);}
+    if(gong)engine.overlay?.('gong');
+    if(cue==='lead')engine.overlay?.('lead',sound?.endIn??0);
+    return;
+   }
+   if(view.phase==='podium'&&Array.isArray(view.podiumSchedule)&&engine.podium){
+    const key=view.id+':podium:'+view.questionIndex;
+    if(mode!==key){mode=key;const future=futurePodiumCues(view,received,now());engine.podium(key,future,future.some(x=>x.rank===1));}
+    return;
+   }
    const roundClosed=['reveal','leaderboard','podium'].includes(view.phase);
    if(mode&&(mode!=='cue'||!roundClosed)){engine.stop();mode=null;}
    if(gong||cue){mode='cue';if(gong&&cue)engine.cue('gong',cue);else engine.cue(gong?'gong':cue);}
@@ -104,5 +159,5 @@
    view=next;received=now();sync(cue,gong);
   },stop(){destroyed=true;if(engine?.dispose)engine.dispose();else engine?.stop();enabled=false;label();}};
  }
- const api={create,tracks,shuffleBag,windowFor,isStaleView};if(typeof module!=='undefined'&&module.exports)module.exports=api;root.GameAudio=api;
+ const api={create,tracks,shuffleBag,windowFor,isStaleView,scoreSoundWindow,futurePodiumCues};if(typeof module!=='undefined'&&module.exports)module.exports=api;root.GameAudio=api;
 })(typeof window==='undefined'?globalThis:window);

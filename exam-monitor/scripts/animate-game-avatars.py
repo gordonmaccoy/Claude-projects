@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Regenerate Examio's animated avatar GIFs from the bundled, approved WebPs.
+"""Generate Examio avatar thumbnails, GIF roster loops and animated feature WebPs.
 
 From exam-monitor: python3 scripts/animate-game-avatars.py  (requires Pillow).
 Each authored rectangle is an open eye's center and radii at a 150px design
 scale. The blink folds original pixels inward rather than painting over eyes.
 """
+from argparse import ArgumentParser
 from math import cos, pi, sin
 from pathlib import Path
 from PIL import Image
@@ -33,6 +34,21 @@ EYES = [
     [(64,55,12,12),(82,52,10,10)], [(66,51,12,10),(98,50,10,10)],
     [(61,51,12,11),(90,50,12,11)], [(65,49,12,10),(90,47,12,10)],
     [(61,57,12,13),(90,55,12,13)], [(55,61,11,11),(86,60,13,12)],
+    # Eye rectangles for the 14 large-lobby additions.
+    [(73, 57, 9, 9), (99, 55, 7, 8)],
+    [(56, 56, 9, 9), (80, 59, 7, 8)],
+    [(64, 55, 9, 10), (91, 53, 6, 8)],
+    [(59, 63, 9, 9), (86, 65, 9, 9)],
+    [(74, 55, 9, 9), (102, 53, 8, 9)],
+    [(77, 42, 9, 8), (96, 34, 5, 5)],
+    [(71, 57, 9, 9), (100, 55, 7, 9)],
+    [(82, 52, 9, 9), (104, 55, 6, 8)],
+    [(62, 59, 9, 9), (86, 56, 9, 9)],
+    [(64, 54, 9, 9), (88, 53, 9, 9)],
+    [(64, 36, 8, 9), (87, 32, 7, 7)],
+    [(62, 30, 9, 9), (92, 30, 9, 9)],
+    [(56, 30, 9, 10), (91, 26, 9, 10)],
+    [(79, 59, 9, 9), (108, 61, 8, 9)],
 ]
 
 
@@ -41,7 +57,7 @@ def blink(original, eyes, closure):
         return original
     canvas = original.copy()
     for x, y, w, h in eyes:
-        x, y, w, h = (round(k * DRAW / DESIGN) for k in (x, y, w, h))
+        x, y, w, h = (round(k * original.width / DESIGN) for k in (x, y, w, h))
         left, upper, right, lower = x - w, y - h, x + w, y + h
         band = max(3, round(h * .68))
         patch = original.crop((left, upper, right, lower))
@@ -96,6 +112,29 @@ def create(path, index, eyes):
                    duration=duration, loop=0, optimize=True, disposal=1)
 
 
+def create_picker_and_feature(path, index, eyes):
+    # Use the original art at native dimensions. Feature frames change only at
+    # the face, so WebP stores small delta patches instead of resizing the
+    # entire sprite for each movement.
+    src = Image.open(path).convert('RGB')
+    thumb = src.resize((80, 80), Image.Resampling.LANCZOS)
+    thumb.save(path.with_name(path.stem+'-thumb.webp'), quality=78, method=6)
+    half = blink(src, eyes, .58)
+    closed = blink(src, eyes, 1)
+    hold = 2250 + (index * 97) % 780
+    src.save(path.with_name(path.stem+'-feature.webp'), save_all=True,
+             append_images=[half, closed, half],
+             duration=[hold, 55, 95, 55], loop=0, quality=88,
+             kmin=0, kmax=0, method=6, minimize_size=True)
+
+
 if __name__ == '__main__':
+    parser = ArgumentParser(description=__doc__)
+    parser.add_argument('--gif-from', type=int, default=1,
+                        help='first roster GIF to regenerate (one-based, inclusive)')
+    args = parser.parse_args()
     for i, eyes in enumerate(EYES):
-        create(ROOT / f'avatar-{i+1:02d}.webp', i, eyes)
+        path = ROOT / f'avatar-{i+1:02d}.webp'
+        if i+1 >= args.gif_from:
+            create(path, i, eyes)
+        create_picker_and_feature(path, i, eyes)

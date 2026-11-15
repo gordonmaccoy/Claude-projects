@@ -61,3 +61,15 @@ test('live poll can align to a phase boundary without scheduling a tight loop',(
  assert.equal(client.nextPollDelay(v,800,1200),150);
  assert.equal(client.nextPollDelay({...v,phase:'reveal'},800,800),1000);
 });
+
+test('all Game Mode pages load the shared Examio wordmark styles',()=>{
+ const fs=require('node:fs');
+ for(const page of ['game-library','game-host','game-display','game-player']){
+  const html=fs.readFileSync('public/'+page+'.html','utf8');
+  assert.ok(html.includes('href="/examio.css"'),page);
+  assert.match(html,/class="brand"[^>]*>.*<strong>Examio<\/strong>/);
+ }
+ const css=fs.readFileSync('public/game.css','utf8');
+ const mark=css.match(/\.brand strong\{([^}]+)\}/)?.[1]||'';
+ for(const property of ['size','weight','tracking'])assert.ok(mark.includes('var(--examio-wordmark-'+property+')'));
+});

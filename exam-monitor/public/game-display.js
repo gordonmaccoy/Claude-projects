@@ -2,7 +2,7 @@
   const {$, status, json, render, nextPollDelay} = GameClient;
   const [id, displayToken, controlParam] = location.hash.slice(1).split('/').map(decodeURIComponent);
   if (!id || !displayToken) {
-    status('Open the classroom display from the game host page.', true);
+    status('Open the classroom display from Games in progress.', true);
     return;
   }
 
@@ -37,9 +37,10 @@
   const trackCue = GameShow.createTracker();
   const audio = GameAudio.create({button: $('game-audio-toggle'), slider: $('game-volume')});
   const celebration = $('celebration');
-  let celebrationTimer, pollTimer, receivedAt, polling = false, stopped = false;
+  let celebrationTimer, leaderTimer, pollTimer, receivedAt, polling = false, stopped = false;
   function clearCelebration() {
     clearTimeout(celebrationTimer);
+    clearTimeout(leaderTimer);
     celebration.hidden = true;
   }
   function showLeader(player) {
@@ -50,23 +51,38 @@
     celebration.hidden = false;
     celebrationTimer = setTimeout(clearCelebration, 3400);
   }
+  function updateJoinDetails(lobby) {
+    document.body.classList.toggle('game-projector-lobby',Boolean(lobby));
+    $('join-details').hidden = $('qr').hidden = !lobby;
+    if (!lobby) return;
+    const name=typeof lobby.roomName==='string'&&lobby.roomName.trim();
+    $('room-name').textContent=name||lobby.pin||'';
+    $('join-link').href=name?'/':'/game-player.html';
+    $('join-link').textContent=location.host+(name?'':'/game-player.html');
+    $('room-instructions').textContent=name?'Enter this room name to join.':'Enter this Game PIN to join.';
+    $('pin-row').hidden=!name||!lobby.pin;
+    $('pin').textContent=lobby.pin||'';
+    if (!$('qr').getAttribute('src')) $('qr').src='/game-api/'+encodeURIComponent(id)+'/qr';
+  }
   function applyView(next) {
     if (GameAudio.isStaleView(next, view)) return;
     const hasPreviousView = view?.id === next.id;
     view = next;
     receivedAt = Date.now();
     $('game-audio-controls').hidden = view.phase === 'closed';
-    $('join-details').hidden = view.phase !== 'lobby';
-    if (view.phase === 'lobby') {
-      $('pin').textContent = view.pin;
-      $('join-link').textContent = location.host+'/game-player.html';
-      if (!$('qr').getAttribute('src')) $('qr').src = '/game-api/'+encodeURIComponent(id)+'/qr';
-    }
+    updateJoinDetails(view.phase === 'lobby' ? view : null);
     render(view);
     updateControl();
     if (view.phase !== 'leaderboard') clearCelebration();
     const event = trackCue(view);
-    if (hasPreviousView && event?.cue === 'lead') showLeader(event.player);
+    if (hasPreviousView && event?.cue === 'lead') {
+      const round = view.questionIndex;
+      const wait = Number.isFinite(view.scoreStartsAt)
+        ? Math.max(0, view.scoreStartsAt + GameClient.SCORE_DURATION_MS - view.serverNow) : 0;
+      leaderTimer = setTimeout(() => {
+        if (view.phase === 'leaderboard' && view.questionIndex === round) showLeader(event.player);
+      }, wait);
+    }
     audio.update(view, hasPreviousView ? event?.cue : undefined);
   }
   if (controls) {
@@ -119,7 +135,7 @@
       status('');
     } catch (e) {
       failed = true;
-      $('join-details').hidden = true;
+      updateJoinDetails(null);
       status(e.status === 404 ? 'This game has ended or expired.' : e.message, true);
       if ([403,404,410].includes(e.status)) {
         stopped = true;

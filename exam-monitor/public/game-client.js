@@ -46,13 +46,22 @@
     return [...rows].sort((a,b)=>(a.previousRank ?? a.rank)-(b.previousRank ?? b.rank) ||
       a.nickname?.localeCompare(b.nickname || '') || 0);
   }
+  const SCORE_DURATION_MS=1020;
+  function scoreProgress(view,receivedAt,now=Date.now()){
+    if(view?.phase!=='leaderboard'||![view.scoreStartsAt,view.serverNow].every(Number.isFinite))return 1;
+    return Math.max(0,Math.min(1,(view.serverNow+Math.max(0,now-receivedAt)-view.scoreStartsAt)/SCORE_DURATION_MS));
+  }
   function nextPollDelay(view, receivedAt, now=Date.now()) {
-    const boundary = view?.phase === 'countdown' ? view.startsAt : view?.phase === 'question' ? view.deadlineAt : null;
+    const boundary = view?.phase === 'countdown' ? view.startsAt : view?.phase === 'question' ? view.deadlineAt
+      : view?.phase === 'leaderboard' ? (view.serverNow<view.scoreStartsAt?view.scoreStartsAt:
+        view.serverNow<view.scoreEndsAt?view.scoreEndsAt:null)
+      : view?.phase === 'podium' ? (view.podiumSchedule?.find(x=>x.at>view.serverNow)?.at ??
+        (view.rankRevealAt>view.serverNow?view.rankRevealAt:null)) : null;
     if (!Number.isFinite(boundary) || !Number.isFinite(view?.serverNow)) return 1000;
     return Math.max(150,Math.min(1000,boundary-view.serverNow-(now-receivedAt)+20));
   }
   const api={newQuestion,secondsLeft,roundTime,resumeRecord,mediaSource,forgetExpiredSession,requestInit,
-    choiceSlots,resultKind,isOlderView,priorRows,nextPollDelay};
+    choiceSlots,resultKind,isOlderView,priorRows,nextPollDelay,scoreProgress,SCORE_DURATION_MS};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;
   if(!root.document)return;
   const $=id=>document.getElementById(id),el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
@@ -62,25 +71,23 @@
   function button(text,fn,cls=''){const b=el('button',text,cls);b.type='button';b.onclick=async()=>{b.disabled=true;try{await fn();}catch(e){status(e.message,true);}finally{b.disabled=false;}};return b;}
   function picture(src,alt='Question image'){if(typeof src!=='string'||!/^data:image\/(png|jpeg|webp);base64,/.test(src))return null;const img=el('img');img.src=src;img.alt=alt;img.className='question-image';return img;}
   function avatar(id, cls='player-avatar') {
-    const img=el('img');img.src=GameAvatars.image(id);img.alt='';img.className=cls;
+    const img=el('img');img.src=cls.includes('feature-avatar')&&GameAvatars.feature ? GameAvatars.feature(id) : GameAvatars.image(id);img.alt='';img.className=cls;
     img.decoding='async';return img;
   }
   const reduced=()=>root.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   const pointsText=value=>Number(value||0).toLocaleString()+' pts';
   const countEpoch=new WeakMap();
-  function countUp(node, from, to, prefix='', suffix=' pts') {
+  function countUp(node, from, to, timeline, prefix='', suffix=' pts') {
     const epoch=(countEpoch.get(node)||0)+1;countEpoch.set(node,epoch);
     const show=n=>{node.textContent=prefix+Number(n).toLocaleString()+suffix;};
-    if(!Number.isFinite(from)||!Number.isFinite(to)||from===to||reduced()||!root.requestAnimationFrame){show(to);return;}
-    const start=performance.now();
+    if(!timeline||!Number.isFinite(from)||!Number.isFinite(to)||from===to||reduced()||!root.requestAnimationFrame){show(to);return;}
     const frame=now=>{
       if (!node.isConnected||countEpoch.get(node)!==epoch) return;
-      const ratio=Math.min(1,(now-start)/680);
+      const ratio=scoreProgress(timeline.view,timeline.receivedAt,now);
       show(ratio===1?to:Math.round(from+(to-from)*(1-(1-ratio)**3)));
       if(ratio<1)root.requestAnimationFrame(frame);
     };
-    show(from);
-    root.requestAnimationFrame(frame);
+    frame(performance.now());
   }
   function leaderboard(view) {
     const box=el('div',undefined,'rankings'),list=el('ol');
@@ -91,8 +98,9 @@
     });
     box.append(list);return box;
   }
-  function animateBoard(board,rows) {
-    if(reduced())return;
+  function animateBoard(board,rows,timeline) {
+    const progress=scoreProgress(timeline.view,timeline.receivedAt,performance.now());
+    if(reduced()||progress>=1||!rows.some(p=>Number.isFinite(p.previousScore)))return;
     const list=board.querySelector('ol'),nodes=new Map([...list.children].map(row=>[row.dataset.player,row]));
     const old=priorRows(rows),before=new Map();
     old.forEach(p=>list.append(nodes.get(p.id)));
@@ -100,8 +108,8 @@
     rows.forEach(p=>list.append(nodes.get(p.id)));
     rows.forEach(p=>{
       const row=nodes.get(p.id),dy=before.get(p.id)-row.getBoundingClientRect().top;
-      if(dy)row.animate?.([{transform:'translateY('+dy+'px)'},{transform:'translateY(0)'}],{duration:650,easing:'cubic-bezier(.22,.78,.22,1)'});
-      countUp(row.querySelector('.points'),p.previousScore,p.score);
+      if(dy)row.animate?.([{transform:'translateY('+dy+'px)'},{transform:'translateY(0)'}],{duration:SCORE_DURATION_MS,delay:-SCORE_DURATION_MS*progress,easing:'cubic-bezier(.22,.78,.22,1)'});
+      countUp(row.querySelector('.points'),p.previousScore,p.score,timeline);
     });
   }
   let clock,lastRender,lastView;
@@ -187,20 +195,26 @@
     if(isPlayer&&view.answered)stage.append(el('p','Answer received','answer-feedback controller-confirmed'));
   }
   function voteChart(q,animated) {
+    const panel=el('section',undefined,'vote-panel');
     const chart=el('ul',undefined,'vote-chart'+(animated?' animated-chart':''));
+    const counts=q.options.map(o=>q.counts?.[o.id]||0),total=counts.reduce((sum,n)=>sum+n,0);
+    const heading=el('div',undefined,'vote-heading');
+    heading.append(el('h3','Answer breakdown'),el('span',total+' '+(total===1?'response':'responses')));
     chart.setAttribute('aria-label','Class votes by answer choice');
-    const counts=q.options.map(o=>q.counts?.[o.id]||0),max=Math.max(1,...counts);
-    choiceSlots(counts.length).forEach(({slot,symbol,label})=>{
+    choiceSlots(counts.length).forEach(({slot,label})=>{
       const count=counts[slot],option=q.options[slot],correct=option.id===q.correctOptionId;
-      const bar=el('li',undefined,'vote-column choice-'+slot);
+      const bar=el('li',undefined,'vote-row choice-'+slot);
       bar.setAttribute('aria-label',label+': '+count+' '+(count===1?'vote':'votes')+(correct?', correct answer':''));
-      const shape=el('span',symbol,'vote-symbol');shape.setAttribute('aria-hidden','true');
-      const countLabel=el('strong',String(count),'vote-count');
-      const fill=el('span',undefined,'vote-fill');fill.setAttribute('aria-hidden','true');fill.style.setProperty('--vote-share',count/max);
-      const slotLabel=el('span',String.fromCharCode(65+slot)+(correct?' ✓':''),'vote-letter');
-      bar.append(countLabel,fill,shape,slotLabel);chart.append(bar);
+      const slotLabel=el('span',String.fromCharCode(65+slot),'vote-letter');
+      const description=el('div',undefined,'vote-answer');
+      description.append(el('span',option.text));
+      const img=picture(option.image,'Answer choice image');if(img)description.append(img);
+      if(correct){bar.classList.add('vote-correct');description.append(el('strong','✓ Correct','vote-key'));}
+      const track=el('span',undefined,'vote-track'),fill=el('span',undefined,'vote-fill');
+      track.setAttribute('aria-hidden','true');fill.style.setProperty('--vote-share',total?100*count/total+'%':'0%');track.append(fill);
+      bar.append(slotLabel,description,track,el('strong',String(count),'vote-count'));chart.append(bar);
     });
-    return chart;
+    panel.append(heading,chart);return panel;
   }
   function playerResult(view) {
     const phase=view.phase,kind=resultKind(view),card=el('div',undefined,'player-result');
@@ -210,33 +224,69 @@
       unanswered:['No answer received','M9 12h6']};
     const [caption,icon]=config[kind];
     if(phase==='podium'){
-      card.append(el('h2','Game complete!'),avatar(view.avatarId,'player-avatar feature-avatar'),el('strong','Final place: #'+view.rank,'result-detail'));
+      card.append(el('h2','Game complete!'),avatar(view.avatarId,'player-avatar feature-avatar'));
+      const tile=el('div',undefined,'player-rank-tile');
+      if(Number.isInteger(view.rank)){
+        tile.dataset.place=String(view.rank);
+        tile.append(el('span','Final place'),el('strong','#'+view.rank),el('span',pointsText(view.score)));
+      }else tile.append(el('span','Watch the classroom podium'));
+      card.append(tile);
       return card;
     }
     const badge=el('span',undefined,'result-badge');badge.setAttribute('aria-hidden','true');
     const ns='http://www.w3.org/2000/svg',mark=document.createElementNS(ns,'svg'),stroke=document.createElementNS(ns,'path');
     mark.setAttribute('viewBox','0 0 24 24');stroke.setAttribute('d',icon);mark.append(stroke);badge.append(mark);
     card.append(el('h2',caption),badge,avatar(view.avatarId,'player-avatar feature-avatar'));
-    if(phase==='leaderboard')card.append(el('strong','Your place: #'+view.rank,'result-detail'));
-    else card.append(el('strong',kind==='correct'?'+'+Number(view.answer.points||0).toLocaleString()+' pts':'Keep going!','result-detail'));
+    if(phase==='leaderboard'&&(view.scoreStartsAt==null||view.serverNow>=view.scoreStartsAt)){
+      if(kind==='correct'&&Number.isFinite(view.answer?.points)){
+        const earned=el('strong','+'+view.answer.points.toLocaleString()+' pts','result-detail round-earned');
+        earned.setAttribute('aria-live','off');card.append(earned);
+      }
+      card.append(el('span','Your place: #'+view.rank,'result-detail'));
+    }
+    else card.append(el('span',kind==='correct'?'Score reveal on the classroom screen.':'Keep going!','result-detail'));
     return card;
   }
-  function podium(stage,view,animated) {
-    const ceremony=el('div',undefined,'podium'+(animated?' staged-podium':''));
-    const beams=el('div',undefined,'celebration-beams');beams.setAttribute('aria-hidden','true');
-    beams.append(el('span'),el('span'),el('span'));
-    stage.append(beams,el('h2','Well played, everyone!','podium-heading'));
+  function podium(stage,view,previous) {
+    const ceremony=el('div',undefined,'podium podium-risers');
     const winners=(view.leaderboard||[]).filter(p=>p.rank<=3);
-    const distinctRanks=[...new Set(winners.map(p=>p.rank))].sort((a,b)=>b-a);
-    for(const p of winners){
-      const winner=el('div',undefined,'podium-place');
-      winner.dataset.place=p.rank;winner.style.setProperty('--entrance',distinctRanks.indexOf(p.rank)*600+'ms');
-      winner.append(el('span',['1ST PLACE','2ND PLACE','3RD PLACE'][p.rank-1],'podium-label'),avatar(p.avatarId),el('p',p.nickname),el('strong',pointsText(p.score)));
-      ceremony.append(winner);
+    const schedule=view.podiumSchedule||[];
+    const ranks=schedule.length?schedule.map(x=>x.rank):[...new Set(winners.map(p=>p.rank))];
+    const prior=previous?.phase==='podium'?previous.leaderboard||[]:[];
+    const recentlyRevealed=rank=>!reduced()&&previous?.id===view.id&&
+      !prior.some(p=>p.rank===rank)&&schedule.some(x=>x.rank===rank&&view.serverNow>=x.at&&view.serverNow-x.at<900);
+    const first=winners.some(p=>p.rank===1);
+    if(first){
+      stage.dataset.winner='true';stage.append(el('span',undefined,'winner-spotlight'));
+      if(recentlyRevealed(1)){
+        const confetti=el('div',undefined,'podium-confetti');confetti.setAttribute('aria-hidden','true');
+        for(let i=0;i<26;i++){
+          const fleck=el('i');
+          fleck.style.setProperty('--i',i);fleck.style.setProperty('--left',(7+i*17%87)+'%');
+          fleck.style.setProperty('--drift',(i%2?1:-1)*(24+i%8*8)+'px');confetti.append(fleck);
+        }
+        stage.append(confetti);
+      }
+    }
+    stage.append(el('h2','The podium','podium-heading'));
+    for(const rank of ranks){
+      const group=el('section',undefined,'podium-step');group.dataset.place=rank;
+      const groupWinners=winners.filter(p=>p.rank===rank);
+      if(recentlyRevealed(rank))group.classList.add('podium-enter');
+      const people=el('div',undefined,'podium-finishers');
+      for(const p of groupWinners.slice(0,3)){
+        const entry=el('article',undefined,'podium-person');
+        entry.append(avatar(p.avatarId,'player-avatar feature-avatar'),el('strong',p.nickname),el('span',pointsText(p.score),'podium-total'));
+        people.append(entry);
+      }
+      if(groupWinners.length>3)people.append(el('span','+'+(groupWinners.length-3)+' tied','podium-total'));
+      const base=el('div',undefined,'podium-block');base.append(el('strong',String(rank)),el('span','Place'));
+      group.append(people,base);ceremony.append(group);
     }
     stage.append(ceremony);
   }
   function render(view,{answer}={}) {
+    const receivedAt=performance.now(),timeline={view,receivedAt};
     const isPlayer=Boolean(answer),sameGame=lastView?.id===view.id;
     if(isOlderView(view,lastView))return;
     const changedPhase=!sameGame||lastView.phase!==view.phase||lastView.questionIndex!==view.questionIndex;
@@ -244,13 +294,13 @@
     const animate=Boolean(sameGame&&changedPhase&&!reduced());
     const fingerprint=JSON.stringify(view.phase==='media'?{id:view.id,phase:view.phase,questionIndex:view.questionIndex,media:view.media}
       :['countdown','question'].includes(view.phase)?{id:view.id,phase:view.phase,questionIndex:view.questionIndex,question:view.question,startsAt:view.startsAt,deadlineAt:view.deadlineAt,answered:view.answered,answer:view.answer,score:view.score}
-      :!isPlayer&&['leaderboard','podium'].includes(view.phase)?{id:view.id,phase:view.phase,questionIndex:view.questionIndex,leaderboard:(view.leaderboard||[]).map(({connected,...row})=>row)}
+      :!isPlayer&&['leaderboard','podium'].includes(view.phase)?{id:view.id,phase:view.phase,questionIndex:view.questionIndex,scoreStartsAt:view.scoreStartsAt,podiumSchedule:view.podiumSchedule,leaderboard:(view.leaderboard||[]).map(({connected,...row})=>row)}
       :!isPlayer&&view.phase==='reveal'?{id:view.id,phase:view.phase,questionIndex:view.questionIndex,question:view.question}
       :{...view,serverNow:0});
     lastView=view;
     if(fingerprint===lastRender)return;
     lastRender=fingerprint;clearInterval(clock);
-    const stage=$('stage');stage.replaceChildren();stage.dataset.phase=view.phase;
+    const stage=$('stage');stage.replaceChildren();stage.dataset.phase=view.phase;delete stage.dataset.winner;
     if(changedPhase) stage.dataset.transition=animate?'quick':'';
     else stage.dataset.transition='';
     if($('game-title'))$('game-title').textContent=view.title||'Live quiz';
@@ -265,19 +315,22 @@
     }
     if(view.phase==='question'){if(!isPlayer)appendPrompt(stage,q);choices(stage,view,answer);}
     if(view.phase==='reveal'&&!isPlayer&&q){
-      appendPrompt(stage,q);stage.append(voteChart(q,animate));choices(stage,view,answer);
+      appendPrompt(stage,q);stage.append(voteChart(q,animate));
       if(q.answerExplanation)stage.append(el('p',q.answerExplanation,'explanation'));
     }
-    if(isPlayer&&['reveal','leaderboard','podium'].includes(view.phase))stage.append(playerResult(view));
-    if(!isPlayer&&view.phase==='podium')podium(stage,view,animate);
-    if(!isPlayer&&['leaderboard','podium'].includes(view.phase)){
+    if(isPlayer&&['reveal','leaderboard','podium'].includes(view.phase)){
+      const result=playerResult(view);stage.append(result);
+      const earned=result.querySelector('.round-earned');if(earned)countUp(earned,0,view.answer.points,timeline,'+');
+    }
+    if(!isPlayer&&view.phase==='podium')podium(stage,view,previous);
+    if(!isPlayer&&(view.phase==='leaderboard'||view.phase==='podium'&&(!view.podiumSchedule?.length||view.serverNow>=view.podiumSchedule.at(-1).at))){
       const board=leaderboard(view);stage.append(board);
-      if(animate&&view.phase==='leaderboard')animateBoard(board,view.leaderboard||[]);
+      if(view.phase==='leaderboard')animateBoard(board,view.leaderboard||[],timeline);
     }
     if(view.phase==='closed')stage.append(el('h2','Thanks for playing!'));
     if($('score')&&view.score!==undefined){
       const score=$('score');
-      if(isPlayer&&animate&&view.phase==='leaderboard')countUp(score,view.previousScore??previous.score,view.score);
+      if(isPlayer&&view.phase==='leaderboard')countUp(score,view.previousScore,view.score,timeline);
       else countUp(score,view.score,view.score);
     }
     runRoundClock(view,stage);

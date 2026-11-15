@@ -3,6 +3,8 @@ window.examioKorean = {
  "Student results recorded in real time":"학생 결과를 실시간으로 기록",
  "Leave off for a silly random name.":"끄면 재미있는 이름이 무작위로 생성됩니다.",
  "Enter the room name to join your test.":"강의실 이름을 입력하여 시험에 참여하세요.",
+ "Enter the room name to join your test or game.":"강의실 이름을 입력하여 시험이나 게임에 참여하세요.",
+ "Join a test or game":"시험 또는 게임 참여",
  "Finding your room…":"강의실을 찾는 중…",
  "Room not found. Check the name on your classroom display.":"강의실을 찾을 수 없습니다. 강의실 화면에 표시된 이름을 확인하세요.",
  "Unable to find your room. Please try again.":"강의실을 찾을 수 없습니다. 다시 시도하세요.",

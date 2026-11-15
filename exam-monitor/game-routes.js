@@ -36,6 +36,9 @@ function createGameController({store,origin}){
  api.post('/game-sessions/:id/recover',sessionWrap(async(req,res)=>{await owned(req);const {session}=await store.mutateGame(req.params.id,s=>game.approveRecovery(s,req.body?.code,req.body?.playerId,Date.now()));res.json(await host(session,req));}));
  api.post('/game-sessions/:id/close',sessionWrap(async(req,res)=>{await owned(req);await store.closeGame(req.user.id,req.params.id);res.json({ok:true});}));
  publicApi.post('/resolve',wrap(async(req,res)=>{const pin=String(req.body?.pin||'').trim();if(!/^\d{6}$/.test(pin))missing();const s=await store.findGamePin(pin);if(!s)missing();res.json({sessionId:s.id});}));
+ publicApi.get('/:id/lobby',wrap(async(req,res)=>{
+  const s=await store.getGameSession(req.params.id);if(!s)missing();res.json(game.lobbyView(s));
+ }));
  publicApi.post('/:id/join',sessionWrap(async(req,res)=>{const {session,result}=await store.mutateGame(req.params.id,s=>{game.sweep(s,Date.now());return game.join(s,req.body||{},Date.now());});res.json({...result,view:game.playerView(session,result.playerId)});}));
  publicApi.post('/:id/state',sessionWrap(async(req,res)=>{const session=await current(req.params.id,req.gameReceivedAt);game.authenticatePlayer(session,req.body?.playerId,req.body?.resumeToken);beat(session.id,req.body.playerId,req.gameReceivedAt);res.json(game.playerView(overlay(session),req.body.playerId));}));
  publicApi.post('/:id/answer',sessionWrap(async(req,res)=>{const receivedAt=req.gameReceivedAt;const {session,result}=await store.mutateGame(req.params.id,s=>game.answer(s,req.body||{},receivedAt));res.json({accepted:result.accepted,view:game.playerView(session,req.body.playerId)});}));
@@ -52,13 +55,15 @@ function createPublicLimiter(){
   const valid=typeof token==='string'&&token.length>=32&&token.length<=128;
   const session=req.path.split('/')[1]||'';
   const polling=req.path.endsWith('/state')||req.path.endsWith('/display');
+  const lobby=req.path.endsWith('/lobby');
+  const resolving=req.path==='/resolve'||req.path==='/api/rooms/resolve';
   if(polling&&!valid)return res.status(403).json({error:'Game connection not recognized.'});
   const actor=valid?require('node:crypto').createHash('sha256').update(token).digest('hex'):null;
   // Do not treat a campus NAT or Railway proxy as a single player.
   // Per-token limits protect authenticated/resuming activity; coarse endpoint
   // limits remain high enough for large shared-IP classrooms.
   const budgets=actor?[[session+':'+actor+':'+(polling?'read':'write'),polling?180:120]]:[];
-  if(!polling)budgets.push(['ip:'+req.socket.remoteAddress+':'+(req.path==='/resolve'?'resolve':'write'),req.path==='/resolve'?1200:10000]);
+  if(!polling)budgets.push(['ip:'+req.socket.remoteAddress+':'+(resolving?'resolve':lobby?'lobby':'write'),resolving?1200:10000]);
   for(const [key,max] of budgets){let value=counters.get(key);if(!value){if(counters.size>=20000)return res.status(429).json({error:'Please wait before retrying.'});value={count:0,until:now+60000};counters.set(key,value);}if(++value.count>max)return res.status(429).json({error:'Too many attempts. Please wait a minute.'});}
   next();
  };

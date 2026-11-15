@@ -1,7 +1,7 @@
 /* Convert an imported/saved test into an independent, reviewable game draft. */
 (function(root){
  'use strict';
- function fromSource(source,{title,folderId=null,compatibleOnly=false}={}){
+ function fromSource(source,{title,folderId=null,largeClass=false,compatibleOnly=false}={}){
   const test=source?.test??source;
   if(!test||!Array.isArray(test.questions)||!test.questions.length)throw new Error('The source has no questions to copy.');
   const name=title===undefined?(test.title??''):title;
@@ -35,7 +35,7 @@
   if(omitted&&!compatibleOnly)throw new Error('The source contains '+omitted+' non-multiple-choice question(s). Choose compatible-only copying to leave them out.');
   if(!questions.length)throw new Error('There are no multiple-choice questions to copy.');
   if(questions.length>100)throw new Error('A game can contain at most 100 multiple-choice questions.');
-  return {draft:{title:name,folderId,questions},omitted,unresolved};
+  return {draft:{title:name,folderId,largeClass:largeClass===true,questions},omitted,unresolved};
  }
  function applyAnswerReview(draft,reviewedTest){
   const reviewed=reviewedTest?.test??reviewedTest;

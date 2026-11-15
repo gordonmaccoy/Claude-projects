@@ -29,3 +29,10 @@ test('refresh into settled scores or podium does not replay a cue',()=>{
  assert.equal(track(view('leaderboard',[leader('b')],2)),null);
  assert.equal(track(view('podium',[leader('a')],3,'another')),null);
 });
+test('arming a score reveal cannot consume the later leader cue',()=>{
+ const track=createTracker();
+ track(view('lobby',[leader('a',1,0)]));
+ const pending={...view('leaderboard',[leader('a',1,0)]),scoreStartsAt:1000,serverNow:900};
+ assert.equal(track(pending),null);
+ assert.deepEqual(track({...pending,serverNow:1000,leaderboard:[leader('b')]}),{cue:'lead',player:leader('b')});
+});

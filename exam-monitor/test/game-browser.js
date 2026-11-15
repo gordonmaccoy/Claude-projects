@@ -12,7 +12,7 @@ const {chromium}=require('playwright'),{PGlite}=require('@electric-sql/pglite'),
  const sample=host.locator('.game-card').filter({hasText:'Sample Game: Easy Quiz'});
  await sample.waitFor();assert.equal(await sample.count(),1);
  assert.equal(await host.getByRole('button',{name:'Add sample game'}).count(),0);
- await host.locator('#new-game').click();await host.locator('#create-manual').click();await host.locator('#title').fill('Browser game');await host.locator('#questions textarea').first().fill('Which is correct?');const inputs=host.locator('.option-edit input:not([type=radio])');for(let i=0;i<4;i++)await inputs.nth(i).fill('Choice '+(i+1));await host.locator('.option-edit input[type=radio]').first().check();
+ await host.locator('#new-game').click();await host.locator('#create-title').fill('Browser game');await host.locator('#create-large-class').check();await host.locator('#create-manual').click();assert.equal(await host.locator('#large-class').isChecked(),true);await host.locator('#title').fill('Browser game');await host.locator('#questions textarea').first().fill('Which is correct?');const inputs=host.locator('.option-edit input:not([type=radio])');for(let i=0;i<4;i++)await inputs.nth(i).fill('Choice '+(i+1));await host.locator('.option-edit input[type=radio]').first().check();
  await host.locator('#add-question').click();
  const nextQuestion=host.locator('#questions .question-card').nth(1);
  await nextQuestion.locator('textarea').first().fill('What is 1 plus 1?');
@@ -31,7 +31,8 @@ const {chromium}=require('playwright'),{PGlite}=require('@electric-sql/pglite'),
  await lastQuestion.locator('.option-edit input[type=radio]').first().check();
  await host.locator('#save-game').click();
  const custom=host.locator('.game-card').filter({hasText:'Browser game'});
- const popup=host.waitForEvent('popup');await custom.getByRole('button',{name:'Launch Game'}).click();const classroom=await popup;classroom.on('pageerror',e=>errors.push(e.message));await host.waitForURL('**/game-host.html?session=*');assert.equal(await host.locator('#pin,#qr').count(),0);await classroom.locator('#pin').filter({hasText:/\d{6}/}).waitFor();const pin=await classroom.locator('#pin').textContent();await classroom.locator('#qr').waitFor();
+ const popup=host.waitForEvent('popup');await custom.getByRole('button',{name:'Launch Game'}).click();const classroom=await popup;classroom.on('pageerror',e=>errors.push(e.message));await host.waitForURL('**/game-library.html?session=*');await host.locator('#active-section #game-host-panel').waitFor();assert.equal(await host.locator('#pin,#qr').count(),0);await classroom.locator('#pin').filter({hasText:/\d{6}/}).waitFor();const pin=await classroom.locator('#pin').textContent();await classroom.locator('#qr').waitFor();const roomName=await classroom.locator('#room-name').textContent();assert.match(roomName,/^Game: [A-Za-z]+ [A-Za-z]+$/);
+ await host.reload();await host.locator('#active-section #game-host-panel').waitFor();
  // A copied viewer URL cannot control the game, even from another tab in this same profile.
  assert.equal((new URL(classroom.url())).hash.split('/').length,2);
  const viewer=await host.context().newPage();
@@ -42,9 +43,20 @@ const {chromium}=require('playwright'),{PGlite}=require('@electric-sql/pglite'),
  await classroom.getByRole('button',{name:'Enable sound'}).click();
  await classroom.getByRole('button',{name:'Mute sound'}).waitFor();
  await classroom.getByRole('slider',{name:'Volume'}).fill('25');
- async function joinPlayer(nickname,avatarId){
+ async function joinPlayer(nickname,avatarId,viaRoomName=false){
   const page=await browser.newPage({viewport:{width:360,height:640}});page.on('pageerror',e=>errors.push(e.message));
-  await page.goto(base+'/game-player.html');await page.locator('#join-pin').fill(pin);await page.locator('#nickname').fill(nickname);
+  if(viaRoomName){
+   await page.goto(base+'/');await page.locator('#room-name').fill(roomName);
+   await page.locator('#room-join-form button').click();await page.waitForURL('**/game-player.html?session=*');
+  }else{
+   await page.goto(base+'/game-player.html');await page.locator('#join-pin').fill(pin);await page.getByRole('button',{name:'Continue',exact:true}).click();
+  }
+  await page.locator('#nickname').fill(nickname);
+  const avatars=page.locator('#avatar-picker button');await avatars.first().waitFor();assert.equal(await avatars.count(),30);
+  if(viaRoomName){
+   await page.locator('[data-avatar="avatar-12"].is-taken:disabled').waitFor();
+   await page.locator('#avatar-next').click();assert.equal(await avatars.count(),20);
+  }
   const picker=page.locator('[data-avatar="'+avatarId+'"]');
   await picker.click();
   const dialog=page.locator('#avatar-preview:visible');
@@ -57,7 +69,7 @@ const {chromium}=require('playwright'),{PGlite}=require('@electric-sql/pglite'),
   await page.locator('#play-area:not([hidden])').waitFor();
   return page;
  }
- const player=await joinPlayer('Alpha','avatar-12'), other=await joinPlayer('Beta','avatar-13');
+ const player=await joinPlayer('Alpha','avatar-12'), other=await joinPlayer('Beta','avatar-44',true);
  const scores=()=>classroom.getByRole('button',{name:'Show Scores',exact:true});
  const next=()=>classroom.getByRole('button',{name:'Next Question',exact:true});
  async function round(prompt,count,choiceText) {
@@ -85,10 +97,11 @@ const {chromium}=require('playwright'),{PGlite}=require('@electric-sql/pglite'),
  await classroom.locator('#stage[data-phase=reveal]').waitFor();
  assert.deepEqual(await classroom.locator('.vote-count').allTextContents(),['1','1','0','0']);
  assert.match(await player.locator('#score').textContent(),/^0\b/);
+ assert.equal(await player.locator('.round-earned').count(),0);
  assert.equal(await next().isVisible(),false);
  await scores().click();await player.getByText('Your place: #1').waitFor();
  await classroom.locator('#celebration:not([hidden]) .celebration-name').filter({hasText:'Alpha'}).waitFor();
- await player.waitForFunction(()=>!/^0\b/.test(document.getElementById('score').textContent));await player.waitForTimeout(1000);
+ await next().waitFor();
  const score=await player.locator('#score').textContent();
  await player.reload();await player.getByText('Your place: #1').waitFor();assert.equal(await player.locator('#score').textContent(),score);
  await next().click();await round('What is 1 plus 1?',5,'6');
@@ -99,8 +112,8 @@ const {chromium}=require('playwright'),{PGlite}=require('@electric-sql/pglite'),
  await next().click();await round('Choose the first answer.',2,'First');
  await other.locator('button.choice').first().click();await player.locator('button.choice').nth(1).click();
  await scores().click();await player.getByText('Your place: #2').waitFor();
- await classroom.getByRole('button',{name:'Show Podium',exact:true}).click();await player.getByText('Final place: #2').waitFor();
- await classroom.locator('.podium-place[data-place="1"] .player-avatar').waitFor();
+ await classroom.getByRole('button',{name:'Show Podium',exact:true}).click();await player.locator('.player-rank-tile[data-place="2"]').waitFor();
+ await classroom.locator('.podium-step[data-place="1"] .player-avatar').waitFor();
  assert.equal(await player.locator('.podium,.rankings').count(),0);assert.deepEqual(errors,[]);
  console.log('Game browser flow passed: avatar confirmation, three choice counts, reading, player privacy, early and timeout reveal, scores, reconnect, rank swap and podium.');
 

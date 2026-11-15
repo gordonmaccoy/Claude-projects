@@ -76,7 +76,7 @@ const roomJoinForm=document.querySelector('#room-join-form');if(roomJoinForm)roo
   const response=await fetch('/api/rooms/resolve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({roomName:roomJoinForm.elements.room.value})});
   const result=await response.json();if(!response.ok)throw new Error(result.error||'Unable to find your room. Please try again.');
   // Accept only this application's student entry route, never an external redirect.
-  const next=new URL(result.joinUrl,location.origin);if(next.origin!==location.origin||next.pathname!=='/student.html'||!next.searchParams.get('session'))throw new Error('Unable to find your room. Please try again.');
+  const next=new URL(result.joinUrl,location.origin);if(next.origin!==location.origin||!['/student.html','/game-player.html'].includes(next.pathname)||!next.searchParams.get('session'))throw new Error('Unable to find your room. Please try again.');
   location.assign(next.href);
  }catch(e){status.textContent=t(e instanceof TypeError?'Unable to find your room. Please try again.':e.message);}finally{button.disabled=false;}
 });

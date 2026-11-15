@@ -32,11 +32,15 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
   const wrap = fn => (req, res, next) => Promise.resolve(fn(req, res)).catch(next);
   app.get('/health', wrap(async (req, res) => { await store.activeSessions(); res.json({ ok: true }); }));
   app.get('/api/config', (req, res) => res.json({ supabaseUrl: config.url || '', supabaseKey: config.key || '',uploadMaxBytes:MAX_BYTES,aiConfigured,exportEmailConfigured:exportMailer.configured }));
-  app.post('/api/rooms/resolve',wrap(async(req,res)=>{
-    let room;try{room=require('./rooms').roomName(req.body?.roomName);}catch(e){return res.status(400).json({error:e.message});}
-    const session=await store.findRoom(room.key);
+  const gameRoomResolveLimit=require('./game-routes').createPublicLimiter();
+  const gameRoomPrefix=/^game\s*:\s*/i;
+  const gameRoomInput=req=>typeof req.body?.roomName==='string'&&req.body.roomName.length<=100?req.body.roomName.normalize('NFKC').trim():'';
+  app.post('/api/rooms/resolve',(req,res,next)=>gameRoomPrefix.test(gameRoomInput(req))?gameRoomResolveLimit(req,res,next):next(),wrap(async(req,res)=>{
+    const value=gameRoomInput(req),isGame=gameRoomPrefix.test(value);
+    let room;try{room=require('./rooms').roomName(isGame?value.replace(gameRoomPrefix,''):req.body?.roomName);}catch(e){return res.status(400).json({error:e.message});}
+    const session=isGame?await store.findGameRoom?.('game: '+room.key):await store.findRoom(room.key);
     if(!session)return res.status(404).json({error:'Room not found. Check the name on your classroom display.'});
-    res.json({joinUrl:'/student.html?session='+encodeURIComponent(session.id)});
+    res.json({joinUrl:(isGame?'/game-player.html':'/student.html')+'?session='+encodeURIComponent(session.id)});
   }));
   app.use('/api', (req, res, next) => Promise.resolve().then(async () => {
     const token = /^Bearer (.+)$/.exec(req.headers.authorization || '')?.[1];

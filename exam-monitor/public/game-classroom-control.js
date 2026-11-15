@@ -6,7 +6,9 @@
       case 'lobby': return 'Start Game';
       case 'media': return 'Start Question';
       case 'reveal': return 'Show Scores';
-      case 'leaderboard': return view.questionIndex + 1 >= view.questionCount ? 'Show Podium' : 'Next Question';
+      case 'leaderboard':
+        if (Number.isFinite(view.scoreEndsAt) && view.serverNow < view.scoreEndsAt) return null;
+        return view.questionIndex + 1 >= view.questionCount ? 'Show Podium' : 'Next Question';
       default: return null;
     }
   }

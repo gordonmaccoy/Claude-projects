@@ -9,8 +9,9 @@
     return function(view) {
       const rows=view.leaderboard||[];
       const index=Number.isInteger(view.questionIndex)?view.questionIndex:-1;
+      const scoresReady=view.phase==='leaderboard'&&(!Number.isFinite(view.scoreStartsAt)||view.serverNow>=view.scoreStartsAt);
       if(session!==view.id){
-        session=view.id;lastIndex=index;lastBoard=view.phase==='leaderboard'?index:-1;
+        session=view.id;lastIndex=index;lastBoard=scoresReady?index:-1;
         leader=soleLeader(rows)?.id;podiumShown=view.phase==='podium';
         return null;
       }
@@ -19,7 +20,7 @@
       if(view.phase==='podium'&&!podiumShown&&rows.length){
         podiumShown=true;return {cue:'podium'};
       }
-      if(view.phase!=='leaderboard'||index<=lastBoard||podiumShown)return null;
+      if(!scoresReady||index<=lastBoard||podiumShown)return null;
       lastBoard=index;
       const prior=rows.some(row=>Number.isInteger(row.previousRank))
         ? soleLeader(rows.map(row=>({id:row.id,rank:row.previousRank,score:row.previousScore})))?.id

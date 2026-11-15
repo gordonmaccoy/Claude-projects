@@ -1,0 +1,48 @@
+/* Match the graded classroom's scan pattern: brand / room name / QR.
+   Use Game Mode's deep blue canvas, not the professor's theme. */
+.game-display.game-projector-lobby>header{
+ display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr) minmax(0,1fr);
+ align-items:center;gap:clamp(10px,2vw,28px);padding:clamp(12px,2vw,26px) 4vw;
+ background:#113452;border-bottom:1px solid #5282a9;color:#f2f9ff
+}
+.game-display.game-projector-lobby .brand{justify-self:start}
+.game-room-entry{min-width:0;text-align:center;overflow-wrap:anywhere}
+.game-room-entry p{margin:4px 0;color:#d7eaff;font-size:clamp(.86rem,1.55vw,1.18rem)}
+.game-room-entry a{color:#fff;text-underline-offset:.17em;font-weight:700}
+.game-room-entry #room-name{
+ display:block;color:#fff;margin:6px 0;font-size:clamp(1.8rem,4.4vw,4rem);line-height:1.1;font-weight:800;letter-spacing:-.035em
+}
+.game-room-entry .game-pin-fallback{font-size:clamp(.72rem,1.2vw,.93rem);color:#b6d3ed}
+.game-room-entry #pin{font-weight:750;letter-spacing:.14em;font-variant-numeric:tabular-nums}
+.game-room-qr{justify-self:end;block-size:auto;inline-size:clamp(90px,13vw,160px);max-inline-size:100%;background:#fff;border:5px solid #fff;border-radius:11px;image-rendering:pixelated;aspect-ratio:1}
+.game-display.game-projector-lobby main{max-width:1600px}
+.game-display.game-projector-lobby .live-heading{padding-inline:clamp(2px,1.4vw,22px)}
+.game-display.game-projector-lobby #stage{padding:clamp(12px,2.6vw,34px);min-height:260px}
+.game-display.game-projector-lobby #stage h2{margin:0;font-size:clamp(1.45rem,3vw,2.4rem);line-height:1.2}
+.game-display.game-projector-lobby #stage>p{margin:.6rem 0 1.3rem;color:#c8e1f7}
+.game-display.game-projector-lobby .roster{
+ display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:clamp(8px,1vw,16px);
+ width:100%;text-align:left
+}
+.game-display.game-projector-lobby .roster .roster-player{
+ border:1px solid #75a2c6;border-radius:13px;background:#edf6ff;color:#153854;
+ padding:8px 12px;min-width:0;gap:12px;font-size:clamp(1rem,2.25vw,2rem);line-height:1.15;font-weight:760
+}
+.game-display.game-projector-lobby .roster .roster-player span{display:block;min-width:0;color:#153854;background:none;overflow-wrap:anywhere}
+.game-display.game-projector-lobby .roster .player-avatar{width:clamp(46px,5vw,76px);height:clamp(46px,5vw,76px);border-radius:9px}
+@media(max-width:710px){
+ .game-display.game-projector-lobby>header{grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto}
+ .game-display.game-projector-lobby .game-room-entry{grid-row:2;grid-column:1/-1}
+ .game-display.game-projector-lobby .game-room-qr{grid-row:1;grid-column:2}
+}
+/* A full classroom needs compact cards; keep the original larger cards for
+   small groups where a teacher can read them across a room. */
+.game-display.game-projector-lobby .roster:has(>.roster-player:nth-child(13)){
+ grid-template-columns:repeat(auto-fit,minmax(min(100%,158px),1fr))
+}
+.game-display.game-projector-lobby .roster:has(>.roster-player:nth-child(13)) .roster-player{
+ font-size:clamp(.93rem,1.45vw,1.26rem);gap:8px;padding:6px 8px
+}
+.game-display.game-projector-lobby .roster:has(>.roster-player:nth-child(13)) .player-avatar{
+ width:clamp(34px,3.5vw,56px);height:clamp(34px,3.5vw,56px)
+}
