@@ -7,11 +7,12 @@ function played(count=3){
  const s=g.newSession('owner',{title:'Show',questions:[{id:'q1',text:'One?',options:[{id:'a',text:'A'},{id:'b',text:'B'}],correctOptionId:'a'}]},0);
  const players=Array.from({length:count},(_,i)=>g.join(s,{nickname:'Player '+i,avatarId:'avatar-0'+(i+1),resumeToken:String(i).repeat(43)},0));
  g.advance(s,0);
- players.forEach((p,i)=>g.answer(s,{...p,questionIndex:0,slot:0},6000+1000*i));
+ players.forEach((p,i)=>g.answer(s,{...p,questionIndex:0,slot:0},8200+1000*i));
+ g.sweep(s,14000);
  return {s,players};
 }
 test('both displays get one score anchor and prior scores and ranks until the anchor',()=>{
- const {s,players:[a,b]}=played();const show=10000,start=show+1200;
+ const {s,players:[a,b]}=played();const show=14200,start=show+1200;
  const reveal=g.playerView(s,b.playerId,show-1);
  assert.deepEqual(reveal.answer,{slot:0,correct:true});
  g.advance(s,show);
@@ -37,8 +38,8 @@ test('the same count-up curve catches up from staggered polls; a later rejoin do
  assert.equal(client.nextPollDelay({...v,serverNow:990},6000,6000),150);
 });
 test('podium exposes only the places revealed on the shared timeline',()=>{
- const {s,players:[a,b,c]}=played();g.advance(s,10000);g.advance(s,14000);
- const opening=g.publicView(s,14000);
+ const {s,players:[a,b,c]}=played();g.advance(s,14200);g.advance(s,18200);
+ const opening=g.publicView(s,18200);
  assert.deepEqual(opening.podiumSchedule.map(x=>x.rank),[3,2,1]);
  assert.equal(opening.leaderboard.length,0);
  for(const [i,p] of [c,b,a].entries()){
@@ -50,8 +51,8 @@ test('podium exposes only the places revealed on the shared timeline',()=>{
 });
 test('podium omits unoccupied places and gives tied winners the same reveal',()=>{
  const {s,players}=played(2);s.players[1].score=s.players[0].score;
- g.advance(s,10000);g.advance(s,14000);
- const {podiumSchedule}=g.publicView(s,14000);
+ g.advance(s,14200);g.advance(s,18200);
+ const {podiumSchedule}=g.publicView(s,18200);
  assert.deepEqual(podiumSchedule.map(x=>x.rank),[1]);
  const at=podiumSchedule[0].at;
  for(const p of players){assert.equal(g.playerView(s,p.playerId,at-1).rank,undefined);assert.equal(g.playerView(s,p.playerId,at).rank,1);}
@@ -64,12 +65,12 @@ test('score audio and podium cues use future offsets; a late view never replays 
  assert.deepEqual(audio.futurePodiumCues(podium,10000,10100),[{rank:2,startIn:400},{rank:1,startIn:1700}]);
 });
 test('next and podium cannot skip the score reveal window',()=>{
- const {s}=played();g.advance(s,10000);
- const begin=g.publicView(s,11000);
- assert.equal(begin.scoreEndsAt,12220);
+ const {s}=played();g.advance(s,14200);
+ const begin=g.publicView(s,15200);
+ assert.equal(begin.scoreEndsAt,16420);
  const {actionLabel}=require('../public/game-classroom-control');
  assert.equal(actionLabel(begin),null);
- assert.equal(client.nextPollDelay({...begin,serverNow:11900},1000,1000),340);
+ assert.equal(client.nextPollDelay({...begin,serverNow:16100},1000,1000),340);
  assert.throws(()=>g.advance(s,begin.scoreEndsAt-1),/score reveal/i);
  assert.equal(actionLabel(g.publicView(s,begin.scoreEndsAt)),'Show Podium');
  g.advance(s,begin.scoreEndsAt);

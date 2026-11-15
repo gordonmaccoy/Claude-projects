@@ -36,6 +36,12 @@
 
   const trackCue = GameShow.createTracker();
   const audio = GameAudio.create({button: $('game-audio-toggle'), slider: $('game-volume')});
+  const lobbyControls = GameLobbyControls.create({
+    qrButton: $('join-qr-button'), qrImage: $('qr'), qrDialog: $('join-qr-dialog'),
+    enlargedQr: $('join-qr-enlarged'), closeQr: $('join-qr-close'),
+    speaker: $('sound-speaker'), soundPanel: $('sound-panel'), audioToggle: $('game-audio-toggle'),
+    autoEnable: () => audio.canAutoEnable?.() === true, document,
+  });
   const celebration = $('celebration');
   let celebrationTimer, leaderTimer, pollTimer, receivedAt, polling = false, stopped = false;
   function clearCelebration() {
@@ -53,16 +59,14 @@
   }
   function updateJoinDetails(lobby) {
     document.body.classList.toggle('game-projector-lobby',Boolean(lobby));
-    $('join-details').hidden = $('qr').hidden = !lobby;
+    $('join-details').hidden = !lobby;
+    lobbyControls.setQr(lobby ? '/game-api/'+encodeURIComponent(id)+'/qr' : null);
     if (!lobby) return;
     const name=typeof lobby.roomName==='string'&&lobby.roomName.trim();
-    $('room-name').textContent=name||lobby.pin||'';
-    $('join-link').href=name?'/':'/game-player.html';
-    $('join-link').textContent=location.host+(name?'':'/game-player.html');
-    $('room-instructions').textContent=name?'Enter this room name to join.':'Enter this Game PIN to join.';
-    $('pin-row').hidden=!name||!lobby.pin;
-    $('pin').textContent=lobby.pin||'';
-    if (!$('qr').getAttribute('src')) $('qr').src='/game-api/'+encodeURIComponent(id)+'/qr';
+    $('room-name').textContent=name||'Join the game';
+    $('join-link').parentElement.hidden=!name;
+    $('join-link').textContent=location.host;
+    $('room-instructions').textContent=name?'Enter this room name to join.':'Scan the QR code to join.';
   }
   function applyView(next) {
     if (GameAudio.isStaleView(next, view)) return;
@@ -70,6 +74,7 @@
     view = next;
     receivedAt = Date.now();
     $('game-audio-controls').hidden = view.phase === 'closed';
+    if (view.phase === 'closed') lobbyControls.closeSound();
     updateJoinDetails(view.phase === 'lobby' ? view : null);
     render(view);
     updateControl();
@@ -143,6 +148,7 @@
         audio.stop();
         clearCelebration();
         $('game-audio-controls').hidden = true;
+        lobbyControls.closeSound();
         render({id,phase:'closed'});
       }
     } finally {

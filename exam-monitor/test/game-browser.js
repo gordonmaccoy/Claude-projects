@@ -31,7 +31,9 @@ const {chromium}=require('playwright'),{PGlite}=require('@electric-sql/pglite'),
  await lastQuestion.locator('.option-edit input[type=radio]').first().check();
  await host.locator('#save-game').click();
  const custom=host.locator('.game-card').filter({hasText:'Browser game'});
- const popup=host.waitForEvent('popup');await custom.getByRole('button',{name:'Launch Game'}).click();const classroom=await popup;classroom.on('pageerror',e=>errors.push(e.message));await host.waitForURL('**/game-library.html?session=*');await host.locator('#active-section #game-host-panel').waitFor();assert.equal(await host.locator('#pin,#qr').count(),0);await classroom.locator('#pin').filter({hasText:/\d{6}/}).waitFor();const pin=await classroom.locator('#pin').textContent();await classroom.locator('#qr').waitFor();const roomName=await classroom.locator('#room-name').textContent();assert.match(roomName,/^Game: [A-Za-z]+ [A-Za-z]+$/);
+ await custom.getByRole('button',{name:'Launch Game'}).click();
+ assert.equal(await host.locator('#launch-require-names').isChecked(),true);
+ const popup=host.waitForEvent('popup');await host.locator('#confirm-launch').click();const classroom=await popup;classroom.on('pageerror',e=>errors.push(e.message));await host.waitForURL('**/game-library.html?session=*');await host.locator('#active-section #game-host-panel').waitFor();assert.equal(await host.locator('#pin,#qr').count(),0);await classroom.locator('#qr').waitFor();assert.equal(await classroom.locator('#pin,#pin-row').count(),0);const roomName=await classroom.locator('#room-name').textContent();assert.match(roomName,/^Game: [A-Za-z]+ [A-Za-z]+$/);
  await host.reload();await host.locator('#active-section #game-host-panel').waitFor();
  // A copied viewer URL cannot control the game, even from another tab in this same profile.
  assert.equal((new URL(classroom.url())).hash.split('/').length,2);
@@ -40,16 +42,28 @@ const {chromium}=require('playwright'),{PGlite}=require('@electric-sql/pglite'),
  await viewer.waitForTimeout(1800);
  assert.equal(await viewer.locator('#classroom-advance').isVisible(),false);
  await viewer.close();
- await classroom.getByRole('button',{name:'Enable sound'}).click();
+ const enlarge=classroom.getByRole('button',{name:'Enlarge join QR code'}),qrDialog=classroom.getByRole('dialog',{name:'Scan to join the game'});
+ await classroom.getByRole('heading',{name:'Waiting for game to start'}).waitFor();
+ await enlarge.click();
+ await qrDialog.waitFor();
+ assert.equal(await classroom.locator('#join-qr-enlarged').getAttribute('src'),await classroom.locator('#qr').getAttribute('src'));
+ await classroom.keyboard.press('Escape');await qrDialog.waitFor({state:'hidden'});
+ const speaker=classroom.getByRole('button',{name:'Sound controls'});
+ await speaker.click();
  await classroom.getByRole('button',{name:'Mute sound'}).waitFor();
  await classroom.getByRole('slider',{name:'Volume'}).fill('25');
+ assert.equal(await classroom.locator('#game-volume').evaluate(el=>getComputedStyle(el).writingMode),'vertical-lr');
+ await classroom.keyboard.press('Escape');
+ assert.equal(await speaker.getAttribute('aria-expanded'),'false');
+ const sessionId=new URL(host.url()).searchParams.get('session');
  async function joinPlayer(nickname,avatarId,viaRoomName=false){
   const page=await browser.newPage({viewport:{width:360,height:640}});page.on('pageerror',e=>errors.push(e.message));
   if(viaRoomName){
    await page.goto(base+'/');await page.locator('#room-name').fill(roomName);
    await page.locator('#room-join-form button').click();await page.waitForURL('**/game-player.html?session=*');
   }else{
-   await page.goto(base+'/game-player.html');await page.locator('#join-pin').fill(pin);await page.getByRole('button',{name:'Continue',exact:true}).click();
+   // The URL encoded by the projector QR.
+   await page.goto(base+'/game-player.html?session='+encodeURIComponent(sessionId));
   }
   await page.locator('#nickname').fill(nickname);
   const avatars=page.locator('#avatar-picker button');await avatars.first().waitFor();assert.equal(await avatars.count(),30);
@@ -70,9 +84,22 @@ const {chromium}=require('playwright'),{PGlite}=require('@electric-sql/pglite'),
   return page;
  }
  const player=await joinPlayer('Alpha','avatar-12'), other=await joinPlayer('Beta','avatar-44',true);
+ await classroom.getByText('2 players connected',{exact:true}).waitFor();
+ const [startBox,soundBox,playerBox]=await Promise.all([
+  classroom.locator('#classroom-advance').boundingBox(),speaker.boundingBox(),
+  classroom.locator('.roster-player').first().boundingBox(),
+ ]);
+ assert.ok(Math.abs(startBox.x+startBox.width/2-classroom.viewportSize().width/2)<2,'Start is centered');
+ assert.ok(soundBox.x>classroom.viewportSize().width*.9,'Sound control sits at far right');
+ assert.ok(playerBox.width<=210,'Roster tiles do not stretch across the stage');
  const scores=()=>classroom.getByRole('button',{name:'Show Scores',exact:true});
  const next=()=>classroom.getByRole('button',{name:'Next Question',exact:true});
- async function round(prompt,count,choiceText) {
+ async function round(prompt,count,choiceText,number) {
+  const intro=number===1?'Get ready!':'Get ready for question '+number+'!';
+  for(const page of [classroom,player]){
+   await page.locator('#stage[data-phase=intro]').getByRole('heading',{name:intro,exact:true}).waitFor();
+   assert.equal(await page.locator('#stage .choice').count(),0);
+  }
   await classroom.locator('#stage[data-phase=countdown]').getByText(prompt,{exact:true}).waitFor();
   assert.equal(await classroom.locator('#stage .choice').count(),0);
   assert.equal(await player.locator('button.choice').count(),0);
@@ -91,8 +118,12 @@ const {chromium}=require('playwright'),{PGlite}=require('@electric-sql/pglite'),
   const layout=await player.locator('#stage').evaluate(n=>({content:n.scrollHeight,box:n.clientHeight}));assert.ok(layout.content<=layout.box+1);
  }
  await classroom.getByRole('button',{name:'Start Game',exact:true}).click();
- await round('Which is correct?',4,'Choice 1');
+ await round('Which is correct?',4,'Choice 1',1);
  await player.locator('button.choice').first().click();await other.locator('button.choice').nth(1).click();
+ const closedHeading=classroom.locator('#stage[data-phase=responses-closed]').getByRole('heading',{name:'Responses closed'});
+ await closedHeading.waitFor();
+ assert.equal(await classroom.locator('.vote-panel').count(),0);
+ assert.equal(await scores().isVisible(),false);
  await player.locator('#stage [data-result=correct]').waitFor();await other.locator('#stage [data-result=wrong]').waitFor();
  await classroom.locator('#stage[data-phase=reveal]').waitFor();
  assert.deepEqual(await classroom.locator('.vote-count').allTextContents(),['1','1','0','0']);
@@ -104,12 +135,14 @@ const {chromium}=require('playwright'),{PGlite}=require('@electric-sql/pglite'),
  await next().waitFor();
  const score=await player.locator('#score').textContent();
  await player.reload();await player.getByText('Your place: #1').waitFor();assert.equal(await player.locator('#score').textContent(),score);
- await next().click();await round('What is 1 plus 1?',5,'6');
+ await next().click();await round('What is 1 plus 1?',5,'6',2);
  await other.locator('button.choice').first().click();
- // Remaining player waits past the deadline; a wrong answer is not a timeout.
+ // Remaining player waits past the deadline; the same closure beat then precedes the poll.
+ await closedHeading.waitFor();
+ assert.equal(await classroom.locator('.vote-panel').count(),0);
  await player.locator('#stage [data-result=timeout]').waitFor();
  await scores().click();await classroom.locator('#stage[data-phase=leaderboard]').waitFor();
- await next().click();await round('Choose the first answer.',2,'First');
+ await next().click();await round('Choose the first answer.',2,'First',3);
  await other.locator('button.choice').first().click();await player.locator('button.choice').nth(1).click();
  await scores().click();await player.getByText('Your place: #2').waitFor();
  await classroom.getByRole('button',{name:'Show Podium',exact:true}).click();await player.locator('.player-rank-tile[data-place="2"]').waitFor();

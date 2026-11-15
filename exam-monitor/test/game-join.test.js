@@ -28,7 +28,8 @@ test('base and large lobbies assign only allowed, exclusive picks and preserve r
 });
 test('old lobby data is not rewritten and existing reconnects keep their assigned avatar',()=>{
  const s=game.newSession('owner',{...quiz,largeClass:true});
- const p=game.join(s,player(36));delete s.game.largeClass;delete s.roomName;
+ const p=game.join(s,player(36));delete s.game.largeClass;delete s.roomName;delete s.requireNames;
+ assert.equal(game.lobbyView(s).requireNames,true);
  assert.equal(game.join(s,player(36)).playerId,p.playerId);
  assert.equal(game.playerView(s,p.playerId).avatarId,avatarId(36));
 });
@@ -64,13 +65,20 @@ test('valid game room name and simultaneous claims coexist with graded route',as
  assert.equal((await call(path+'/display',{displayToken})).body.roomName,roomName);
  const newP1={...player(1),avatarId:avatarId(50)},newP2={...player(2),avatarId:avatarId(50)};
  assert.deepEqual((await Promise.all([call(path+'/join',newP1),call(path+'/join',newP2)])).map(r=>r.status).sort(),[200,409]);
- const lobby=(await call(path+'/lobby')).body;assert.deepEqual(lobby,{largeClass:true,takenAvatarIds:[avatarId(50)],phase:'lobby'});
+ const lobby=(await call(path+'/lobby')).body;assert.deepEqual(lobby,{largeClass:true,requireNames:true,takenAvatarIds:[avatarId(50)],phase:'lobby'});
  await call('/api/game-sessions/'+id+'/close',{},true);
  assert.equal((await call('/api/rooms/resolve',{roomName})).status,404);
+ assert.equal((await call('/api/game-sessions',{gameId:saved.body.id,requireNames:'false'},true)).status,400);
+ const open=await call('/api/game-sessions',{gameId:saved.body.id,requireNames:false},true);
+ assert.equal(open.status,200);
+ assert.equal((await call('/game-api/'+open.body.id+'/lobby')).body.requireNames,false);
+ const nameless=await call('/game-api/'+open.body.id+'/join',{avatarId:avatarId(50),resumeToken:token(3)});
+ assert.equal(nameless.status,200);assert.equal(nameless.body.view.nickname,'Golden Lion Cub');
+ assert.equal((await call('/api/game-sessions/'+open.body.id,null,true)).body.players[0].nickname,'Golden Lion Cub');
 });
 
-async function simulatePhone({record={},largeClass=true,onJoin}={}){
- const vm=require('node:vm'),elements=new Map(),images=[],calls=[],timers=new Map();let sequence=0,lobby={largeClass,takenAvatarIds:[],phase:'lobby'};
+async function simulatePhone({record={},largeClass=true,requireNames=true,takenAvatarIds=[],onJoin,onRecovery}={}){
+ const vm=require('node:vm'),elements=new Map(),images=[],calls=[],timers=new Map();let sequence=0,lobby={largeClass,requireNames,takenAvatarIds,phase:'lobby'};
  function el(tag='div'){
   const attrs=new Map(),css=new Set();
   return {tag,children:[],dataset:{},set src(value){attrs.set('src',value);images.push(value);},
@@ -86,7 +94,7 @@ async function simulatePhone({record={},largeClass=true,onJoin}={}){
   setTimeout(fn){timers.set(++sequence,fn);return sequence;},clearTimeout(id){timers.delete(id);},
   GameAvatars:{ids,names:ids.map(x=>'Name '+x),thumbnail:x=>'thumb-'+x,feature:x=>'feature-'+x},
   GameClient:{$,status(){},resumeRecord:()=>({resumeToken:token(10),...record}),forgetExpiredSession:()=>false,isOlderView:()=>false,nextPollDelay:()=>1000,render(){},
-   async json(path,body){calls.push([path,body]);if(path.endsWith('/lobby'))return lobby;if(path.endsWith('/join'))return onJoin?onJoin(body):{playerId:'p',view:{avatarId:body.avatarId}};return {avatarId:record.avatarId};}}
+   async json(path,body){calls.push([path,body]);if(path.endsWith('/lobby'))return lobby;if(path.endsWith('/join'))return onJoin?onJoin(body):{playerId:'p',view:{avatarId:body.avatarId}};if(path.endsWith('/recovery'))return onRecovery?onRecovery(body):{code:'SYNTHETIC'};return {avatarId:record.avatarId};}}
  });
  return {$,images,calls,setLobby:v=>{lobby=v;},async poll(){const first=timers.entries().next().value;if(!first)throw Error('No poll scheduled');timers.delete(first[0]);await first[1]();}};
 }
@@ -109,4 +117,29 @@ test('standard phones have no pager and established reconnects download no picke
  const rejoin=await simulatePhone({record:{nickname:'Returning',playerId:'old',avatarId:avatarId(31)}});
  assert.deepEqual(rejoin.calls.map(([url])=>url),['/game-api/room/join','/game-api/room/state']);
  assert.equal(rejoin.images.length,0);assert.equal(rejoin.$('join-form-section').hidden,true);
+});
+
+test('a no-name phone joins by avatar without a nickname form field or payload',async()=>{
+ const {$,calls}=await simulatePhone({requireNames:false});
+ assert.equal($('nickname-label').hidden,true);assert.equal($('nickname').required,false);
+ $('avatar-picker').children[0].onclick();$('avatar-preview-confirm').onclick();
+ assert.equal($('join-submit').disabled,false);
+ await $('join-form').onsubmit({preventDefault(){}});
+ const submitted=calls.find(([url])=>url.endsWith('/join'))?.[1];
+ assert.equal(submitted.avatarId,avatarId(1));assert.equal(Object.hasOwn(submitted,'nickname'),false);
+ assert.equal($('join-form-section').hidden,true);
+});
+test('a no-name phone uses only claimed character IDs for teacher-approved recovery',async()=>{
+ const {$,calls}=await simulatePhone({requireNames:false,takenAvatarIds:[avatarId(2)],onJoin(){throw new Error('Await teacher');}});
+ await $('recover').onclick();
+ assert.equal($('character-recovery').open,true);
+ assert.deepEqual($('recovery-avatar').children.map(o=>o.value),['',avatarId(2)]);
+ $('recovery-avatar').value=avatarId(2);
+ await $('character-recovery-form').onsubmit({preventDefault(){}});
+ assert.equal($('character-recovery').open,false);
+ assert.match($('recovery-code').textContent,/SYNTHETIC/);
+ const submitted=calls.find(([url])=>url.endsWith('/recovery'))?.[1];
+ assert.equal(submitted.avatarId,avatarId(2));assert.equal(Object.hasOwn(submitted,'nickname'),false);
+ const check=calls.find(([url])=>url.endsWith('/join'))?.[1];
+ assert.deepEqual(Object.keys(check),['resumeToken']);
 });

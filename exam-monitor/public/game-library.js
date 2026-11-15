@@ -49,22 +49,37 @@
  document.addEventListener('keydown',event=>{if(event.key==='Escape'&&openActions){event.preventDefault();closeActions(true);}});
  window.addEventListener('resize',positionActions);
  window.addEventListener('scroll',positionActions,true);
+ let launchTarget=null;
+ const launchDialog=$('launch-dialog');
+ $('cancel-launch').onclick=()=>launchDialog.close();
+ launchDialog.addEventListener('close',()=>{if(!launchDialog.open)launchTarget=null;});
+ $('launch-form').onsubmit=async event=>{
+  event.preventDefault();
+  if(launching||!launchTarget)return;
+  const gameId=launchTarget.id,requireNames=$('launch-require-names').checked;
+  launching=true;launchDialog.close();
+  const display=window.open('about:blank','_blank','popup,width=1280,height=800');if(display)display.opener=null;
+  try{
+   const session=await api('/game-sessions','POST',{gameId,requireNames});
+   sessionRevision++;sessions=[...sessions.filter(s=>s.id!==session.id),session];
+   selectSession(session.id,true);
+   const url=GameHost.displayHref(session);
+   if(display&&!display.closed&&url)display.location.replace(url);
+   else {display?.close();host.showStatus('Game ready. Use Open classroom display to show the game on your projector.');}
+  }catch(error){display?.close();status(error.message,true);}
+  finally{launching=false;}
+ };
  function gameActions(game,card){
   const actions=el('div',undefined,'game-card-actions');
-  const launch=button('Launch Game',async()=>{
+  const launch=el('button','Launch Game','primary');launch.type='button';launch.setAttribute('aria-haspopup','dialog');
+  launch.onclick=()=>{
    if(launching)return;
-   launching=true;closeActions();
-   const display=window.open('about:blank','_blank','popup,width=1280,height=800');if(display)display.opener=null;
-   try{
-    const session=await api('/game-sessions','POST',{gameId:game.id});
-    sessionRevision++;sessions=[...sessions.filter(s=>s.id!==session.id),session];
-    selectSession(session.id,true);
-    const url=GameHost.displayHref(session);
-    if(display&&!display.closed&&url)display.location.replace(url);
-    else {display?.close();host.showStatus('Game ready. Use Open classroom display to show the game on your projector.');}
-   }catch(error){display?.close();throw error;}
-   finally{launching=false;}
-  },'primary');
+   closeActions();launchTarget=game;
+   $('launch-title').textContent=game.title;
+   $('launch-require-names').checked=true;
+   launchDialog.showModal();
+   $('launch-require-names').focus();
+  };
   const disclosure=el('div',undefined,'game-actions-disclosure');
   const trigger=el('button',undefined,'game-actions-toggle');trigger.type='button';
   const dots=el('span','⋯');dots.setAttribute('aria-hidden','true');trigger.append(dots);

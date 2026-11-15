@@ -24,10 +24,18 @@
       body:body===undefined||multipart?body:JSON.stringify(body),...(signal?{signal}:{})};
   }
   const symbols = [['▲','triangle'],['◆','diamond'],['●','circle'],['■','square'],['★','star']];
-  const phaseOrder = ['lobby','media','countdown','question','reveal','leaderboard','podium','closed'];
+  const phaseOrder = ['lobby','intro','media','countdown','question','responses-closed','reveal','leaderboard','podium','closed'];
   function choiceSlots(count) {
     if (!Number.isInteger(count) || count < 2 || count > symbols.length) return [];
     return symbols.slice(0,count).map(([symbol,name],slot)=>({symbol,slot,label:'Choice '+String.fromCharCode(65+slot)+', '+name}));
+  }
+  function sceneCopy(view) {
+    if (view.phase === 'intro') return view.questionIndex === 0
+      ? {kicker:'GAME START', heading:'Get ready!', detail:"Let’s begin!"}
+      : {kicker:'NEXT ROUND', heading:'Get ready for question '+(view.questionIndex+1)+'!',detail:'Look at the classroom screen.'};
+    if (view.phase === 'responses-closed') return {
+      kicker:'ROUND COMPLETE', heading:'Responses closed', detail:'Answer breakdown coming up…'};
+    return null;
   }
   function resultKind(view) {
     if (view.answer?.correct === true) return 'correct';
@@ -52,16 +60,18 @@
     return Math.max(0,Math.min(1,(view.serverNow+Math.max(0,now-receivedAt)-view.scoreStartsAt)/SCORE_DURATION_MS));
   }
   function nextPollDelay(view, receivedAt, now=Date.now()) {
-    const boundary = view?.phase === 'countdown' ? view.startsAt : view?.phase === 'question' ? view.deadlineAt
+    const boundary = view?.phase === 'intro' ? view.introEndsAt : view?.phase === 'responses-closed' ? view.revealAt
+      : view?.phase === 'countdown' ? view.startsAt : view?.phase === 'question' ? view.deadlineAt
       : view?.phase === 'leaderboard' ? (view.serverNow<view.scoreStartsAt?view.scoreStartsAt:
         view.serverNow<view.scoreEndsAt?view.scoreEndsAt:null)
       : view?.phase === 'podium' ? (view.podiumSchedule?.find(x=>x.at>view.serverNow)?.at ??
-        (view.rankRevealAt>view.serverNow?view.rankRevealAt:null)) : null;
+        (view.rankRevealAt>view.serverNow?view.rankRevealAt:null) ??
+        (view.podiumCompleteAt>view.serverNow?view.podiumCompleteAt:null)) : null;
     if (!Number.isFinite(boundary) || !Number.isFinite(view?.serverNow)) return 1000;
     return Math.max(150,Math.min(1000,boundary-view.serverNow-(now-receivedAt)+20));
   }
   const api={newQuestion,secondsLeft,roundTime,resumeRecord,mediaSource,forgetExpiredSession,requestInit,
-    choiceSlots,resultKind,isOlderView,priorRows,nextPollDelay,scoreProgress,SCORE_DURATION_MS};
+    choiceSlots,sceneCopy,resultKind,isOlderView,priorRows,nextPollDelay,scoreProgress,SCORE_DURATION_MS};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;
   if(!root.document)return;
   const $=id=>document.getElementById(id),el=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
@@ -135,6 +145,17 @@
     };
     if(!update())clock=setInterval(update,50);
   }
+  function renderScene(stage,view) {
+    const scene=sceneCopy(view),card=el('div',undefined,'game-scene');
+    const end=view.phase==='intro'?view.introEndsAt:view.revealAt;
+    const duration=view.phase==='intro'?2200:Math.max(1,end-view.roundEndedAt);
+    const elapsed=Number.isFinite(end)&&Number.isFinite(view.serverNow)?Math.max(0,duration+view.serverNow-end):0;
+    card.style.setProperty('--scene-elapsed',(-elapsed)+'ms');
+    card.style.setProperty('--scene-duration',duration+'ms');
+    const flare=el('span',undefined,'game-scene-flare');flare.setAttribute('aria-hidden','true');
+    card.append(flare,el('p',scene.kicker,'game-scene-kicker'),el('h2',scene.heading),el('p',scene.detail,'game-scene-detail'));
+    stage.append(card);
+  }
   function appendPrompt(stage,q) {
     if(!q)return;
     stage.append(el('h2',q.text,'question-text'));
@@ -157,7 +178,7 @@
       card.append(el('h2',"You're in!"),avatar(view.avatarId,'player-avatar feature-avatar'),el('strong',view.nickname,'result-detail'));
       stage.append(card);return;
     }
-    stage.append(el('h2','Waiting for the teacher to start'),el('p',(view.players||[]).length+' players connected'));
+    stage.append(el('h2','Waiting for game to start'),el('p',(view.players||[]).length+' players connected'));
     const roster=el('div',undefined,'roster');
     for(const p of view.players||[]){
       const item=el('span',undefined,'roster-player');
@@ -247,20 +268,25 @@
     else card.append(el('span',kind==='correct'?'Score reveal on the classroom screen.':'Keep going!','result-detail'));
     return card;
   }
+  function podiumComplete(view){
+    return view.serverNow>=(view.podiumCompleteAt??view.podiumSchedule?.at(-1)?.at??0);
+  }
   function podium(stage,view,previous) {
     const ceremony=el('div',undefined,'podium podium-risers');
     const winners=(view.leaderboard||[]).filter(p=>p.rank<=3);
     const schedule=view.podiumSchedule||[];
-    const ranks=schedule.length?schedule.map(x=>x.rank):[...new Set(winners.map(p=>p.rank))];
+    const ranks=[...new Set(winners.map(p=>p.rank))].sort((a,b)=>b-a);
+    const featured=ranks.at(-1),places={1:'First place',2:'Second place',3:'Third place'};
     const prior=previous?.phase==='podium'?previous.leaderboard||[]:[];
     const recentlyRevealed=rank=>!reduced()&&previous?.id===view.id&&
-      !prior.some(p=>p.rank===rank)&&schedule.some(x=>x.rank===rank&&view.serverNow>=x.at&&view.serverNow-x.at<900);
+      !prior.some(p=>p.rank===rank)&&schedule.some(x=>x.rank===rank&&view.serverNow>=x.at&&view.serverNow-x.at<1800);
+    stage.append(el('div','EXAMIO FINALE','podium-kicker'));
     const first=winners.some(p=>p.rank===1);
     if(first){
-      stage.dataset.winner='true';stage.append(el('span',undefined,'winner-spotlight'));
+      stage.dataset.winner='true';const spot=el('span',undefined,'winner-spotlight');spot.setAttribute('aria-hidden','true');stage.append(spot);
       if(recentlyRevealed(1)){
         const confetti=el('div',undefined,'podium-confetti');confetti.setAttribute('aria-hidden','true');
-        for(let i=0;i<26;i++){
+        for(let i=0;i<48;i++){
           const fleck=el('i');
           fleck.style.setProperty('--i',i);fleck.style.setProperty('--left',(7+i*17%87)+'%');
           fleck.style.setProperty('--drift',(i%2?1:-1)*(24+i%8*8)+'px');confetti.append(fleck);
@@ -268,9 +294,10 @@
         stage.append(confetti);
       }
     }
-    stage.append(el('h2','The podium','podium-heading'));
+    stage.append(el('h2',featured?places[featured]:'And the winners are…','podium-heading'));
     for(const rank of ranks){
       const group=el('section',undefined,'podium-step');group.dataset.place=rank;
+      group.setAttribute('aria-label',places[rank]);
       const groupWinners=winners.filter(p=>p.rank===rank);
       if(recentlyRevealed(rank))group.classList.add('podium-enter');
       const people=el('div',undefined,'podium-finishers');
@@ -280,7 +307,8 @@
         people.append(entry);
       }
       if(groupWinners.length>3)people.append(el('span','+'+(groupWinners.length-3)+' tied','podium-total'));
-      const base=el('div',undefined,'podium-block');base.append(el('strong',String(rank)),el('span','Place'));
+      const base=el('div',undefined,'podium-block');
+      base.setAttribute('aria-hidden','true');base.append(el('strong',String(rank),'podium-rank-emblem'));
       group.append(people,base);ceremony.append(group);
     }
     stage.append(ceremony);
@@ -293,8 +321,9 @@
     const previous=lastView;
     const animate=Boolean(sameGame&&changedPhase&&!reduced());
     const fingerprint=JSON.stringify(view.phase==='media'?{id:view.id,phase:view.phase,questionIndex:view.questionIndex,media:view.media}
+      :['intro','responses-closed'].includes(view.phase)?{id:view.id,phase:view.phase,questionIndex:view.questionIndex}
       :['countdown','question'].includes(view.phase)?{id:view.id,phase:view.phase,questionIndex:view.questionIndex,question:view.question,startsAt:view.startsAt,deadlineAt:view.deadlineAt,answered:view.answered,answer:view.answer,score:view.score}
-      :!isPlayer&&['leaderboard','podium'].includes(view.phase)?{id:view.id,phase:view.phase,questionIndex:view.questionIndex,scoreStartsAt:view.scoreStartsAt,podiumSchedule:view.podiumSchedule,leaderboard:(view.leaderboard||[]).map(({connected,...row})=>row)}
+      :!isPlayer&&['leaderboard','podium'].includes(view.phase)?{id:view.id,phase:view.phase,questionIndex:view.questionIndex,scoreStartsAt:view.scoreStartsAt,podiumSchedule:view.podiumSchedule,podiumComplete:podiumComplete(view),leaderboard:(view.leaderboard||[]).map(({connected,...row})=>row)}
       :!isPlayer&&view.phase==='reveal'?{id:view.id,phase:view.phase,questionIndex:view.questionIndex,question:view.question}
       :{...view,serverNow:0});
     lastView=view;
@@ -305,10 +334,11 @@
     else stage.dataset.transition='';
     if($('game-title'))$('game-title').textContent=view.title||'Live quiz';
     $('phase').textContent=isPlayer?(view.questionIndex>=0?'Question '+(view.questionIndex+1)+' / '+view.questionCount:'')
-      :{lobby:'Ready to play?',media:'Watch & listen',countdown:'Question '+(view.questionIndex+1)+' of '+view.questionCount,question:'Question '+(view.questionIndex+1)+' of '+view.questionCount,reveal:'Class vote',leaderboard:'Leaderboard',podium:'Final results',closed:'Game ended'}[view.phase]||view.phase;
+      :{lobby:'Ready to play?',intro:'Get ready','responses-closed':'Round complete',media:'Watch & listen',countdown:'Question '+(view.questionIndex+1)+' of '+view.questionCount,question:'Question '+(view.questionIndex+1)+' of '+view.questionCount,reveal:'Class vote',leaderboard:'Leaderboard',podium:'Final results',closed:'Game ended'}[view.phase]||view.phase;
     const q=view.question;
     if(view.phase==='lobby')lobby(stage,view,isPlayer);
     if(view.phase==='media')mediaStage(stage,view,isPlayer);
+    if(sceneCopy(view))renderScene(stage,view);
     if(view.phase==='countdown'){
       if(isPlayer)stage.append(el('h2','Look at the classroom screen','ready-message'));
       else appendPrompt(stage,q);
@@ -323,7 +353,7 @@
       const earned=result.querySelector('.round-earned');if(earned)countUp(earned,0,view.answer.points,timeline,'+');
     }
     if(!isPlayer&&view.phase==='podium')podium(stage,view,previous);
-    if(!isPlayer&&(view.phase==='leaderboard'||view.phase==='podium'&&(!view.podiumSchedule?.length||view.serverNow>=view.podiumSchedule.at(-1).at))){
+    if(!isPlayer&&(view.phase==='leaderboard'||view.phase==='podium'&&podiumComplete(view))){
       const board=leaderboard(view);stage.append(board);
       if(view.phase==='leaderboard')animateBoard(board,view.leaderboard||[],timeline);
     }

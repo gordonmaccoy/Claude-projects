@@ -62,3 +62,26 @@ test('reload and unmute never replay a completed round',async()=>{
  tick('reveal',7300,{questionIndex:1,roundEndedAt:7200,roundEndReason:'all-answered'});await button.click();
  assert.deepEqual(named('cue'),[]);ctl.stop();
 });
+
+test('response-closed gong rings once from the closing phase and never restarts on delayed polls',async()=>{
+ const {ctl,button,tick,named}=testController();await button.click();
+ tick('question',1000,{startsAt:900,deadlineAt:6000});
+ const closed={roundEndedAt:1500,roundEndReason:'all-answered',revealAt:4000};
+ tick('responses-closed',1600,closed);
+ tick('responses-closed',1800,closed);
+ tick('reveal',4000,closed);
+ assert.deepEqual(named('cue'),[['cue','gong']]);
+ tick('question',8000,{questionIndex:1,startsAt:7000,deadlineAt:9000});
+ tick('reveal',11500,{questionIndex:1,roundEndedAt:9000,roundEndReason:'timeout',revealAt:11500});
+ assert.equal(named('cue').length,1);
+ ctl.stop();
+});
+test('explicit mute persists without assuming a first-time visitor has unlocked sound',async()=>{
+ let saved;const storage={getItem:()=>saved,setItem:(_key,value)=>{saved=value}};
+ const button={setAttribute(){},addEventListener(_,f){this.click=f;}},slider={addEventListener(){}};
+ const engine={resume:async()=>{},volume(){},stop(){}};
+ const ctl=audio.create({button,slider},{storage,engine:()=>engine});
+ assert.equal(saved,undefined);await button.click();await button.click();
+ assert.equal(JSON.parse(saved).muted,true);
+ await button.click();assert.equal(JSON.parse(saved).muted,false);ctl.stop();
+});

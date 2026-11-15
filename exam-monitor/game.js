@@ -1,7 +1,10 @@
 const {randomUUID,randomBytes,randomInt,createHash,timingSafeEqual}=require('node:crypto');
 const {validateTest}=require('./exam');
 const {generateRoomName}=require('./rooms');
-const TTL=24*60*60*1000,READING_MS=5000,SCORE_LEAD_MS=1200,SCORE_DURATION_MS=1020,PODIUM_LEAD_MS=1000,PODIUM_SPACING_MS=2200;
+const avatarNames=new Map(require('./public/game-avatars/manifest.json').map(({id,name})=>[id,name]));
+const TTL=24*60*60*1000,READING_MS=5000,SCORE_LEAD_MS=1200,SCORE_DURATION_MS=1020;
+const PODIUM_LEAD_MS=1900,PODIUM_SPACING_MS=3600,PODIUM_WINNER_HOLD_MS=4000;
+const INTRO_MS=2200,RESPONSE_PAUSE_MS=3800;
 const fail=(message,status=400)=>{throw Object.assign(new Error(message),{status});};
 const hash=value=>createHash('sha256').update(value).digest('hex');
 function tokenValid(token){return typeof token==='string'&&/^[A-Za-z0-9_-]{32,128}$/.test(token);}
@@ -32,8 +35,9 @@ function fromTest(test,{compatibleOnly=false}={}){
 }
 function toTest(game){const source=validateGame(game);return {id:randomUUID(),title:source.title,folderId:null,questions:source.questions.map(q=>{const ids=new Map(q.options.map(o=>[o.id,randomUUID()]));const {durationSeconds,media,...rest}=q;return {...rest,id:randomUUID(),points:1,options:q.options.map(o=>({...o,id:ids.get(o.id)})),correctOptionId:ids.get(q.correctOptionId)};})};}
 function newGameRoomName(){return 'Game: '+generateRoomName().name;}
-function newSession(ownerId,game,now=Date.now()){
- return {id:randomUUID(),ownerId,roomName:newGameRoomName(),pin:String(randomInt(100000,1000000)),displayToken:randomBytes(24).toString('base64url'),classroomControlKey:randomBytes(24).toString('base64url'),game:validateGame(game),phase:'lobby',questionIndex:-1,players:[],participants:[],recoveryRequests:[],createdAt:now,updatedAt:now,expiresAt:now+TTL,startsAt:null,deadlineAt:null,roundEndReason:null,roundEndedAt:null};
+function newSession(ownerId,game,now=Date.now(),{requireNames=true}={}){
+ if(typeof requireNames!=='boolean')fail('Require names must be on or off.');
+ return {requireNames,id:randomUUID(),ownerId,roomName:newGameRoomName(),pin:String(randomInt(100000,1000000)),displayToken:randomBytes(24).toString('base64url'),classroomControlKey:randomBytes(24).toString('base64url'),game:validateGame(game),phase:'lobby',questionIndex:-1,players:[],participants:[],recoveryRequests:[],createdAt:now,updatedAt:now,expiresAt:now+TTL,startsAt:null,deadlineAt:null,roundEndReason:null,roundEndedAt:null};
 }
 function active(s,now=Date.now()){if(s.phase==='closed'||s.expiresAt<=now)fail('Game has ended or expired.',410);}
 function changed(s,now){s.updatedAt=Math.max(s.updatedAt,now);s.expiresAt=Math.max(s.expiresAt,now+TTL);}
@@ -43,26 +47,34 @@ const avatarLimit=s=>s.game.largeClass===true?50:30;
 const avatarAt=i=>'avatar-'+String(i).padStart(2,'0');
 function lobbyView(s,now=Date.now()){
  active(s,now);
- return {largeClass:s.game.largeClass===true,takenAvatarIds:[...new Set(s.players.map(p=>p.avatarId).filter(Boolean))],phase:s.phase};
+ return {largeClass:s.game.largeClass===true,requireNames:s.requireNames!==false,takenAvatarIds:[...new Set(s.players.map(p=>p.avatarId).filter(Boolean))],phase:s.phase};
 }
 function join(s,{nickname,resumeToken,avatarId},now=Date.now()){
  active(s,now);if(!tokenValid(resumeToken))fail('A secure resume token is required.');
  const known=s.players.find(p=>p.tokenHash===hash(resumeToken));if(known){known.lastSeenAt=now;return {playerId:known.id,resumeToken};}
- if(typeof nickname!=='string'||!nickname.trim()||nickname.trim().length>30||/[\x00-\x1f]/.test(nickname))fail('Use a nickname of 1–30 characters.');
- nickname=nickname.trim();if(s.players.some(p=>p.nickname.toLocaleLowerCase()===nickname.toLocaleLowerCase()))fail('That nickname is taken. Use recovery if this is your player.');
+ const requireNames=s.requireNames!==false;
+ if(requireNames){
+  if(typeof nickname!=='string'||!nickname.trim()||nickname.trim().length>30||/[\x00-\x1f]/.test(nickname))fail('Use a nickname of 1–30 characters.');
+  nickname=nickname.trim();if(s.players.some(p=>p.nickname.toLocaleLowerCase()===nickname.toLocaleLowerCase()))fail('That nickname is taken. Use recovery if this is your player.');
+ }
  if(s.phase!=='lobby')fail('This game has started. Existing players can reconnect.');
  const limit=avatarLimit(s),taken=new Set(s.players.map(p=>p.avatarId));
  const choices=Array.from({length:limit},(_,i)=>avatarAt(i+1));
  if(s.players.length>=limit||choices.every(id=>taken.has(id)))fail('This game is full. If you already joined, reconnect or recover your score.',409);
  // Older clients that omit a character receive the first free one. Explicit picks never auto-switch.
- if(avatarId===undefined)avatarId=choices.find(id=>!taken.has(id));
- if(!choices.includes(avatarId))fail('Choose an available avatar character.');
+ if(requireNames&&avatarId===undefined)avatarId=choices.find(id=>!taken.has(id));
+ if(!choices.includes(avatarId)||!avatarNames.has(avatarId))fail('Choose an available avatar character.');
  if(taken.has(avatarId))fail('That character was taken. Please choose another.',409);
+ if(!requireNames)nickname=avatarNames.get(avatarId);
  const player={id:randomUUID(),nickname,avatarId,tokenHash:hash(resumeToken),score:0,answers:{},lastSeenAt:now};s.players.push(player);changed(s,now);return {playerId:player.id,resumeToken};
 }
 function touch(s,playerId,resumeToken,now=Date.now()){active(s,now);const p=authenticatePlayer(s,playerId,resumeToken);p.lastSeenAt=now;return p;}
 function countdown(s,now){s.phase='countdown';s.startsAt=now+READING_MS;s.deadlineAt=s.startsAt+s.game.questions[s.questionIndex].durationSeconds*1000;s.participants=s.players.map(p=>p.id);}
-function beginQuestion(s,now){s.questionIndex++;s.scoreStartsAt=null;s.roundEndReason=null;s.roundEndedAt=null;if(s.game.questions[s.questionIndex].media){s.phase='media';s.startsAt=null;s.deadlineAt=null;s.participants=[];}else countdown(s,now);}
+function beginQuestion(s,now){
+ s.questionIndex++;s.phase='intro';s.introEndsAt=now+INTRO_MS;
+ s.scoreStartsAt=null;s.roundEndReason=null;s.roundEndedAt=null;s.revealAt=null;
+ s.startsAt=null;s.deadlineAt=null;s.participants=[];
+}
 function advance(s,now=Date.now()){
  active(s,now);sweep(s,now);
  if(s.phase==='lobby'){if(!s.players.length)fail('Wait for at least one player.');beginQuestion(s,now);}
@@ -73,20 +85,26 @@ function advance(s,now=Date.now()){
   if(s.questionIndex+1>=s.game.questions.length){s.phase='podium';s.startsAt=null;s.deadlineAt=null;
   const placements=rankRows(s.players,'score').filter(row=>row.rank<=3);
   s.podiumSchedule=[...new Set(placements.map(row=>row.rank))].sort((a,b)=>b-a)
-   .map((rank,i)=>({rank,at:now+PODIUM_LEAD_MS+i*PODIUM_SPACING_MS}));}else beginQuestion(s,now);}
+   .map((rank,i)=>({rank,at:now+PODIUM_LEAD_MS+i*PODIUM_SPACING_MS}));
+  s.podiumCompleteAt=(s.podiumSchedule.at(-1)?.at??now)+PODIUM_WINNER_HOLD_MS;}else beginQuestion(s,now);}
  else fail('Wait for the current question to finish.');changed(s,now);
 }
 function sweep(s,now=Date.now()){
  if(s.expiresAt<=now){s.phase='closed';return;}
+ if(s.phase==='intro'&&now>=s.introEndsAt){
+  if(s.game.questions[s.questionIndex].media)s.phase='media';
+  else countdown(s,s.introEndsAt);
+ }
  if(s.phase==='countdown'&&now>=s.startsAt)s.phase='question';
  if(s.phase==='question'){
   const q=s.game.questions[s.questionIndex];
   const timedOut=now>=s.deadlineAt;
   const allAnswered=!timedOut&&s.participants.length>0&&s.participants.every(id=>answerFor(s.players.find(p=>p.id===id),q.id));
   if(timedOut||allAnswered){
-   s.phase='reveal';s.roundEndReason=timedOut?'timeout':'all-answered';s.roundEndedAt=timedOut?s.deadlineAt:now;changed(s,now);
+   s.phase='responses-closed';s.roundEndReason=timedOut?'timeout':'all-answered';s.roundEndedAt=timedOut?s.deadlineAt:now;s.revealAt=s.roundEndedAt+RESPONSE_PAUSE_MS;changed(s,now);
   }
  }
+ if(s.phase==='responses-closed'&&now>=s.revealAt)s.phase='reveal';
  s.recoveryRequests=s.recoveryRequests.filter(r=>now-r.createdAt<5*60*1000);
 }
 function points(elapsedMs,durationMs){return elapsedMs<500?1000:Math.round(1000*(1-elapsedMs/durationMs/2));}
@@ -99,7 +117,7 @@ function answer(s,{playerId,resumeToken,questionIndex,slot},now=Date.now()){
  sweep(s,now);
  // Preserve the request-receipt time for an answer queued just before the
  // deadline, even if an independent deadline sweep already moved to reveal.
- const canAnswer=s.phase==='question'||s.phase==='reveal'&&s.roundEndReason==='timeout';
+ const canAnswer=s.phase==='question'||['responses-closed','reveal'].includes(s.phase)&&s.roundEndReason==='timeout';
  if(!canAnswer||now<s.startsAt||now>=s.deadlineAt)fail('This question is not open for answers.');
  if(questionIndex!==s.questionIndex||!s.participants.includes(playerId))fail('That question is not available.');
  const optionId=submitted.options[slot].id;
@@ -109,12 +127,15 @@ function answer(s,{playerId,resumeToken,questionIndex,slot},now=Date.now()){
  p.score+=earned;p.lastSeenAt=Math.max(p.lastSeenAt,now);changed(s,now);sweep(s,now);
  return {accepted:true};
 }
-function requestRecovery(s,{nickname,resumeToken},now=Date.now()){
- active(s,now);if(!tokenValid(resumeToken))fail('A secure resume token is required.');if(typeof nickname!=='string'||!s.players.some(p=>p.nickname===nickname.trim()))fail('Player not found.',404);
+function requestRecovery(s,{nickname,avatarId,resumeToken},now=Date.now()){
+ active(s,now);if(!tokenValid(resumeToken))fail('A secure resume token is required.');
+ const player=s.requireNames===false?s.players.find(p=>p.avatarId===avatarId):
+  s.players.find(p=>typeof nickname==='string'&&p.nickname===nickname.trim());
+ if(!player)fail('Player not found.',404);
  s.recoveryRequests=s.recoveryRequests.filter(r=>now-r.createdAt<5*60*1000);
  const old=s.recoveryRequests.find(r=>r.tokenHash===hash(resumeToken));if(old)return {code:old.code};
  if(s.recoveryRequests.length>=20)fail('Too many recovery requests. Ask your teacher.',429);
- const code=randomBytes(5).toString('hex').toUpperCase();s.recoveryRequests.push({code,nickname:nickname.trim(),tokenHash:hash(resumeToken),createdAt:now});return {code};
+ const code=randomBytes(5).toString('hex').toUpperCase();s.recoveryRequests.push({code,nickname:player.nickname,tokenHash:hash(resumeToken),createdAt:now});return {code};
 }
 function approveRecovery(s,code,playerId,now=Date.now()){
  active(s,now);const r=s.recoveryRequests.find(r=>r.code===code&&now-r.createdAt<5*60*1000),p=s.players.find(p=>p.id===playerId);if(!r||!p||r.nickname!==p.nickname)fail('Recovery request not available.',404);
@@ -133,10 +154,10 @@ function scoringPending(s,now){
 }
 function podiumRevealAt(s,rank){
  const schedule=s.podiumSchedule||[];
- return schedule.find(place=>place.rank===rank)?.at??schedule.at(-1)?.at??0;
+ return schedule.find(place=>place.rank===rank)?.at??s.podiumCompleteAt??schedule.at(-1)?.at??0;
 }
 function standings(s,now){
- const q=s.game.questions[s.questionIndex],pending=['countdown','question','reveal'].includes(s.phase)||scoringPending(s,now);
+ const q=s.game.questions[s.questionIndex],pending=['countdown','question','responses-closed','reveal'].includes(s.phase)||scoringPending(s,now);
  const showPrevious=s.phase==='leaderboard'&&!pending;
  const rows=s.players.map(p=>{
   const earned=q?answerFor(p,q.id)?.points||0:0;
@@ -146,7 +167,7 @@ function standings(s,now){
  return {rows,leaderboard:rankRows(rows,'score').map(p=>previousRanks?{...p,previousRank:previousRanks.get(p.id)}:p)};
 }
 function roundView(s,now){
- return {id:s.id,phase:s.phase,questionIndex:s.questionIndex,questionCount:s.game.questions.length,startsAt:s.startsAt,deadlineAt:s.deadlineAt,serverNow:now,roundEndReason:s.roundEndReason??null,roundEndedAt:s.roundEndedAt??null,scoreStartsAt:s.phase==='leaderboard'?s.scoreStartsAt??null:null,
+ return {id:s.id,phase:s.phase,questionIndex:s.questionIndex,questionCount:s.game.questions.length,startsAt:s.startsAt,deadlineAt:s.deadlineAt,serverNow:now,introEndsAt:s.phase==='intro'?s.introEndsAt:null,revealAt:s.revealAt??null,roundEndReason:s.roundEndReason??null,roundEndedAt:s.roundEndedAt??null,scoreStartsAt:s.phase==='leaderboard'?s.scoreStartsAt??null:null,
   scoreEndsAt:s.phase==='leaderboard'&&Number.isFinite(s.scoreStartsAt)?s.scoreStartsAt+SCORE_DURATION_MS:null};
 }
 function publicView(s,now=Date.now()){
@@ -164,7 +185,7 @@ function publicView(s,now=Date.now()){
  const podium=s.phase==='podium',schedule=s.podiumSchedule||[];
  const showingAll=!podium||now>=podiumRevealAt(s,4);
  const visible=showingAll?leaderboard:leaderboard.filter(p=>p.rank<=3&&now>=podiumRevealAt(s,p.rank));
- return {...roundView(s,now),...(podium?{podiumSchedule:schedule}:{}),pin:s.pin,roomName:s.roomName??null,title:s.game.title,
+ return {...roundView(s,now),...(podium?{podiumSchedule:schedule,podiumCompleteAt:podiumRevealAt(s,4)}:{}),pin:s.pin,roomName:s.roomName??null,title:s.game.title,
   players:showingAll?rows:visible,leaderboard:visible,question,media:s.phase==='media'&&q?.media?{...q.media}:null};
 }
 function playerView(s,playerId,now=Date.now()){

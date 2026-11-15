@@ -108,7 +108,7 @@
     const url=displayHref(view);display.hidden=!url;
     if(url)display.href=url;
     const next=control.actionLabel(view);
-    advance.textContent=next||'Question in progress';advance.disabled=!next||busy;end.disabled=busy;
+    advance.textContent=next||({intro:'Get ready…','responses-closed':'Responses closed',podium:'Final results'}[view.phase]||'Question in progress');advance.disabled=!next||busy;end.disabled=busy;
     const players=view.players||[],requests=view.recoveryRequests||[];
     const nextFingerprint=JSON.stringify([view.id,requests,players.map(p=>({id:p.id,nickname:p.nickname}))]);
     recovery.closest('.recovery-panel').hidden=!requests.length;

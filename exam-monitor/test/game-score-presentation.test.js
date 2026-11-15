@@ -81,7 +81,7 @@ test('podium participants reveal by tier and first place alone triggers confetti
  const c={...common,phase:'podium',podiumSchedule:[{rank:3,at:5000},{rank:2,at:7200},{rank:1,at:9400}]};
  const row=(rank)=>({id:String(rank),nickname:'Player '+rank,rank,score:1000-rank,avatarId:'avatar-0'+rank});
  x.render({...c,serverNow:4700,leaderboard:[]});
- assert.equal(x.stage.querySelectorAll('.podium-block').length,3);
+ assert.equal(x.stage.querySelectorAll('.podium-block').length,0);
  assert.equal(x.stage.querySelectorAll('.podium-person').length,0);
  assert.equal(x.stage.querySelector('.rankings'),null);
  x.render({...c,serverNow:5100,leaderboard:[row(3)]});
@@ -119,4 +119,44 @@ test('the professor white theme gives the vote and podium dark text on their lig
  assert.match(css,/\.vote-panel\{background:var\(--prof-surface\);color:var\(--prof-text\)/);
  assert.match(css,/\[data-theme=light\] \.game-host-panel #stage :is\(\.vote-row,\.vote-count,\.podium-heading,\.podium-person\)\{color:var\(--prof-text\)\}/);
  assert.match(css,/\[data-theme=light\] \.game-host-panel #stage\[data-phase=podium\]\[data-winner=true\]\{background:var\(--prof-panel\)\}/);
+});
+
+test('projector ceremony starts dark, then raises exactly one occupied tier at a time',()=>{
+ const x=fixture();
+ const schedule=[{rank:3,at:5000},{rank:2,at:8600},{rank:1,at:12200}];
+ const row=rank=>({id:String(rank),rank,nickname:'Finalist '+rank,score:1000-rank});
+ const v={...common,phase:'podium',podiumSchedule:schedule,podiumCompleteAt:16200};
+ x.render({...v,serverNow:4000,leaderboard:[]});
+ assert.equal(x.stage.querySelectorAll('.podium-block').length,0);
+ assert.match(x.stage.textContent,/And the winners are/);
+ x.render({...v,serverNow:5100,leaderboard:[row(3)]});
+ assert.equal(x.stage.querySelectorAll('.podium-block').length,1);
+ assert.match(x.stage.textContent,/Third place/);
+ assert.equal(x.stage.querySelector('.podium-enter').dataset.place,3);
+ x.render({...v,serverNow:8800,leaderboard:[row(2),row(3)]});
+ assert.equal(x.stage.querySelectorAll('.podium-block').length,2);
+ assert.match(x.stage.textContent,/Second place/);
+ x.render({...v,serverNow:12300,leaderboard:[row(1),row(2),row(3)]});
+ assert.match(x.stage.textContent,/First place/);
+ assert.ok(x.stage.querySelector('.podium-confetti'));
+ assert.equal(x.stage.querySelector('.rankings'),null);
+ x.render({...v,serverNow:16200,leaderboard:[row(1),row(2),row(3)]});
+ assert.ok(x.stage.querySelector('.rankings'),'same rows still cause final standings to appear after winner beat');
+ assert.equal(x.stage.querySelector('.podium-confetti'),null);
+});
+
+test('server gives each occupied place its own beat and holds the winner before the full standings',()=>{
+ const g=require('../game');
+ const s=g.newSession('owner',{title:'Finale',questions:[{id:'q',text:'Which one?',options:[{id:'a',text:'A'},{id:'b',text:'B'}],correctOptionId:'a'}]},100);
+ for(let i=1;i<=4;i++)g.join(s,{nickname:'P'+i,avatarId:'avatar-0'+i,resumeToken:String(i).repeat(43)},100);
+ s.players.forEach((p,i)=>p.score=400-i*100);
+ s.phase='leaderboard';s.questionIndex=0;s.scoreStartsAt=1000;
+ g.advance(s,4000);
+ const v=g.publicView(s,4000);
+ assert.deepEqual(v.podiumSchedule,[{rank:3,at:5900},{rank:2,at:9500},{rank:1,at:13100}]);
+ assert.equal(v.podiumCompleteAt,17100);
+ assert.equal(g.publicView(s,17099).leaderboard.length,3);
+ assert.equal(g.publicView(s,17100).leaderboard.length,4);
+ assert.equal(g.playerView(s,s.players[3].id,17099).rank,undefined);
+ assert.equal(g.playerView(s,s.players[3].id,17100).rank,4);
 });

@@ -22,7 +22,7 @@
   return view.podiumSchedule.filter(x=>Number.isFinite(x.at)&&x.at>=serverNow&&[1,2,3].includes(x.rank))
    .map(x=>({rank:x.rank,startIn:x.at-serverNow}));
  }
- const phaseOrder=['lobby','media','countdown','question','reveal','leaderboard','podium','closed'];
+ const phaseOrder=['lobby','intro','media','countdown','question','responses-closed','reveal','leaderboard','podium','closed'];
  function isStaleView(next,previous){
   if(!previous||next.id!==previous.id||!Number.isFinite(next.serverNow)||!Number.isFinite(previous.serverNow))return false;
   if(next.serverNow<previous.serverNow||next.questionIndex<previous.questionIndex)return true;
@@ -30,7 +30,8 @@
  }
  function freshGong(previous,next){
   return Boolean(previous&&next.id===previous.id&&previous.questionIndex===next.questionIndex&&
-    ['countdown','question'].includes(previous.phase)&&['reveal','leaderboard'].includes(next.phase)&&
+    ['countdown','question'].includes(previous.phase)&&(next.phase==='responses-closed'||
+      !Number.isFinite(next.revealAt)&&['reveal','leaderboard'].includes(next.phase))&&
     ['timeout','all-answered'].includes(next.roundEndReason)&&Number.isFinite(next.roundEndedAt)&&
     next.serverNow>=next.roundEndedAt&&next.serverNow-next.roundEndedAt<=3500);
  }
@@ -80,41 +81,66 @@
   function scoreboard(key,window){loop(key,true,window);}
   function fanfare(kind,t){const notes=kind==='podium'?[60,64,67,72,67,72,76,79]:[67,71,74,79];notes.forEach((n,i)=>{tone(n,t+i*.12,.32,.16,'triangle');tone(n-12,t+i*.12,.35,.07,'sine');});return notes.length*.12+.5;}
   function gong(t){
-   // Inharmonic partials give a struck metal onset and warmly decaying body.
-   [[38,.26,1.3],[45.3,.16,1.01],[52.8,.12,.9],[59.2,.08,.64],[64.9,.055,.48],[72.4,.045,.24],[81.1,.024,.15]].forEach(([pitch,level,length])=>tone(pitch,t,length,level,'sine',.006));
+   // A mallet strike, longer low bronze resonance and a brighter, brief shimmer.
+   [[36,.34,2.42],[43.23,.23,2.25],[50.71,.15,1.74],[56.48,.14,1.32],[63.14,.11,1.09],[72.37,.075,.47],[80.92,.055,.20]]
+    .forEach(([pitch,level,length],i)=>tone(pitch,t,length,level,'sine',i===0?.038:.012));
   }
   function cue(kind,followup){
    stop();bus=ctx.createGain();bus.gain.value=.8;bus.connect(master);const t=ctx.currentTime+.015;
    let tail;
    if(kind==='gong'){
-    gong(t);tail=1.36;
+    gong(t);tail=2.47;
     if(followup)tail=Math.max(tail,.42+fanfare(followup,t+.42));
    }else tail=fanfare(kind,t);
    closeTimer=setTimeout(stop,Math.ceil(tail*1000));
   }
   function overlay(kind,delay=0){if(!bus)return;const t=ctx.currentTime+Math.max(.015,delay/1000);if(kind==='gong')gong(t);else fanfare(kind,t);}
+  function cheer(t,isWinner){
+   // Distant crowd: a rolling mid-frequency bed, layered hand claps, and a few whoops.
+   const count=isWinner?35:25;
+   for(let i=0;i<count;i++){
+    const time=t+i*.05+Math.random()*.028;
+    const n=ctx.createBufferSource(),filter=ctx.createBiquadFilter(),g=ctx.createGain();
+    n.buffer=noise;filter.type='bandpass';filter.frequency.value=670+Math.random()*1750;
+    n.connect(filter);filter.connect(g);g.connect(bus);nodes.add(n);
+    const peak=(.07+Math.random()*.09)*(1-i/count);
+    g.gain.setValueAtTime(.001,time);g.gain.linearRampToValueAtTime(peak,time+.022);
+    g.gain.exponentialRampToValueAtTime(.0001,time+.21);
+    n.onended=()=>{nodes.delete(n);n.disconnect();filter.disconnect();g.disconnect();};
+    n.start(time);n.stop(time+.23);
+    if(i%7===0)tone(60+i%13,time+.02,.39,peak*.18,'triangle',.13);
+   }
+  }
+  function royalFanfare(t){
+   // Original herald call: a dotted rhythm over an open fifth, resolving on the octave.
+   const call=[[67,0,.25],[72,.31,.18],[76,.52,.17],[79,.73,.41],[76,1.17,.19],[79,1.41,.18],[84,1.65,.84]];
+   for(const [note,when,length] of call){
+    const at=t+when;
+    tone(note,at,length,.17,'sawtooth',.042);tone(note+12,at+.009,length*.82,.045,'triangle',.035);
+    tone(note-12,at+.016,length,.11,'triangle',.046);
+   }
+   for(const note of [48,55,60,64])tone(note,t+1.66,.87,.074,'triangle',.07);
+  }
   function podium(key,placements,finale){
    if(activeKey===key)return;stop();activeKey=key;bus=ctx.createGain();bus.gain.value=.78;bus.connect(master);
    if(!placements.length)return;
    const origin=ctx.currentTime;
    for(const {rank,startIn} of placements){
     const t=origin+Math.max(.015,startIn/1000);
-    for(let i=0;i<(rank===1?27:17);i++){
-     hiss(t+i*.047+Math.random()*.036,i%3===0);
-    }
-    const notes=rank===3?[64,67,72]:rank===2?[65,69,74]:[60,67,72,76,79,84];
-    notes.forEach((note,i)=>{tone(note,t+i*.112,.39,rank===1?.16:.10,'triangle');if(rank===1)tone(note-12,t+i*.112,.52,.09,'sine');});
+    cheer(t+.06,rank===1);
+    if(rank===1)royalFanfare(t+.1);
+    else (rank===3?[62,65,69]:[64,67,72,76]).forEach((note,i)=>tone(note,t+i*.15,.48,.10,'triangle',.035));
    }
-   const tail=Math.max(...placements.map(x=>x.startIn))+(finale?1900:1500);
+   const tail=Math.max(...placements.map(x=>x.startIn))+(finale?2900:1700);
    closeTimer=setTimeout(stop,tail);
   }
   return {resume:()=>ctx.resume(),volume:v=>master.gain.setTargetAtTime(v,ctx.currentTime,.02),question,lobby,scoreboard,podium,cue,overlay,stop,dispose(){stop();ctx.close();}};
  }
  function create({button,slider},env={}){
   const now=env.now||Date.now;let storage=env.storage;if(storage===undefined)try{storage=root.localStorage;}catch{}let prefs={volume:.35};try{prefs={...prefs,...JSON.parse(storage?.getItem('examio-game-audio')||'{}')};}catch{}
-  let volume=Number.isFinite(Number(prefs.volume))?Math.max(0,Math.min(1,Number(prefs.volume))):.35,enabled=false,engine=null,view=null,received=0,session=null,pick=shuffleBag(),selected=new Map(),lastCue=null,destroyed=false,mode=null;
-  function label(){button.textContent=enabled?'Mute sound':'Enable sound';button.setAttribute('aria-pressed',String(enabled));}
-  function save(){try{storage?.setItem('examio-game-audio',JSON.stringify({volume}));}catch{}}
+  let volume=Number.isFinite(Number(prefs.volume))?Math.max(0,Math.min(1,Number(prefs.volume))):.35,muted=prefs.muted===true,enabled=false,activating=false,engine=null,view=null,received=0,session=null,pick=shuffleBag(),selected=new Map(),lastCue=null,destroyed=false,mode=null;
+  function label(){button.textContent=enabled?'Mute sound':muted?'Unmute sound':'Enable sound';button.setAttribute('aria-pressed',String(enabled));}
+  function save(){try{storage?.setItem('examio-game-audio',JSON.stringify({volume,muted}));}catch{}}
   function sync(cue,gong=false){
    if(!engine)return;
    if(!enabled||volume===0){if(mode)engine.stop();mode=null;return;}
@@ -142,14 +168,21 @@
     if(mode!==key){mode=key;const future=futurePodiumCues(view,received,now());engine.podium(key,future,future.some(x=>x.rank===1));}
     return;
    }
-   const roundClosed=['reveal','leaderboard','podium'].includes(view.phase);
+   const roundClosed=['responses-closed','reveal','leaderboard','podium'].includes(view.phase);
    if(mode&&(mode!=='cue'||!roundClosed)){engine.stop();mode=null;}
    if(gong||cue){mode='cue';if(gong&&cue)engine.cue('gong',cue);else engine.cue(gong?'gong':cue);}
   }
   label();slider.min='0';slider.max='100';slider.step='1';slider.value=String(Math.round(volume*100));
-  button.addEventListener('click',async()=>{if(destroyed)return;if(enabled){enabled=false;mode=null;engine?.stop();label();return;}try{if(!engine)engine=(env.engine||webEngine)();await engine.resume();if(destroyed)return;enabled=true;label();sync();}catch{enabled=false;button.textContent='Sound unavailable';button.setAttribute('aria-pressed','false');}});
+  button.addEventListener('click',async()=>{
+   if(destroyed||activating)return;
+   if(enabled){enabled=false;muted=true;mode=null;engine?.stop();save();label();return;}
+   activating=true;
+   try{if(!engine)engine=(env.engine||webEngine)();await engine.resume();if(destroyed)return;enabled=true;muted=false;save();label();sync();}
+   catch{enabled=false;button.textContent='Sound unavailable';button.setAttribute('aria-pressed','false');}
+   finally{activating=false;}
+  });
   slider.addEventListener('input',()=>{volume=Math.max(0,Math.min(1,Number(slider.value)/100));save();sync();});
-  return {update(next,cue){
+  return {canAutoEnable:()=>!enabled&&!activating&&!destroyed&&!muted&&volume>0,update(next,cue){
    if(destroyed||isStaleView(next,view))return;
    if(next.id!==session){session=next.id;pick=shuffleBag();selected=new Map();lastCue=null;mode=null;engine?.stop();}
    const gong=freshGong(view,next);
