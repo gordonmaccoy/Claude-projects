@@ -1,3 +1,4 @@
+const delivery=require('./delivery');
 const { randomBytes, randomInt, createHash } = require('node:crypto');
 const {validateSecurity,effectiveSecurity}=require('./security');
 const token = () => randomBytes(24).toString('base64url');
@@ -53,7 +54,7 @@ function launchOptions(input={}) {
  if(language!=='en'&&language!=='ko')throw new Error('Invalid session language');
  const durationMinutes=input.durationMinutes??0,showScores=input.showScores??true,shuffleAnswers=input.shuffleAnswers??false,showCorrections=input.showCorrections??false;
  if(!Number.isInteger(durationMinutes)||durationMinutes<0||durationMinutes>360||typeof showScores!=='boolean'||typeof shuffleAnswers!=='boolean'||typeof showCorrections!=='boolean')throw new Error('Invalid launch options');
- return {durationMinutes,showScores,shuffleAnswers,showCorrections,language,security:validateSecurity(input.security)};
+ const flow=delivery.options(input);return {durationMinutes,showScores:flow.deliveryVersion?true:showScores,shuffleAnswers,showCorrections:flow.deliveryVersion?true:showCorrections,language,security:validateSecurity(input.security),...flow};
 }
 function newSession(ownerId, test, now = Date.now(), options={}) {
  const settings=launchOptions(options);
@@ -69,12 +70,12 @@ function join(s, input, now = Date.now()) {
     if (!/^[A-Za-z0-9_-]{32,128}$/.test(input.resumeToken)) throw new Error('Invalid resume token');
     const st = s.students.find(x => x.tokenHash === hash(input.resumeToken));
     if (st) return { studentId: st.id, resumeToken: input.resumeToken };
-    if (!input.name || !input.number) throw new Error('Invalid resume token');
+    if (!input.name || (s.requireStudentNumber!==false&&!input.number)) throw new Error('Invalid resume token');
   }
   if (s.phase === 'ended') throw new Error('Session ended');
   const name = typeof input.name === 'string' ? input.name.trim() : '';
-  const number = typeof input.number === 'string' ? input.number.trim() : '';
-  if (!/^[0-9]{1,64}$/.test(number)) throw new Error('Student number must contain digits only (0–9)');
+  const number = s.requireStudentNumber===false ? 'guest-'+token() : typeof input.number === 'string' ? input.number.trim() : '';
+  if (s.requireStudentNumber!==false&&!/^[0-9]{1,64}$/.test(number)) throw new Error('Student number must contain digits only (0–9)');
   if (!name || name.length > 80 || !number || number.length > 64 || /[\x00-\x1f]/.test(name + number)) throw new Error('Student number and name are required (maximum 64 / 80 characters)');
   if (s.students.some(x => x.number === number)) throw new Error('Student number already joined. Resume on the original browser or ask your professor.');
   if (s.students.length >= 1000) throw new Error('Classroom is full');
@@ -82,7 +83,7 @@ function join(s, input, now = Date.now()) {
   const st = { id: token(), tokenHash: hash(resumeToken), number, name, visible: true, lastSeen: now,
     hiddenSince: null, failedAt: null, overrideAt: null, draft: {}, submission: null, events: [] };
   if(effectiveSecurity(s).enabled && s.shuffleAnswers && s.test){st.optionOrder={};for(const q of s.test.questions){if(q.type==='blank')continue;const order=q.options.map(o=>o.id);shuffle(order);st.optionOrder[q.id]=order;}}
-  if(effectiveSecurity(s).shuffleQuestions&&s.test){st.questionOrder=s.test.questions.map(q=>q.id);shuffle(st.questionOrder);}
+  if(effectiveSecurity(s).shuffleQuestions&&s.test&&delivery.type(s)!=='teacher'){st.questionOrder=s.test.questions.map(q=>q.id);shuffle(st.questionOrder);}
   s.students.push(st);
   return { studentId: st.id, resumeToken };
 }
@@ -222,7 +223,8 @@ function submit(s, id, answers, now = Date.now()) {
   if (s.mode !== 'test' || s.phase !== 'running') throw new Error('Test is not running');
   const st = student(s, id);
   if (st.submission) throw new Error('Student already submitted');
-  const valid = validateAnswers(s, answers);
+  const valid = delivery.mergedAnswers(s,st,answers);
+  if(delivery.sequential(s)&&!delivery.flow(s,st).readyToSubmit)throw Error('Complete the questions before submitting');
   sweep(s, now);
   if (isFailed(st)) throw new Error('Call professor: activity is locked');
   st.submission = { answers: valid, originalScore: scoreAnswers(s.test, valid), submittedAt: now };
@@ -262,7 +264,7 @@ function publicView(s, now = Date.now()) {
     students: s.students.map(st => ({ name: st.name, fullscreen:effectiveSecurity(s).fullscreen&&st.fullscreen===true, submitted:Boolean(st.submission||st.completedAt),status: isFailed(st)?'failed':st.completedAt?'completed':st.submission?'submitted':status(st,now,s) })) };
 }
 function privateView(s, now = Date.now()) {
-  return { id: s.id, security:effectiveSecurity(s),roomName:s.roomName||null,mode: s.mode, language:s.language??'en', title: s.resultTitle || s.test?.title || 'Classroom calculator', phase: s.phase,
+  return { id: s.id, deliveryType:delivery.type(s),requireStudentNumber:s.requireStudentNumber!==false,teacherQuestion:s.teacherQuestion||0,questionCount:s.test?.questions.length||0, security:effectiveSecurity(s),roomName:s.roomName||null,mode: s.mode, language:s.language??'en', title: s.resultTitle || s.test?.title || 'Classroom calculator', phase: s.phase,
     remainingMs:remainingTime(s,now),durationMinutes:s.durationMinutes||0,deadlineAt:s.deadlineAt||null,showScores:s.showScores!==false,shuffleAnswers:effectiveSecurity(s).enabled&&!!s.shuffleAnswers,extensionVersion:s.extensionVersion||0,
     createdAt: s.createdAt, startedAt: s.startedAt, endedAt: s.endedAt, displayToken: s.displayToken,
     students: s.students.map(st => ({ id: st.id, number: st.number, name: st.name, status: status(st, now,s),
@@ -273,12 +275,12 @@ function privateView(s, now = Date.now()) {
 }
 function studentView(s, st) {
   const internal=result(s,st);const final=internal?{score:internal.score,total:internal.total,percentage:internal.percentage,failed:internal.failed,submittedAt:internal.submittedAt}:null;
-  return { security:effectiveSecurity(s),phase: s.phase, remainingMs:remainingTime(s), mode: s.mode, language:s.language??'en', name: st.name, failed: isFailed(st), completed:Boolean(st.completedAt),terminal:Boolean(st.completedAt||st.submission?.professorFinalized),deadlineAt:s.deadlineAt||null,extensionVersion:s.extensionVersion||0,lastExtension:s.lastExtension?{minutes:s.lastExtension.minutes}:null,
+  return { ...(s.test?{flow:delivery.flow(s,st)}:{}),requireStudentNumber:s.requireStudentNumber!==false,security:effectiveSecurity(s),phase: s.phase, remainingMs:remainingTime(s), mode: s.mode, language:s.language??'en', name: st.name, failed: isFailed(st), completed:Boolean(st.completedAt),terminal:Boolean(st.completedAt||st.submission?.professorFinalized),deadlineAt:s.deadlineAt||null,extensionVersion:s.extensionVersion||0,lastExtension:s.lastExtension?{minutes:s.lastExtension.minutes}:null,
     test: s.test && s.phase === 'running' && !st.submission ? { title: s.resultTitle || s.test.title,
-      questions: (st.questionOrder?st.questionOrder.map(id=>s.test.questions.find(q=>q.id===id)):s.test.questions).map(q => ({ id: q.id, type:q.type || 'mc', points:q.points??1,text: q.text, ...(q.image?{image:q.image}:{}), ...(q.type === 'blank' ? {} : {options:st.optionOrder?.[q.id]?st.optionOrder[q.id].map(id=>q.options.find(o=>o.id===id)):q.options}) })) } : null,
+      questions: delivery.visibleQuestions(s,st).map(id=>s.test.questions.find(q=>q.id===id)).map(q => ({ id: q.id, type:q.type || 'mc', points:q.points??1,text: q.text, ...(q.image?{image:q.image}:{}), ...(q.type === 'blank' ? {} : {options:st.optionOrder?.[q.id]?st.optionOrder[q.id].map(id=>q.options.find(o=>o.id===id)):q.options}) })) } : null,
     ...(final && !final.failed && s.showCorrections===true?{corrections:incorrectAnswers(s,st)}:{}),
     draft: st.submission ? {} : st.draft, result:final && s.showScores===false?{hidden:true,failed:final.failed,submittedAt:final.submittedAt}:final };
 }
-module.exports = { validateTest, newSession, join, student, start, sweep, visibility, submit, override,
+module.exports = { ...delivery,validateTest, newSession, join, student, start, sweep, visibility, submit, override,
   pause,resume,launchOptions,securityEvent,detailedResults,completeCalculator,totalPoints,extend,finalizeFail, progress, scoreAnswers, validateAnswers, publicView, privateView, studentView, hash, isFailed };
 

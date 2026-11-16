@@ -25,7 +25,7 @@ function showJoinError(text) { els.joinError.hidden=false; els.joinError.textCon
 function savedToken() { try { return memoryToken || localStorage.getItem(resumeKey); } catch { return memoryToken; } }
 function saveDraft() { try { localStorage.setItem(draftKey,JSON.stringify(testAnswers)); } catch {} }
 async function join(input) {
-  if(input.name && input.number) {
+  if(input.name) {
     memoryToken = savedToken() || Array.from(crypto.getRandomValues(new Uint8Array(24)),b=>b.toString(16).padStart(2,'0')).join('');
     input.resumeToken=memoryToken;
     try { localStorage.setItem(resumeKey,memoryToken); } catch { message(t('Resume is available while this page stays open. This browser cannot save the resume link across reloads.')); }
@@ -47,7 +47,7 @@ async function initializeStudentLanguage() {
     if(sessionId) {
       const response=await fetch(`/session-language/${encodeURIComponent(sessionId)}`);
       if(!response.ok)throw new Error('Session language unavailable');
-      applyStudentLanguage((await response.json()).language);
+      const config=await response.json();applyStudentLanguage(config.language);$('number-input').hidden=config.requireStudentNumber===false;$('number-input').required=config.requireStudentNumber!==false;$('number-label').hidden=config.requireStudentNumber===false;
     }
   } catch {
     connectionNotice.textContent=t('Connection interrupted. Reconnecting…');
@@ -75,7 +75,9 @@ socket.on('disconnect',()=> {
 });
 function setConnected(ok) { for (const el of [els.connDot,els.testConnDot]) { el.classList.toggle('offline',!ok); el.title=ok?t('Connected'):t('Disconnected'); } }
 els.form.onsubmit=async e=> { e.preventDefault(); const b=els.form.querySelector('button'); b.disabled=true; try { await join({name:els.nameInput.value.trim(),number:$('number-input').value.trim()}); } finally { b.disabled=false; } };
+let deliveryRenderKey='';
 function showView(view) {
+  const nextKey=JSON.stringify([view.flow?.index,view.flow?.locked,view.flow?.lockedIds,view.flow?.readyToSubmit]);if(nextKey!==deliveryRenderKey){renderedTest=false;deliveryRenderKey=nextKey;}
   const previousExtension=currentView?.extensionVersion;currentView=view;
   if(previousExtension!==undefined && view.extensionVersion>previousExtension){extensionNoticeUntil=performance.now()+6000;$('time-notice').textContent=t('Your professor extended the time by {minutes} minute.', {minutes:view.lastExtension?.minutes||1});}
   if((view.result||view.failed||view.phase==='ended'||view.phase==='paused')&&$('submit-dialog').open)$('submit-dialog').close();
@@ -119,8 +121,8 @@ function showView(view) {
 
   if(view.test && !renderedTest) {
     renderedTest=true; testAnswers={...view.draft};
-    try { const local=JSON.parse(localStorage.getItem(draftKey)||'{}'); for(const q of view.test.questions) if(q.type==='blank' ? typeof local[q.id]==='string' && local[q.id].length<=300 : q.options.some(o=>o.id===local[q.id])) testAnswers[q.id]=local[q.id]; } catch {}
-    renderTestQuestions(view.test.questions);
+    try { const local=JSON.parse(localStorage.getItem(draftKey)||'{}'); for(const q of view.test.questions) if(!view.flow?.lockedIds?.includes(q.id)&&(q.type==='blank' ? typeof local[q.id]==='string' && local[q.id].length<=300 : q.options.some(o=>o.id===local[q.id]))) testAnswers[q.id]=local[q.id]; } catch {}
+    renderTestQuestions(view.test.questions);renderDeliveryControls(view);
   }
 }
 socket.on('student:finished',view=>{showView(view);socket.disconnect();});
@@ -158,21 +160,36 @@ $('calculator-complete').onclick=async()=>{
 function renderTestQuestions(questions) {
   els.testQuestions.replaceChildren();
   questions.forEach((q,i)=> {
-    const card=document.createElement('div');card.className='tq-card';const p=document.createElement('p');p.className='tq-text';p.textContent=`${i+1}. ${q.text} (${t((q.points??1)===1?'{points} point':'{points} points',{points:q.points??1})})`;card.append(p);appendQuestionImage(card,q.image);
+    const card=document.createElement('div');card.className='tq-card';const p=document.createElement('p');p.className='tq-text';p.textContent=`${currentView?.flow?.type!=='free'?(currentView?.flow?.index||0)+i+1:i+1}. ${q.text} (${t((q.points??1)===1?'{points} point':'{points} points',{points:q.points??1})})`;card.append(p);appendQuestionImage(card,q.image);
     card.dataset.questionId=q.id;
     const options=document.createElement('div'); options.className='tq-options';
     if(q.type==='blank') {
-      const input=document.createElement('input');input.type='text';input.className='blank-answer';input.maxLength=300;input.setAttribute('aria-label',t('Answer to question {number}',{number:i+1}));input.autocomplete='off';input.value=testAnswers[q.id]||'';
+      const input=document.createElement('input');input.type='text';input.className='blank-answer';input.maxLength=300;input.setAttribute('aria-label',t('Answer to question {number}',{number:i+1}));input.autocomplete='off';input.value=testAnswers[q.id]||'';input.disabled=currentView?.flow?.lockedIds?.includes(q.id)||false;
       input.oninput=()=> { testAnswers[q.id]=input.value;if(input.value.trim())lastAnsweredQuestion=q.id;updateVersion++;saveDraft();clearTimeout(draftTimer);draftTimer=setTimeout(uploadDraft,400); };options.append(input);
     }
     (q.options||[]).forEach((o,j)=> {
-      const label=document.createElement('label');label.className='tq-option';const radio=document.createElement('input');radio.type='radio';radio.name=q.id;radio.value=o.id;radio.checked=testAnswers[q.id]===o.id;
+      const label=document.createElement('label');label.className='tq-option';const radio=document.createElement('input');radio.type='radio';radio.name=q.id;radio.value=o.id;radio.checked=testAnswers[q.id]===o.id;radio.disabled=currentView?.flow?.lockedIds?.includes(q.id)||false;
       radio.onchange=()=> { testAnswers[q.id]=o.id;lastAnsweredQuestion=q.id; updateVersion++;saveDraft();clearTimeout(draftTimer);draftTimer=setTimeout(uploadDraft,400); };
       const letter=document.createElement('span');letter.className='tq-opt-letter';letter.textContent=String.fromCharCode(65+j);
       const text=document.createElement('span');text.className='tq-opt-text';text.textContent=o.text;label.append(radio,letter,text);appendQuestionImage(text,o.image);options.append(label);
-    });card.append(options);els.testQuestions.append(card);
+    });card.append(options);if(currentView?.flow?.type==='free'&&currentView.flow.onlyOneAttempt&&!currentView.flow.lockedIds.includes(q.id)){const lock=document.createElement('button');lock.type='button';lock.className='question-commit';lock.textContent=t('Submit answer');lock.onclick=()=>commitQuestion(q.id,lock);card.append(lock);}els.testQuestions.append(card);
   });
 
+}
+async function commitQuestion(questionId,button){
+ if(!testAnswers[questionId]?.trim()){message(t('Enter an answer before continuing'));return;}
+ clearTimeout(draftTimer);button.disabled=true;const response=await emit('student:answer',{questionId,answer:testAnswers[questionId]});if(response.view)showView(response.view);if(!response.ok){message(response.error);button.disabled=false;}
+}
+function renderDeliveryControls(view){
+ const flow=view.flow;if(!flow||flow.type==='free'){els.testSubmitBtn.hidden=false;return;}
+ els.testSubmitBtn.hidden=!flow.readyToSubmit;
+ const panel=document.createElement('div');panel.className='student-delivery-panel';
+ const progress=document.createElement('p');progress.className='question-position';progress.textContent=t('Question {number} of {total}',{number:Math.min(flow.index+1,flow.total),total:flow.total});panel.append(progress);
+ if(flow.feedback){const feedback=document.createElement('div');feedback.className='question-feedback '+(flow.feedback.isCorrect?'is-correct':'is-incorrect');const heading=document.createElement('strong');heading.textContent=t(flow.feedback.isCorrect?'Correct!':'Not quite.');const text=document.createElement('p');text.textContent=t('Correct answer:')+' '+flow.feedback.correct;feedback.append(heading,text);panel.append(feedback);}
+ if(flow.readyToSubmit){const note=document.createElement('p');note.textContent=t('All questions are complete. Submit your quiz to see your score.');panel.append(note);}
+ else if(flow.type==='teacher'&&flow.locked){const note=document.createElement('p');note.textContent=t('Answer submitted. Wait for your professor to open the next question.');panel.append(note);}
+ else if(flow.questionId){const next=document.createElement('button');next.type='button';next.className='join-btn';next.textContent=t(flow.locked?'Next question':'Submit answer & continue');next.onclick=async()=>{if(!flow.locked){await commitQuestion(flow.questionId,next);return;}next.disabled=true;const response=await emit('student:next-question',{questionId:flow.questionId});if(response.view)showView(response.view);if(!response.ok){message(response.error);next.disabled=false;}};panel.append(next);}
+ els.testQuestions.append(panel);
 }
 let lastAnsweredQuestion=null;
 async function uploadDraft() {

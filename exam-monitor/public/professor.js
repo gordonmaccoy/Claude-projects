@@ -9,6 +9,7 @@ const els = { tbTitle: $('tb-title'), tbQuestions: $('tb-questions'), tbError: $
 const socket = io();
 let resultViewVersion=0;
 let trashVersion=0, pendingTrashDelete=null;
+let sessionPreferences=null;
 let auth, account, current, historySession, library = [], folders = [], aiConfigured=false, exportEmailConfigured=false, uploadMaxBytes=5*1024*1024, importMode="import", sessionList = [], editingId = null, tbQuestions = [], popup, recoveringPassword = false;
 let accountGeneration = 0,creationVersion=0,professorTimerSnapshot=null;
 
@@ -238,7 +239,7 @@ const sharingContacts=window.createSharingContacts({api,t});
 const quizSharing=createQuizSharingUI({api,contacts:sharingContacts,getFolders:()=>folders,isSignedIn:()=>!!account,notify:notice,onImported:async()=>{await refresh();}});
 document.addEventListener("visibilitychange",()=>{if(!document.hidden&&account)quizSharing.refresh();});
 async function refresh() {
-  [library, sessionList, folders] = await Promise.all([api('/tests'), api('/sessions'),api('/folders')]);
+  [library, sessionList, folders,quickLaunchPreferences] = await Promise.all([api('/tests'), api('/sessions'),api('/folders'),api('/launch-preferences')]);applyQuizLayout();
   const expanded=new Set([...document.querySelectorAll('#launch-tests details[open],#library-tests details[open]')].map(folder=>folder.dataset.folderKey));
   if(draggedTest||draggedFolder)return;
   renderFolderOptions();
@@ -257,7 +258,7 @@ async function refresh() {
   }
   for (const test of library) {
     const launch = card(test.title, t('{count} questions · Saved test',{count:test.questions.length}));
-    launch.append(button(t('Launch test ↗'), () => openLaunch(test), 'primary')); (groups['launch-tests'+(test.folderId||'')]||$('launch-tests')).append(launch);
+    const launchActions=document.createElement('div');launchActions.className='actions';launchActions.append(button(t('Launch test ↗'), () => openLaunch(test), 'primary'),button(t('Quick Launch'),action(async()=>{if(!quickLaunchPreferences){openLaunch(test);$('launch-error').textContent=t('Choose your options and save Quick Launch preferences first.');return;}await launchSession({...quickLaunchPreferences,testId:test.id,language:window.examioLanguage.current});})));launch.append(launchActions); (groups['launch-tests'+(test.folderId||'')]||$('launch-tests')).append(launch);
     const saved=document.createElement('article');saved.className='library-test-row';
     const title=document.createElement('strong');title.textContent=test.title;saved.append(title);
     saved.dataset.testId=test.id;
@@ -399,6 +400,7 @@ function renderDashboard() {
   $('dashboard').hidden = false; $('session-title').textContent = current.title;
   $('calculator-card').hidden = current.mode === 'calculator' && current.phase !== 'ended';
   $('session-phase').textContent = current.phase === 'waiting' ? t('Waiting room open · Questions appear when you start the test.') : current.phase === 'paused'?t('Test paused'):current.phase === 'running' ? t('Session in progress') : t('Session ended · Results saved');
+  const teacher=current.deliveryType==='teacher'&&current.phase==='running';$('teacher-next-question').hidden=!teacher||current.teacherQuestion>=current.questionCount;$('teacher-next-question').textContent=current.teacherQuestion===current.questionCount-1?t('Finish questions'):t('Next question →');$('teacher-question-status').hidden=!teacher;$('teacher-question-status').textContent=t('Question {number} of {total}',{number:Math.min((current.teacherQuestion||0)+1,current.questionCount),total:current.questionCount});
   $('test-start').hidden = current.phase !== 'waiting'; $('session-end').hidden = current.phase === 'ended';
   $('test-pause').hidden=current.mode!=='test'||!['running','paused'].includes(current.phase);$('test-pause').textContent=current.phase==='paused'?t('Resume test'):t('Pause test');
   $('extend-time').hidden=!['running','paused'].includes(current.phase)||(!current.deadlineAt&&current.remainingMs==null);
@@ -431,11 +433,11 @@ function renderTable(container, session) {
       for(const value of [s.number,masked?'••••••':s.name,s.failed ? t('FAILED') : s.completed?'Completed and closed':s.status === 'green' ? t('Active') : t('Inactive')]) { const cell=document.createElement('td'); cell.textContent=value; row.append(cell); }
       const review=document.createElement('td');if(s.failed && session.phase==='running')review.append(button(t('Unlock & continue'),()=>unlockStudent(session,s)));row.append(review);body.append(row);
     }
-    table.append(body); container.replaceChildren(table); return;
+    table.append(body);if(session.requireStudentNumber===false)for(const row of table.rows)row.cells[0]?.remove(); container.replaceChildren(table); return;
   }
   table.innerHTML = '<thead><tr><th>'+t('Student number')+'</th><th>'+t('Name')+'</th><th>'+t('Status')+'</th><th>'+t('Student progress')+'</th>'+(showScores?'<th>'+t('Score')+'</th><th>'+t('Original score')+'</th>':'')+'<th>'+t('Review')+'</th></tr></thead>';
   const tbody = document.createElement('tbody');
-  for (const s of [...session.students].sort((a,b) => a.number.localeCompare(b.number, undefined, { numeric:true }))) {
+  for (const s of [...session.students].sort((a,b) => session.requireStudentNumber===false?a.name.localeCompare(b.name):a.number.localeCompare(b.number, undefined, { numeric:true }))) {
     const tr = document.createElement('tr');
     for (const text of [s.number,masked?'••••••':s.name]) { const td=document.createElement('td'); td.textContent=text; tr.append(td); }
     const state=document.createElement('td'); const pill=document.createElement('span'); pill.className=`pill ${s.status === 'red' ? 'red' : ''}`; pill.textContent=s.failed ? t('FAILED') : s.completed ? 'Completed and closed' : s.result ? 'Test Submitted' : s.status === 'green' ? t('Active') : t('Inactive'); state.append(pill); tr.append(state);
@@ -447,7 +449,7 @@ function renderTable(container, session) {
     const details=document.createElement('details'); const summary=document.createElement('summary'); summary.textContent=t('{count} monitoring events',{count:s.events.length});if(s.events.length>5)summary.className='monitoring-alert'; details.append(summary);
     const list=document.createElement('ul'); for (const e of s.events) { const li=document.createElement('li'); li.textContent=`${new Date(e.at).toLocaleTimeString()} · ${e.type}${e.reason ? ` · ${e.reason}` : ''}`; list.append(li); } details.append(list); review.append(details); tr.append(review); tbody.append(tr);
   }
-  table.append(tbody); container.replaceChildren(table);
+  table.append(tbody);if(session.requireStudentNumber===false)for(const row of table.rows)row.cells[0]?.remove();container.replaceChildren(table);
 }
 function closeResults() {
   if($('question-detail-dialog').open)$('question-detail-dialog').close();questionData=null;
@@ -502,7 +504,7 @@ function renderAnswerGrid(data){
   }
   const averages=table.createTFoot().insertRow();averages.className='question-average-row';const averageLabel=document.createElement('th');averageLabel.colSpan=3;averageLabel.scope='row';averageLabel.textContent=t('Class average');averages.append(averageLabel);for(let index=0;index<data.questions.length;index++){const value=window.examioResultAnalysis.questionStatistics(data.students,index).average;averages.insertCell().textContent=value==null?'—':value+'%';}
   const body=table.createTBody();
-  for(const student of data.students){
+  for(const student of [...data.students].sort((a,b)=>historySession?.requireStudentNumber===false?a.name.localeCompare(b.name):a.number.localeCompare(b.number,undefined,{numeric:true}))){
     const row=body.insertRow();
     for(const value of [student.number,student.name,student.submitted?t('Submitted'):data.phase==='ended'?t('No submission'):t('Draft')])row.insertCell().textContent=value;
     for(const answer of student.answers){
@@ -514,6 +516,11 @@ function renderAnswerGrid(data){
     }
   }
   root.replaceChildren();
+  if(historySession?.requireStudentNumber===false){
+    for(const row of table.tHead.rows)row.cells[0]?.remove();
+    for(const row of table.tBodies[0].rows)row.cells[0]?.remove();
+    averageLabel.colSpan=2;
+  }
   if(data.students.length)root.append(table);else root.textContent=t('No students joined.');
 }
 function renderQuestionDetail(){
@@ -554,7 +561,7 @@ $('result-details-tab').onclick=action(async()=>{
   await refreshAnswerGrid();
 });
 setInterval(()=>{if(detailsPhase!=='ended')void refreshAnswerGrid();},2000);
-const exportsController=window.createExamioExports({getSession:()=>historySession,getEmail:()=>account?.email,getEmailConfigured:()=>exportEmailConfigured,downloadFile,api,notify:notice}); $('results-refresh').onclick=action(refresh);
+const exportsController=window.createExamioExports({getSession:()=>historySession,getEmail:()=>account?.email,getEmailConfigured:()=>exportEmailConfigured,downloadFile,api,saveToDrive:async(session,detail)=>{const generation=accountGeneration;const response=await fetch('/api/sessions/'+encodeURIComponent(session.id)+'/export?format=xlsx&detail='+(detail?'1':'0'),{headers:{Authorization:'Bearer '+await token()}});if(!response.ok)throw Error('Unable to load grades. Please sign in and retry.');const workbook=await response.blob();if(generation!==accountGeneration)throw Error('Account changed. Please retry.');return window.examioSaveGoogleSheet({accessToken:sessionPreferences?.getGoogleProviderToken(account.id),workbook,title:session.title+(detail?' - Detailed Results':' - Summary Grades')});},connectDrive:async(session,detail)=>{sessionStorage.setItem('examio-drive-return',JSON.stringify({owner:account.id,session:session.id,detail}));const {error}=await auth.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+'/professor.html',scopes:'https://www.googleapis.com/auth/drive.file',queryParams:{prompt:'consent',login_hint:account.email,include_granted_scopes:'true'}}});if(error){sessionStorage.removeItem('examio-drive-return');throw error;}},notify:notice}); $('results-refresh').onclick=action(refresh);
 socket.on('connect',()=> { if (account) { if($('notice').textContent.startsWith('Live connection lost'))notice(''); watch().catch(e=>notice(e.message)); } });
 socket.on('disconnect',()=> { if (account) notice('Live connection lost. Sessions remain saved; reconnecting…'); });
 socket.on('professor:update',view=> { const listed=sessionList.find(s=>s.id===view.id);if(view.phase==='ended'||(listed&&(listed.title!==view.title||listed.phase!==view.phase)))refresh().catch(e=>notice(e.message));if (current?.id === view.id) { current={...current,...view}; renderDashboard(); } if (historySession?.id===view.id) { historySession={...historySession,...view}; renderResults(); } });
@@ -579,7 +586,7 @@ async function loadSignedInWorkspace() {
     try {
       const onboarding=await api('/onboarding','POST',{language:window.examioLanguage.current});
       await refresh(); await watch();
-      if(generation===accountGeneration)tour.offer(onboarding);
+      if(generation===accountGeneration){let pending=null;try{pending=JSON.parse(sessionStorage.getItem('examio-drive-return')||'null');sessionStorage.removeItem('examio-drive-return');}catch{}if(pending&&pending.owner===account.id){historySession=await api('/sessions/'+encodeURIComponent(pending.session));tab('results');showResultSummary();renderResults();exportsController.open();notice(t('Google Drive connected. Choose Save to Drive to create your Google Sheet.'));}else tour.offer(onboarding);}
     } catch(e) { if(generation===accountGeneration)notice(e.message); }
   }catch(e){if(generation!==accountGeneration)return;settings.reset();account=null;$('login').hidden=false;$('workspace').hidden=true;$('signout').hidden=true;$('auth-message').textContent=e.message;}
 }
@@ -587,7 +594,7 @@ async function initAuth() {
   const config=await (await fetch('/api/config')).json();
   if (!config.supabaseUrl || !config.supabaseKey) { $('auth-message').textContent='Professor sign-in needs Development authentication configuration. See V2_SETUP.md.'; $('login').querySelectorAll('input,button').forEach(el=>el.disabled=true); return; }
   aiConfigured=Boolean(config.aiConfigured);exportEmailConfigured=Boolean(config.exportEmailConfigured);if(Number.isSafeInteger(config.uploadMaxBytes)&&config.uploadMaxBytes>0)uploadMaxBytes=config.uploadMaxBytes;
-  const preferences=window.createExamioSessionPreferences(config.supabaseUrl);
+  const preferences=sessionPreferences=window.createExamioSessionPreferences(config.supabaseUrl);
   $('remember-login').checked=preferences.remember;
   $('remember-login').onchange=()=>preferences.setRemember($('remember-login').checked);
   auth=window.createOnScreenAuth(config.supabaseUrl, config.supabaseKey, {auth:{flowType:'pkce',detectSessionInUrl:true,persistSession:true,storage:preferences.storage}});
@@ -626,7 +633,7 @@ function folderActions(folder) {
   actions.onclick=event=>event.preventDefault();
   return actions;
 }
-let launchTest=null;
+let launchTest=null,quickLaunchPreferences=null;
 function resetLaunchOptions(){
  $('launch-room-enabled').checked=false;$('launch-room-name').value='';$('launch-room-name').disabled=true;$('launch-room-field').hidden=true;
  $('launch-time-enabled').checked=false;$('launch-duration').value='10';$('launch-duration').disabled=true;$('launch-time-field').hidden=true;
@@ -640,7 +647,15 @@ $('launch-room-enabled').onchange=()=>{$('launch-room-name').disabled=!$('launch
 $('launch-time-enabled').onchange=()=>{$('launch-duration').disabled=!$('launch-time-enabled').checked;$('launch-time-field').hidden=!$('launch-time-enabled').checked;if(!$('launch-duration').disabled)$('launch-duration').focus();};
 function openLaunch(test){launchTest=test;$('launch-test-title').textContent=test.title;resetLaunchOptions();$('launch-error').textContent='';$('launch-dialog').showModal();}
 $('launch-cancel').onclick=()=> $('launch-dialog').close();
-$('launch-form').onsubmit=async e=>{e.preventDefault();$('launch-confirm').disabled=true;try{await launchSession({testId:launchTest.id,...($('launch-room-enabled').checked?{roomName:$('launch-room-name').value.trim()}:{}),language:window.examioLanguage.current,durationMinutes:$('launch-time-enabled').checked?Number($('launch-duration').value):0,showScores:$('launch-show-scores').checked,shuffleAnswers:$('launch-shuffle').checked,showCorrections:$('launch-corrections').checked,security:{enabled:$('launch-monitoring').checked,inactivityFail:$('launch-fail-hidden').checked,shuffleQuestions:$('launch-shuffle-questions').checked,textSelection:$('launch-text-selection').checked,copyPaste:$('launch-copy-block').checked,fullscreen:$('launch-fullscreen').checked,tabVisibility:$('launch-tab-visibility').checked,focusVisibility:$('launch-focus').checked}});$('launch-dialog').close();}catch(e){$('launch-error').textContent=t(e.message);}finally{$('launch-confirm').disabled=false;}};
+function selectedDeliveryType(){return document.querySelector('[name="delivery-type"]:checked').value;}
+function updateDeliveryType(){const mode=selectedDeliveryType();$('launch-only-attempt').disabled=mode!=='free';$('launch-immediate-feedback').disabled=mode==='free';$('launch-shuffle-questions').disabled=mode==='teacher';if(mode!=='free')$('launch-only-attempt').checked=false;if(mode==='free')$('launch-immediate-feedback').checked=false;if(mode==='teacher')$('launch-shuffle-questions').checked=false;}
+document.querySelectorAll('[name="delivery-type"]').forEach(el=>el.onchange=updateDeliveryType);
+function collectLaunchOptions(){return {...($('launch-room-enabled').checked?{roomName:$('launch-room-name').value.trim()}:{}),deliveryType:selectedDeliveryType(),onlyOneAttempt:$('launch-only-attempt').checked,immediateFeedback:$('launch-immediate-feedback').checked,requireStudentNumber:$('launch-student-numbers').checked,language:window.examioLanguage.current,durationMinutes:$('launch-time-enabled').checked?Number($('launch-duration').value):0,showScores:true,showCorrections:true,shuffleAnswers:$('launch-shuffle').checked,security:{enabled:$('launch-monitoring').checked,inactivityFail:$('launch-fail-hidden').checked,shuffleQuestions:$('launch-shuffle-questions').checked,textSelection:$('launch-text-selection').checked,copyPaste:$('launch-copy-block').checked,fullscreen:$('launch-fullscreen').checked,tabVisibility:$('launch-tab-visibility').checked,focusVisibility:$('launch-focus').checked}};}
+$('launch-save-preferences').onclick=action(async()=>{if(!$('launch-form').reportValidity())return;quickLaunchPreferences=await api('/launch-preferences','PUT',collectLaunchOptions());$('launch-error').textContent='';notice(t('Quick Launch preferences saved.'));$('launch-dialog').close();});
+$('launch-form').onsubmit=async e=>{e.preventDefault();$('launch-confirm').disabled=true;try{await launchSession({testId:launchTest.id,...collectLaunchOptions()});$('launch-dialog').close();}catch(e){$('launch-error').textContent=t(e.message);}finally{$('launch-confirm').disabled=false;}};
+function applyQuizLayout(){let layout='grid';try{layout=localStorage.getItem('examio-quiz-layout-'+account?.id)==='list'?'list':'grid';}catch{}$('launch-tests').dataset.layout=layout;document.querySelectorAll('[data-quiz-layout]').forEach(el=>el.setAttribute('aria-pressed',String(el.dataset.quizLayout===layout)));}
+document.querySelectorAll('[data-quiz-layout]').forEach(el=>el.onclick=()=>{try{localStorage.setItem('examio-quiz-layout-'+account.id,el.dataset.quizLayout);}catch{}applyQuizLayout();});
+$('teacher-next-question').onclick=action(async()=>{if(!current)return;$('teacher-next-question').disabled=true;try{updateSession(await api('/sessions/'+current.id+'/next-question','POST',{questionIndex:current.teacherQuestion||0}));}finally{$('teacher-next-question').disabled=false;}});
 $('extend-time').onclick=action(async()=>{const updated=await api('/sessions/'+current.id+'/extend','POST',{});updateSession(updated);notice('Added 1 minute (60 seconds). New end time: '+new Date(updated.deadlineAt).toLocaleTimeString());});
 $('test-pause').onclick=action(async()=>{if(!current||!['running','paused'].includes(current.phase))return;const id=current.id,verb=current.phase==='paused'?'resume':'pause';$('test-pause').disabled=true;try{updateSession(await api('/sessions/'+id+'/'+verb,'POST',{}));}finally{$('test-pause').disabled=false;}});
 let entryAction=null;

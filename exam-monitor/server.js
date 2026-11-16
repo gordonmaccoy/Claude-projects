@@ -239,10 +239,11 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
     res.json({ ok: true });
   }));
   api.post('/sessions/:id/extend',wrap(async(req,res)=>{await owned(req.params.id,req.user);const {session,result}=await store.mutate(req.params.id,s=>{try{exam.extend(s,req.user.id,1);return null;}catch(e){return {error:e.message};}});await broadcast(session);if(result?.error)return res.status(409).json({error:result.error});res.json(await decorate(session,req));}));
-  for (const action of ['start', 'pause', 'resume', 'end', 'override','finalize-fail']) api.post(`/sessions/:id/${action}`, wrap(async (req, res) => {
+  for (const action of ['start', 'pause', 'resume', 'end', 'override','finalize-fail','next-question']) api.post(`/sessions/:id/${action}`, wrap(async (req, res) => {
     await owned(req.params.id, req.user);
     const { session } = await store.mutate(req.params.id, s => {
       if (s.ownerId !== req.user.id) throw new Error('Session not found');
+      if(action==='next-question')exam.advanceQuestion(s,req.user.id,req.body.questionIndex);
       if (action === 'start') exam.start(s);
       if (action === 'pause') exam.pause(s,req.user.id);
       if (action === 'resume') exam.resume(s,req.user.id);
@@ -282,7 +283,7 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
   app.use('/api', api);
   app.get('/session-language/:id',wrap(async(req,res)=>{
     const session=/^[A-F0-9]{12}$/.test(req.params.id)?await store.getSession(req.params.id):null;
-    res.set('Cache-Control','no-store').json({language:session?.language??'en'});
+    res.set('Cache-Control','no-store').json({language:session?.language??'en',requireStudentNumber:session?.requireStudentNumber!==false});
   }));
   app.use(express.static(path.join(__dirname, 'public'), { etag: false }));
   app.get('/', (req, res) => res.redirect('/professor.html'));
@@ -366,10 +367,12 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
       if (s.phase !== 'running') throw new Error('Test is not running');
       const st = exam.student(s, id);
       if (st.submission) throw new Error('Student already submitted');
-      st.draft = exam.validateAnswers(s, answers);
+      exam.saveDraft(s,id,answers);
       if(questionId && st.draft[questionId]?.trim())exam.progress(s,id,questionId);
       else if(st.progressQuestionId && !st.draft[st.progressQuestionId]?.trim())st.progressQuestionId=null;
     }));
+    on('student:answer',({questionId,answer})=>studentMutation((s,id,now)=>exam.answerQuestion(s,id,questionId,answer,now)));
+    on('student:next-question',({questionId})=>studentMutation((s,id)=>exam.nextQuestion(s,id,questionId)));
     on('student:complete-calculator',()=>studentMutation((s,id,now)=>exam.completeCalculator(s,id,now)));
     on('student:submit', ({ answers }) => studentMutation((s, id, now) => exam.submit(s, id, answers,now)));
     // Disconnection never ends an exam or constitutes confirmed hidden time.

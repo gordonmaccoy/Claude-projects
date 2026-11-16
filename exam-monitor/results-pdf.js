@@ -12,17 +12,17 @@ async function resultsPdf(session,detail=false){
  async function space(h){if(y+h>H-M){await save();start();}}
  function wrap(text,width,size,bold){ctx.font=(bold?'bold ':'')+size+'px "Examio Korean"';const lines=[];for(const part of String(text??'').split('\n')){let line='';for(const char of part){if(ctx.measureText(line+char).width>width&&line){lines.push(line);line='';}line+=char;}lines.push(line);}return lines;}
  async function text(value,{size=11,bold=false,color='#19334d'}={}){for(const line of wrap(value,W-M*2,size,bold)){await space(size*1.5);ctx.font=(bold?'bold ':'')+size+'px "Examio Korean"';ctx.fillStyle=color;ctx.fillText(line,M,y+size);y+=size*1.5;}}
- async function row(values,header=false){const widths=[98,210,95,108],lines=values.map((v,i)=>wrap(v,widths[i]-12,10,header)),height=Math.max(...lines.map(a=>a.length))*15+12;await space(height);ctx.fillStyle=header?'#e4edf7':page%2?'#f4f7fb':'#f9fafb';ctx.fillRect(M,y,W-M*2,height);let x=M;for(let i=0;i<values.length;i++){ctx.font=(header?'bold ':'')+'10px "Examio Korean"';ctx.fillStyle='#19334d';lines[i].forEach((line,j)=>ctx.fillText(line,x+6,y+15+j*15));x+=widths[i];}y+=height+2;}
+ async function row(values,header=false){const widths=session.requireStudentNumber===false?[280,108,123]:[98,210,95,108],lines=values.map((v,i)=>wrap(v,widths[i]-12,10,header)),height=Math.max(...lines.map(a=>a.length))*15+12;await space(height);ctx.fillStyle=header?'#e4edf7':page%2?'#f4f7fb':'#f9fafb';ctx.fillRect(M,y,W-M*2,height);let x=M;for(let i=0;i<values.length;i++){ctx.font=(header?'bold ':'')+'10px "Examio Korean"';ctx.fillStyle='#19334d';lines[i].forEach((line,j)=>ctx.fillText(line,x+6,y+15+j*15));x+=widths[i];}y+=height+2;}
  start();await text(view.title,{size:21,bold:true});y+=10;
- const students=[...view.students].sort((a,b)=>a.number.localeCompare(b.number,'en',{numeric:true}));await text(students.length+' students | '+students.filter(s=>s.result).length+' graded',{color:'#64748b'});y+=12;
+ const numbered=session.requireStudentNumber!==false;const students=[...view.students].sort((a,b)=>require('./delivery').compareStudents(session,a,b));await text(students.length+' students | '+students.filter(s=>s.result).length+' graded',{color:'#64748b'});y+=12;
  if(!detail){
- await row(['Student number','Name','Score','Percentage'],true);
- for(const s of students)await row([s.number,s.name,s.score===null?'Pending':s.score+' / '+s.total,s.result?s.result.percentage.toFixed(1)+'%':'-']);
+ await row(numbered?['Student number','Name','Score','Percentage']:['Name','Score','Percentage'],true);
+ for(const s of students)await row([...(numbered?[s.number]:[]),s.name,s.score===null?'Pending':s.score+' / '+s.total,s.result?s.result.percentage.toFixed(1)+'%':'-']);
  }else{
  const questions=session.test.questions,details=new Map(detailedResults(session).map((s,i)=>[session.students[i].id,s]));
  const graded=students.filter(s=>s.result),percentages=graded.map(s=>s.result.percentage);
  const mean=percentages.length?percentages.reduce((a,b)=>a+b,0)/percentages.length:null;
- const fixed=[66,88,62,42],questionWidth=(W-M*2-fixed.reduce((a,b)=>a+b,0))/Math.max(questions.length,1);
+ const fixed=numbered?[66,88,62,42]:[110,72,42],questionWidth=(W-M*2-fixed.reduce((a,b)=>a+b,0))/Math.max(questions.length,1);
  const widths=[...fixed,...questions.map(()=>questionWidth)],font=Math.max(5,Math.min(8,questionWidth/3.4));
  function cell(value,x,width,fill,size=font,bold=false){
  ctx.fillStyle=fill;ctx.fillRect(x,y,width,22);ctx.strokeStyle='#d4dde7';ctx.lineWidth=.4;ctx.strokeRect(x,y,width,22);
@@ -34,7 +34,7 @@ async function resultsPdf(session,detail=false){
  let label=String(value??'');while(ctx.measureText(label).width>width-padding*2&&label.length>1)label=label.slice(0,-2)+'…';
  ctx.fillText(label,x+padding,y+14);ctx.restore();
  }
- function matrixRow(values,colors=[],header=false){let x=M;values.forEach((value,i)=>{cell(value,x,widths[i],colors[i]||(header?'#e4edf7':'#ffffff'),i<4?8:font,header);x+=widths[i];});y+=22;}
+ function matrixRow(values,colors=[],header=false){if(!numbered){values=values.slice(1);colors=colors.slice(1);}let x=M;values.forEach((value,i)=>{cell(value,x,widths[i],colors[i]||(header?'#e4edf7':'#ffffff'),i<4?8:font,header);x+=widths[i];});y+=22;}
  async function matrixHeader(){
  await text('Class statistics | Average '+(mean===null?'-':mean.toFixed(1)+'%')+' | Highest '+(percentages.length?Math.max(...percentages).toFixed(1)+'%':'-')+' | Lowest '+(percentages.length?Math.min(...percentages).toFixed(1)+'%':'-'),{size:10});
  await text('Green = correct | Red = incorrect | Gray = unanswered before submission. Long responses are abbreviated.',{size:8,color:'#64748b'});y+=6;
