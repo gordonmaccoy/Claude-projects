@@ -70,7 +70,9 @@ test('network silence alone never fails; returning before threshold clears hidde
   const s = fixture(); const j = exam.join(s, { name: 'Kim', number: '001' }, 1000);
   exam.start(s, 2000); exam.sweep(s, 30000);
   assert.equal(s.students[0].failedAt, null);
-  assert.equal(exam.publicView(s, 30000).students[0].status, 'red');
+  assert.equal(exam.publicView(s, 30000).students[0].status, 'green');
+  assert.equal(exam.privateView(s,30000).students[0].status,'green');
+  assert.equal(s.students[0].events.length,0);
   exam.visibility(s, j.studentId, false, 31000); exam.visibility(s, j.studentId, true, 35000); exam.sweep(s, 40000);
   assert.equal(s.students[0].failedAt, null);
   exam.submit(s, j.studentId, { q: 'a' }, 40001);
@@ -186,3 +188,5 @@ test('validated question and choice images reach only the authorized test view',
 });
 
 test('private results expose the saved launch settings without changing student data',()=>{const session=exam.newSession('p1',{...fixture().test,folderId:'economics'},1000,{deliveryType:'one',immediateFeedback:true,requireStudentNumber:false,showCorrections:true,durationMinutes:15,security:{enabled:false}});const view=exam.privateView(session);assert.equal(view.folderId,'economics');assert.equal(view.deliveryType,'one');assert.equal(view.immediateFeedback,true);assert.equal(view.onlyOneAttempt,false);assert.equal(view.requireStudentNumber,false);assert.equal(view.showCorrections,true);assert.equal(view.durationMinutes,15);assert.equal(view.security.enabled,false);assert.equal(exam.publicView(session).onlyOneAttempt,undefined);});
+
+test('missing check-ins do not change monitoring status, while confirmed hidden activity still fails and unlocks',()=>{const s=fixture(),j=exam.join(s,{name:'Kim',number:'001'},1000);exam.start(s,2000);s.students[0].lastSeen=0;exam.sweep(s,30000);assert.equal(exam.publicView(s,30000).students[0].status,'green');assert.equal(exam.privateView(s,30000).students[0].failed,false);exam.visibility(s,j.studentId,false,31000);exam.sweep(s,36001);assert.equal(exam.publicView(s,36001).students[0].status,'failed');assert.equal(exam.studentView(s,s.students[0]).failed,true);const resumed=exam.join(s,{resumeToken:j.resumeToken},37000);assert.equal(resumed.studentId,j.studentId);assert.equal(s.students.length,1);exam.override(s,j.studentId,'p1','Verified interruption',38000);exam.visibility(s,j.studentId,true,38001);assert.equal(exam.privateView(s,38001).students[0].failed,false);assert.equal(exam.publicView(s,50000).students[0].status,'green');});

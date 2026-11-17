@@ -378,19 +378,8 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
     on('student:next-question',({questionId})=>studentMutation((s,id)=>exam.nextQuestion(s,id,questionId)));
     on('student:complete-calculator',()=>studentMutation((s,id,now)=>exam.completeCalculator(s,id,now)));
     on('student:submit', ({ answers }) => studentMutation((s, id, now) => exam.submit(s, id, answers,now)));
-    // Disconnection never ends an exam or constitutes confirmed hidden time.
-    // Last heartbeat expires to red. Resume tokens reconnect the original enrollment.
-    socket.on('disconnect', async () => {
-      const identity = socket.data.student;
-      if (!identity) return;
-      try {
-        const { session } = await store.mutate(identity.sessionId, s => {
-          const st = exam.student(s, identity.studentId);
-          if (!st.submission && st.connectionId === socket.id) st.lastSeen = 0;
-        });
-        await broadcast(session);
-      } catch (error) { console.error('Unable to record disconnection:', error.message); }
-    });
+    // Connection loss alone is not student activity and does not change monitoring status.
+
   });
   let sweeping = false;
   async function tick() {
