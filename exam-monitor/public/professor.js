@@ -294,7 +294,7 @@ async function refresh() {
       await api(`/tests/${test.id}`, 'DELETE'); await refresh();
     }));
     actions.append(button('Share',()=>quizSharing.openShare(test)));
-    actions.append(button(t('Download PDF'),()=>downloadFile('/api/tests/'+encodeURIComponent(test.id)+'/pdf',test.title+'.pdf')),handle);saved.append(actions); (groups['library-tests'+(test.folderId||'')]||$('library-tests')).append(saved);
+    actions.append(button(t('Download PDF'),()=>downloadFile('/api/tests/'+encodeURIComponent(test.id)+'/pdf',test.title+'.pdf')));const menu=document.createElement('details');menu.className='quiz-actions-menu';const menuToggle=document.createElement('summary');menuToggle.textContent='⋮';menuToggle.setAttribute('aria-label',t('Quiz options for {title}',{title:test.title}));menuToggle.title=t('Quiz options');menu.append(menuToggle,actions);menu.ontoggle=()=>{if(menu.open)for(const other of document.querySelectorAll('.quiz-actions-menu[open]'))if(other!==menu)other.open=false;};actions.addEventListener('click',event=>{if(event.target.closest('button'))menu.open=false;});const tools=document.createElement('div');tools.className='quiz-row-tools';tools.append(menu,handle);saved.append(tools); (groups['library-tests'+(test.folderId||'')]||$('library-tests')).append(saved);
   }
   for (const s of sessionList) {
     if (s.mode === 'test') {
@@ -648,7 +648,7 @@ $('launch-time-enabled').onchange=()=>{$('launch-duration').disabled=!$('launch-
 function openLaunch(test){launchTest=test;$('launch-test-title').textContent=test.title;resetLaunchOptions();$('launch-error').textContent='';$('launch-dialog').showModal();}
 $('launch-cancel').onclick=()=> $('launch-dialog').close();
 function selectedDeliveryType(){return document.querySelector('[name="delivery-type"]:checked').value;}
-function updateDeliveryType(){const mode=selectedDeliveryType();$('launch-only-attempt').disabled=mode!=='free';$('launch-immediate-feedback').disabled=mode==='free';$('launch-shuffle-questions').disabled=mode==='teacher';if(mode!=='free')$('launch-only-attempt').checked=false;if(mode==='free')$('launch-immediate-feedback').checked=false;if(mode==='teacher')$('launch-shuffle-questions').checked=false;}
+function updateDeliveryType(){const mode=selectedDeliveryType();$('launch-only-attempt').disabled=mode!=='free';$('launch-immediate-feedback').disabled=mode==='free';$('launch-feedback-option').hidden=mode==='free';$('launch-shuffle-questions').disabled=mode==='teacher';if(mode!=='free')$('launch-only-attempt').checked=false;if(mode==='free')$('launch-immediate-feedback').checked=false;if(mode==='teacher')$('launch-shuffle-questions').checked=false;}
 document.querySelectorAll('[name="delivery-type"]').forEach(el=>el.onchange=updateDeliveryType);
 function collectLaunchOptions(){return {...($('launch-room-enabled').checked?{roomName:$('launch-room-name').value.trim()}:{}),deliveryType:selectedDeliveryType(),onlyOneAttempt:$('launch-only-attempt').checked,immediateFeedback:$('launch-immediate-feedback').checked,requireStudentNumber:$('launch-student-numbers').checked,language:window.examioLanguage.current,durationMinutes:$('launch-time-enabled').checked?Number($('launch-duration').value):0,showScores:true,showCorrections:true,shuffleAnswers:$('launch-shuffle').checked,security:{enabled:$('launch-monitoring').checked,inactivityFail:$('launch-fail-hidden').checked,shuffleQuestions:$('launch-shuffle-questions').checked,textSelection:$('launch-text-selection').checked,copyPaste:$('launch-copy-block').checked,fullscreen:$('launch-fullscreen').checked,tabVisibility:$('launch-tab-visibility').checked,focusVisibility:$('launch-focus').checked}};}
 $('launch-save-preferences').onclick=action(async()=>{if(!$('launch-form').reportValidity())return;quickLaunchPreferences=await api('/launch-preferences','PUT',collectLaunchOptions());$('launch-error').textContent='';notice(t('Quick Launch preferences saved.'));$('launch-dialog').close();});
@@ -821,3 +821,6 @@ function hideTbError(){
  for(const el of els.tbQuestions.querySelectorAll('[aria-describedby="tb-question-error"]')){el.removeAttribute('aria-invalid');el.removeAttribute('aria-describedby');}
  for(const el of els.tbQuestions.querySelectorAll('.tb-q-error'))el.remove();
 }
+
+document.addEventListener('click',event=>{for(const menu of document.querySelectorAll('.quiz-actions-menu[open]'))if(!menu.contains(event.target))menu.open=false;});
+document.addEventListener('keydown',event=>{if(event.key==='Escape'){const menu=document.querySelector('.quiz-actions-menu[open]');if(menu){menu.open=false;menu.querySelector('summary').focus();event.preventDefault();}}});
