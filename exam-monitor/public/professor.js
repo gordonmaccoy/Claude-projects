@@ -717,11 +717,11 @@ function addQuestion() {
 function moveQuestion(from,to) {if(to<0||to>=tbQuestions.length||from===to)return;tbQuestions.splice(to,0,tbQuestions.splice(from,1)[0]);renderTestBuilder();}
 let draggingQuestion=null;
 let pendingImages=0;
-function imageControl(target,labelText) {
+function imageControl(target,labelText,compact=false) {
   const panel=document.createElement('div');
   const label=document.createElement('label');label.textContent=labelText;
   const picker=document.createElement('input');picker.type='file';picker.accept='image/png,image/jpeg,image/webp';
-  label.append(picker);panel.append(label);
+  if(compact){panel.className='tb-option-image-tools';picker.hidden=true;picker.setAttribute('aria-label',labelText);const upload=button(t(target.image?'Change image':'Upload image'),()=>picker.click());upload.title=labelText;panel.append(upload,picker);}else{label.append(picker);panel.append(label);}
   const status=document.createElement('p');status.setAttribute('role','status');panel.append(status);
   if(target.image){
     const preview=document.createElement('img');preview.className='tb-image';preview.alt=labelText;preview.src=target.image;
@@ -767,12 +767,12 @@ function renderTestBuilder() {
    const label=document.createElement('label');label.textContent=t('Accepted answers (one per line)');const answers=document.createElement('textarea');answers.className='tb-accepted';answers.rows=3;answers.value=(q.acceptedAnswers||[]).join('\n');answers.oninput=()=>q.acceptedAnswers=answers.value.split('\n').map(s=>s.trim()).filter(Boolean);label.append(answers);card.append(label);
    const sensitive=document.createElement('label');const check=document.createElement('input');check.type='checkbox';check.checked=q.caseSensitive;check.onchange=()=>q.caseSensitive=check.checked;sensitive.append(check,' Case sensitive');card.append(sensitive);
   } else {
-   (q.options||[]).forEach((o,j)=>{const row=document.createElement('div');row.className='tb-option-row';row.dataset.optionId=o.id;if(q.correctOptionId)row.classList.add(q.correctOptionId===o.id?'answer-key-correct':'answer-key-incorrect');const radio=document.createElement('input');radio.type='radio';radio.name=q.id;radio.checked=q.correctOptionId===o.id;radio.setAttribute('aria-label','Correct answer '+String.fromCharCode(65+j));radio.onchange=()=>{q.correctOptionId=o.id;for(const answerRow of card.querySelectorAll('.tb-option-row')){answerRow.classList.toggle('answer-key-correct',answerRow.dataset.optionId===o.id);answerRow.classList.toggle('answer-key-incorrect',answerRow.dataset.optionId!==o.id);}};const input=document.createElement('input');input.className='tb-opt-text';input.maxLength=500;input.placeholder='Option '+String.fromCharCode(65+j);input.value=o.text;input.oninput=()=>o.text=input.value;row.append(radio,input);if(q.options.length>2)row.append(button(t('Remove option'),()=>{q.options.splice(j,1);if(q.correctOptionId===o.id)q.correctOptionId='';renderTestBuilder();}));card.append(row,imageControl(o,'Image for option '+String.fromCharCode(65+j)+' (optional)'));});
+   (q.options||[]).forEach((o,j)=>{const row=document.createElement('div');row.className='tb-option-row';row.dataset.optionId=o.id;if(q.correctOptionId)row.classList.add(q.correctOptionId===o.id?'answer-key-correct':'answer-key-incorrect');const radio=document.createElement('input');radio.type='radio';radio.name=q.id;radio.checked=q.correctOptionId===o.id;radio.setAttribute('aria-label','Correct answer '+String.fromCharCode(65+j));radio.onchange=()=>{q.correctOptionId=o.id;for(const answerRow of card.querySelectorAll('.tb-option-row')){answerRow.classList.toggle('answer-key-correct',answerRow.dataset.optionId===o.id);answerRow.classList.toggle('answer-key-incorrect',answerRow.dataset.optionId!==o.id);}};const input=document.createElement('input');input.className='tb-opt-text';input.maxLength=500;input.placeholder='Option '+String.fromCharCode(65+j);input.value=o.text;input.oninput=()=>o.text=input.value;row.append(radio,input);if(q.options.length>2)row.append(button(t('Remove option'),()=>{q.options.splice(j,1);if(q.correctOptionId===o.id)q.correctOptionId='';renderTestBuilder();}));row.append(imageControl(o,'Image for option '+String.fromCharCode(65+j)+' (optional)',true));card.append(row);});
    if(q.options.length<5)card.append(button(t('+ Add Option'),()=>{q.options.push({id:q.id+'_'+crypto.randomUUID(),text:''});renderTestBuilder();}));
   }
   if(q.answerExplanation){const reason=document.createElement('p');reason.className='answer-rationale';reason.textContent='AI answer rationale: '+q.answerExplanation;card.append(reason);}
   updateAnswerWarning(card,q,i);card.addEventListener('input',()=>{hideTbError();updateAnswerWarning(card,q,i);});card.addEventListener('change',()=>{hideTbError();updateAnswerWarning(card,q,i);});
-  if(q.evidence){const evidence=document.createElement('p');evidence.className='source-evidence';evidence.textContent='Source excerpt: '+q.evidence;card.append(evidence);}els.tbQuestions.append(card);
+  if(q.evidence){const evidence=document.createElement('details');evidence.className='source-evidence';const summary=document.createElement('summary');summary.textContent=t('Source excerpt');const excerpt=document.createElement('p');excerpt.textContent=q.evidence;evidence.append(summary,excerpt);card.append(evidence);}els.tbQuestions.append(card);
  });
 }
 function collectTest() {
