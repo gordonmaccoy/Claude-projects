@@ -612,3 +612,5 @@ Object.assign(window.examioKorean,{"Upload image":"이미지 업로드","Change 
 Object.assign(window.examioKorean,{"True / False":"참 / 거짓","Short answer":"서술형","Model answer":"모범 답안","Marking guidance (optional)":"채점 기준 (선택)","AI awards partial credit against your model answer. You can review and override the score in Detailed Results.":"AI가 모범 답안을 기준으로 부분 점수를 부여합니다. 상세 결과에서 검토하고 점수를 수정할 수 있습니다.","Grading…":"채점 중…","Your answers are submitted. Grading…":"답안이 제출되었습니다. 채점 중…","Grading your answer… Please wait.":"답안을 채점하고 있습니다. 잠시 기다려 주세요.","Review score":"점수 검토","Review short answer":"서술형 답안 검토","Student response":"학생 답안","Points":"배점","Reason for score change":"점수 변경 사유","Save score":"점수 저장"});
 
 Object.assign(window.examioKorean,{"Results layout":"결과 보기 형식"});
+
+Object.assign(window.examioKorean,{"Quiz preview":"퀴즈 미리 보기"});

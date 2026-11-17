@@ -24,6 +24,7 @@ function clearPrivateWorkspace() {
   settings.reset();tour.reset();$('launch-show-names').checked=false;$('launch-show-scores-live').checked=false;$('result-detail-rows').replaceChildren();lastWorkspaceTab='launch';accountGeneration++;creationVersion++;professorTimerSnapshot=null;if($('answer-ai-dialog').open)$('answer-ai-dialog').close();$('answer-ai-status').textContent='';closeEntry();launchTest=null;$('new-title').value='';for(const id of ['tb-folder','new-folder-choice'])$(id).replaceChildren();$('launch-test-title').textContent='';if($('launch-dialog').open)$('launch-dialog').close();$('creation-choice').hidden=true;
   trashVersion++;pendingTrashDelete=null;if($('trash-confirm').open)$('trash-confirm').close();$('trash-confirm-message').textContent='';$('trash-items').replaceChildren();
   current=null; historySession=null; library=[]; folders=[]; sessionList=[]; $('import-source').value='';$('import-file').value='';$('import-panel').hidden=true;$('draft-review').textContent=''; editingId=null; tbQuestions=[];
+  detachResultsPanel();
   for(const id of ['launch-tests','library-tests','active-sessions','result-sessions','live-students','result-students','tb-questions']) $(id).replaceChildren();
   for(const id of ['dashboard','result-detail','test-builder']) $(id).hidden=true;
   $('calculator-card').hidden=false;
@@ -240,9 +241,11 @@ const quizSharing=createQuizSharingUI({api,contacts:sharingContacts,getFolders:(
 document.addEventListener("visibilitychange",()=>{if(!document.hidden&&account)quizSharing.refresh();});
 async function refresh() {
   [library, sessionList, folders,quickLaunchPreferences] = await Promise.all([api('/tests'), api('/sessions'),api('/folders'),api('/launch-preferences')]);applyQuizLayout();
+  const expandedPreviews=new Set([...document.querySelectorAll('.quiz-preview-toggle[aria-expanded=true]')].map(el=>el.dataset.testId));
   const expanded=new Set([...document.querySelectorAll('#launch-tests details[open],#library-tests details[open]')].map(folder=>folder.dataset.folderKey));
   if(draggedTest||draggedFolder)return;
   renderFolderOptions();
+  detachResultsPanel();
   for (const id of ['launch-tests', 'library-tests', 'active-sessions', 'result-sessions']) $(id).replaceChildren();
   if (!library.length) {
     $('launch-tests').append(card(t('A fresh start'), t('Create your first test in Library, or launch the calculator.')));
@@ -260,7 +263,7 @@ async function refresh() {
     const launch = card(test.title, t('{count} questions · Saved test',{count:test.questions.length}));
     const launchActions=document.createElement('div');launchActions.className='actions';launchActions.append(button(t('Launch test ↗'), () => openLaunch(test), 'primary'),button(t('Quick Launch'),action(async()=>{if(!quickLaunchPreferences){openLaunch(test);$('launch-error').textContent=t('Choose your options and save Quick Launch preferences first.');return;}await launchSession({...quickLaunchPreferences,testId:test.id,language:window.examioLanguage.current});})));launch.append(launchActions); (groups['launch-tests'+(test.folderId||'')]||$('launch-tests')).append(launch);
     const saved=document.createElement('article');saved.className='library-test-row';
-    const title=document.createElement('strong');title.textContent=test.title;saved.append(title);
+    const title=document.createElement('button');title.type='button';title.className='quiz-preview-toggle';title.dataset.testId=test.id;title.setAttribute('aria-expanded','false');const arrow=document.createElement('span');arrow.className='quiz-preview-arrow';arrow.setAttribute('aria-hidden','true');arrow.textContent='▸';const titleText=document.createElement('strong');titleText.textContent=test.title;title.append(arrow,titleText);saved.append(title);let preview;const showPreview=()=>{if(!preview){preview=window.createExamioQuizPreview(test,t);preview.id='quiz-preview-'+test.id;title.setAttribute('aria-controls',preview.id);saved.append(preview);}const open=title.getAttribute('aria-expanded')!=='true';title.setAttribute('aria-expanded',String(open));arrow.textContent=open?'▾':'▸';preview.hidden=!open;};title.onclick=showPreview;
     saved.dataset.testId=test.id;
     const handle=document.createElement('button');
     handle.type='button';handle.textContent='↕';handle.title='Drag to move, or press Up or Down';
@@ -294,11 +297,12 @@ async function refresh() {
       await api(`/tests/${test.id}`, 'DELETE'); await refresh();
     }));
     actions.append(button('Share',()=>quizSharing.openShare(test)));
-    actions.append(button(t('Download PDF'),()=>downloadFile('/api/tests/'+encodeURIComponent(test.id)+'/pdf',test.title+'.pdf')));const menu=document.createElement('details');menu.className='quiz-actions-menu';const menuToggle=document.createElement('summary');menuToggle.textContent='⋮';menuToggle.setAttribute('aria-label',t('Quiz options for {title}',{title:test.title}));menuToggle.title=t('Quiz options');menu.append(menuToggle,actions);menu.ontoggle=()=>{if(menu.open)for(const other of document.querySelectorAll('.quiz-actions-menu[open]'))if(other!==menu)other.open=false;};actions.addEventListener('click',event=>{if(event.target.closest('button'))menu.open=false;});const tools=document.createElement('div');tools.className='quiz-row-tools';tools.append(menu,handle);saved.append(tools); (groups['library-tests'+(test.folderId||'')]||$('library-tests')).append(saved);
+    actions.append(button(t('Download PDF'),()=>downloadFile('/api/tests/'+encodeURIComponent(test.id)+'/pdf',test.title+'.pdf')));const menu=document.createElement('details');menu.className='quiz-actions-menu';const menuToggle=document.createElement('summary');menuToggle.textContent='⋮';menuToggle.setAttribute('aria-label',t('Quiz options for {title}',{title:test.title}));menuToggle.title=t('Quiz options');menu.append(menuToggle,actions);menu.ontoggle=()=>{if(menu.open)for(const other of document.querySelectorAll('.quiz-actions-menu[open]'))if(other!==menu)other.open=false;};actions.addEventListener('click',event=>{if(event.target.closest('button'))menu.open=false;});const tools=document.createElement('div');tools.className='quiz-row-tools';tools.append(menu,handle);saved.append(tools);if(expandedPreviews.has(test.id))showPreview(); (groups['library-tests'+(test.folderId||'')]||$('library-tests')).append(saved);
   }
   for (const s of sessionList) {
     if (s.mode === 'test') {
       const c = card(s.title, `${new Date(s.createdAt).toLocaleString()} · ${s.phase} · ${s.students.length} joined`);
+      c.classList.add('result-session-card');c.dataset.sessionId=s.id;
       c.append(button(t('View results'), async () => { const version=++resultViewVersion; const session=await api(`/sessions/${s.id}`); if(version!==resultViewVersion)return; historySession=session; showResultSummary();renderResults(); }));
       $('result-sessions').append(c);
     }
@@ -306,6 +310,7 @@ async function refresh() {
   }
   if (!sessionList.some(s => s.mode === 'test')) $('result-sessions').append(card('No test results yet', 'Results from tests will be saved here. Calculator sessions do not create results.'));
   if(current && !sessionList.some(s=>s.id===current.id && s.phase!=='ended')){current=null;renderDashboard();}
+  if(historySession&&!placeResultsPanel())closeResults();
   quizSharing.start();
 }
 function openBuilder(test) {
@@ -451,6 +456,8 @@ function renderTable(container, session) {
   }
   table.append(tbody);if(session.requireStudentNumber===false)for(const row of table.rows)row.cells[0]?.remove();container.replaceChildren(table);
 }
+function detachResultsPanel(){const panel=$('result-detail');if(panel?.parentElement?.id==='result-sessions')$('results').append(panel);}
+function placeResultsPanel(){if(!historySession)return false;const row=[...document.querySelectorAll('.result-session-card')].find(el=>el.dataset.sessionId===historySession.id);if(!row)return false;const panel=$('result-detail');if(row.nextElementSibling!==panel)row.after(panel);return true;}
 function closeResults() {
   if($('question-detail-dialog').open)$('question-detail-dialog').close();questionData=null;
   $('result-details').hidden=true;$('result-detail-rows').replaceChildren();
@@ -459,9 +466,9 @@ function closeResults() {
   $('result-detail').hidden=true;
   $('result-students').replaceChildren();
 }
-$('result-close').onclick=()=>{closeResults();$('results-refresh').focus();};
+$('result-close').onclick=()=>{const row=[...document.querySelectorAll('.result-session-card')].find(el=>el.dataset.sessionId===historySession?.id);closeResults();(row?.querySelector('button')||$('results-refresh')).focus();};
 function renderResultStatistics(students){const stats=window.examioResultAnalysis.statistics(students),root=$('result-stats');root.replaceChildren();for(const [label,value] of [[t('Students'),stats.students],[t('Completion'),stats.completion+'%'],[t('Class average'),stats.average==null?'—':stats.average+'%']]){const cell=document.createElement('div'),title=document.createElement('span'),number=document.createElement('strong');title.textContent=label;number.textContent=value;cell.append(title,number);root.append(cell);}}
-function renderResults() { $('result-detail').hidden=false; $('result-title').textContent=historySession.title; $('result-delete').hidden=false; $('result-rename').hidden=false;renderResultStatistics(historySession.students); renderTable($('result-students'),historySession); }
+function renderResults() { placeResultsPanel();$('result-detail').hidden=false; $('result-title').textContent=historySession.title; $('result-delete').hidden=false; $('result-rename').hidden=false;renderResultStatistics(historySession.students); renderTable($('result-students'),historySession); }
 async function deleteResults(session) {
   if(!confirm(`Move the saved results for “${session.title}” to Trash for 30 days?${session.phase!=='ended'?' This will end the active session first.':''}`)) return;
   if(session.phase!=='ended')await api(`/sessions/${session.id}/end`,'POST',{});
