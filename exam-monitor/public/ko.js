@@ -619,3 +619,5 @@ Object.assign(window.examioKorean,{"Signed out on this computer. Server sign-out
 
 Object.assign(window.examioKorean,{"Sort results":"결과 정렬","Newest first":"최신 완료순","Name A–Z":"이름순"});
 Object.assign(window.examioKorean,{"Test settings":"시험 설정","Test type":"시험 유형","On":"켜짐","Off":"꺼짐","None":"없음","Launched":"개설 시간","Started":"시작 시간","Completed":"완료 시간","5 second inactivity fail":"5초 비활성 시 실패 처리","Text-selection restrictions":"텍스트 선택 제한","Tab visibility monitoring":"탭 표시 상태 모니터링","Focus & visibility changes":"포커스 및 표시 상태 변경"});
+
+Object.assign(window.examioKorean,{"General settings":"일반 설정","Feedback":"피드백","Monitoring":"모니터링","Test time":"시험 시간","Elapsed test time":"총 경과 시간","Enabled":"사용","Disabled":"사용 안 함","Time from start to completion, including pauses.":"일시 정지 시간을 포함한 시작부터 완료까지의 시간입니다.","h":"시간","min":"분","sec":"초"});

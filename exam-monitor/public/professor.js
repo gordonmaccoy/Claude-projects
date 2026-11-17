@@ -854,7 +854,35 @@ document.querySelectorAll('[data-result-layout]').forEach(el=>el.onclick=()=>{if
 function applyResultSort(){const root=$('result-sessions'),cards=new Map([...root.querySelectorAll('.result-session-card')].map(el=>[el.dataset.sessionId,el]));for(const s of window.examioResultOrder.sort(sessionList,resultSort,window.examioLanguage.current))if(cards.has(s.id))root.append(cards.get(s.id));document.querySelectorAll('[data-result-sort]').forEach(el=>el.setAttribute('aria-pressed',String(el.dataset.resultSort===resultSort)));placeResultsPanel();}
 document.querySelectorAll('[data-result-sort]').forEach(el=>el.onclick=()=>{resultSort=el.dataset.resultSort;applyResultSort();});
 
-function renderResultSettings(session){const root=$('result-settings-content');const signature=JSON.stringify(['id','deliveryType','roomName','requireStudentNumber','durationMinutes','onlyOneAttempt','immediateFeedback','showScores','showCorrections','security','shuffleAnswers','createdAt','startedAt','endedAt'].map(key=>session[key]));if(root.dataset.signature===signature)return;if(root.dataset.sessionId!==session.id)$('result-settings').open=false;root.dataset.sessionId=session.id;root.dataset.signature=signature;root.replaceChildren();const sec=session.security||{};const row=(label,value)=>{const el=document.createElement('div');el.className='result-setting-row';const name=document.createElement('strong');name.textContent=t(label);const val=document.createElement('span');val.textContent=value;el.append(name,val);root.append(el);};const yes=value=>t(value?'On':'Off');row('Test type',t(({free:'Free Navigation',one:'One & Done!',teacher:'Teacher Lead'})[session.deliveryType]||'Free Navigation'));row('Room name',session.roomName||'—');row('Student numbers',yes(session.requireStudentNumber!==false));row('Time limit',session.durationMinutes?session.durationMinutes+' min':t('None'));row('Only one attempt',yes(session.onlyOneAttempt));row('Immediate feedback',yes(session.immediateFeedback));row('Show final score',yes(session.showScores!==false));row('Show errors & corrections',yes(session.showCorrections));row('Monitoring & cheating deterrents',yes(sec.enabled!==false));for(const [key,label] of [['inactivityFail','5 second inactivity fail'],['shuffleQuestions','Shuffle questions'],['textSelection','Text-selection restrictions'],['copyPaste','Copy/paste blocking'],['fullscreen','Fullscreen requests'],['tabVisibility','Tab visibility monitoring'],['focusVisibility','Focus & visibility changes']])row(label,yes(sec[key]===true));row('Shuffle answers',yes(session.shuffleAnswers));for(const [key,label]of [['createdAt','Launched'],['startedAt','Started'],['endedAt','Completed']])row(label,session[key]?new Date(session[key]).toLocaleString():'—');}
+function formatResultElapsed(session){
+ if(session.startedAt==null)return t('Not started');
+ if(session.endedAt==null)return t('In progress');
+ const seconds=Math.max(0,Math.floor((session.endedAt-session.startedAt)/1000));
+ const hours=Math.floor(seconds/3600),minutes=Math.floor(seconds%3600/60);
+ return [hours?hours+' '+t('h'):'',minutes?minutes+' '+t('min'):'',seconds%60+' '+t('sec')].filter(Boolean).join(' ');
+}
+function renderResultSettings(session){
+ const root=$('result-settings-content');
+ const signature=JSON.stringify(['id','deliveryType','roomName','requireStudentNumber','durationMinutes','onlyOneAttempt','immediateFeedback','showScores','showCorrections','security','shuffleAnswers','createdAt','startedAt','endedAt'].map(key=>session[key]));
+ if(root.dataset.signature===signature)return;
+ if(root.dataset.sessionId!==session.id)$('result-settings').open=false;
+ root.dataset.sessionId=session.id;root.dataset.signature=signature;root.replaceChildren();
+ const sec=session.security||{};
+ const section=label=>{const heading=document.createElement('h3');heading.className='result-settings-section';heading.textContent=t(label);root.append(heading);};
+ const row=(label,value)=>{const el=document.createElement('div');el.className='result-setting-row';const name=document.createElement('span');name.textContent=t(label);const val=document.createElement('span');if(typeof value==='boolean'){val.className='result-setting-state '+(value?'enabled':'disabled');val.textContent=value?'✓':'✕';val.setAttribute('aria-label',t(value?'Enabled':'Disabled'));}else val.textContent=value;el.append(name,val);root.append(el);return el;};
+ section('General settings');
+ row('Test type',t(({free:'Free Navigation',one:'One & Done!',teacher:'Teacher Lead'})[session.deliveryType]||'Free Navigation'));
+ row('Room name',session.roomName||'—');row('Student numbers',session.requireStudentNumber!==false);
+ row('Time limit',session.durationMinutes?session.durationMinutes+' '+t('min'):t('None'));row('Only one attempt',!!session.onlyOneAttempt);
+ section('Feedback');row('Immediate feedback',!!session.immediateFeedback);row('Show final score',session.showScores!==false);row('Show errors & corrections',!!session.showCorrections);
+ section('Monitoring');row('Monitoring & cheating deterrents',sec.enabled!==false);
+ for(const [key,label]of [['inactivityFail','5 second inactivity fail'],['shuffleQuestions','Shuffle questions'],['textSelection','Text-selection restrictions'],['copyPaste','Copy/paste blocking'],['fullscreen','Fullscreen requests'],['tabVisibility','Tab visibility monitoring'],['focusVisibility','Focus & visibility changes']])row(label,sec[key]===true);
+ row('Shuffle answers',!!session.shuffleAnswers);
+ section('Test time');
+ row('Elapsed test time',formatResultElapsed(session)).title=t('Time from start to completion, including pauses.');
+ for(const [key,label]of [['startedAt','Started'],['endedAt','Completed']])row(label,session[key]!=null?new Date(session[key]).toLocaleString():'—');
+}
+
 document.addEventListener('click',event=>{const info=$('result-settings');if(info&&!info.contains(event.target))info.open=false;});
 document.addEventListener('keydown',event=>{if(event.key==='Escape')$('result-settings').open=false;});
 
@@ -869,4 +897,15 @@ function renderOtherSessionPanel(body,session){if(!session)return;const snapshot
 function renderOtherSessionPanels(){for(const body of document.querySelectorAll('.session-group-body')){if(body.contains($('dashboard')))continue;renderOtherSessionPanel(body,sessionList.find(s=>s.id===body.dataset.sessionId));}}
 let sessionGroupPolling=false;setInterval(async()=>{if(!account||document.hidden||$('launch').hidden||sessionGroupPolling||!sessionList.some(s=>s.phase!=='ended'))return;sessionGroupPolling=true;const generation=accountGeneration;try{const list=await api('/sessions');if(generation!==accountGeneration)return;const changed=list.filter(s=>s.phase!=='ended').map(s=>s.id+':'+s.phase+':'+s.title).join('|')!==sessionList.filter(s=>s.phase!=='ended').map(s=>s.id+':'+s.phase+':'+s.title).join('|');sessionList=list;if(changed){if(current)current=list.find(s=>s.id===current.id)||null;renderSessionGroups();}else renderOtherSessionPanels();}catch{}finally{sessionGroupPolling=false;}},2000);
 
-$('result-settings').addEventListener('toggle',()=>{const info=$('result-settings');if(!info.open)return;const rect=info.querySelector('summary').getBoundingClientRect(),width=Math.min(340,innerWidth*.8),height=Math.min(520,innerHeight-24),below=innerHeight-rect.bottom-20;const top=below>=240?rect.bottom+8:Math.max(12,rect.top-height-8);const content=$('result-settings-content');content.style.setProperty('--settings-left',Math.max(12,Math.min(rect.left,innerWidth-width-12))+'px');content.style.setProperty('--settings-top',top+'px');content.style.setProperty('--settings-height',Math.min(height,innerHeight-top-12)+'px');});
+function positionResultSettings(){
+ const info=$('result-settings');if(!info.open)return;
+ const rect=info.getBoundingClientRect(),content=$('result-settings-content');
+ const header=$('professor-navigation')?.getBoundingClientRect();const ceiling=Math.max(12,Math.min(innerHeight-180,(header?.bottom||0)+12));
+ const height=Math.max(160,Math.min(900,innerHeight-ceiling-16)),width=Math.min(390,innerWidth-32);
+ const top=Math.max(ceiling,Math.min(rect.top-140,innerHeight-height-16));
+ content.style.setProperty('--settings-left',Math.max(16,Math.min(rect.left,innerWidth-width-16))-rect.left+'px');
+ content.style.setProperty('--settings-top',top-rect.top+'px');
+ content.style.setProperty('--settings-height',height+'px');
+}
+$('result-settings').addEventListener('toggle',positionResultSettings);
+window.addEventListener('resize',positionResultSettings);
