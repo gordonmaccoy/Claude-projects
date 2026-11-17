@@ -30,3 +30,10 @@ Source excerpts collapse by default. Option image upload is inline beside Remove
 
 ## Review decisions
 Pending scores show “Grading…” and are excluded from class averages; exports explicitly mark them pending. Round earned points to two decimals and clamp them within zero and question points. Immediate-feedback screens wait for grading and recover after reload without accepting a second submission. Deduplicate grading jobs and reuse persisted assessments; provider timeout charges cannot be guaranteed exactly once.
+
+## Shipped behavior
+True/False and Short answer are available in the question-type menu. Short answer requires a model answer, supports optional marking guidance, and allows 2,000-character student responses. AI grades meaning with partial credit using the existing configured OpenAI model. Exact model matches and unanswered responses do not need an API request.
+
+Detailed Results provides Review score for submitted short answers. Professors can change points with a required reason; the original AI score and audit history remain stored. Grading delays show Grading… and retry automatically, including after session expiry or restart. Existing FAIL rules continue to show zero while preserving the underlying earned score.
+
+Quiz Results also has independent grid/list controls with the choice remembered per account on this browser.

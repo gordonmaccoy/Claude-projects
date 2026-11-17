@@ -11,18 +11,18 @@ function detailedSheet(session,students) {
   const questions=session.test.questions;
   const answers=detailedResults(session).map(student=>student.answers);
   const byNumber=new Map(session.students.map((student,index)=>[student.number,answers[index]]));
-  const submitted=students.filter(student=>student.result);
+  const submitted=students.filter(student=>student.result&&Number.isFinite(student.result.percentage));
   const rows=[{values:['Student number','Name','Score',...questions.map((_,index)=>'Question '+(index+1))],style:3}];
   for(const student of students){
     const cells=byNumber.get(student.number);
-    rows.push({values:[student.number,student.name,student.result?student.result.percentage/100:null,...cells.map(cell=>cell.answer||(cell.status==='incorrect'?'Unanswered':null))],
+    rows.push({values:[student.number,student.name,student.result?.pending?'Grading…':student.result?student.result.percentage/100:null,...cells.map(cell=>cell.status==='grading'?'Grading…':cell.answer?cell.answer+(cell.maxPoints&&questions[cell.number-1].type==='short'?' ('+cell.points+'/'+cell.maxPoints+')':''):(cell.status==='incorrect'?'Unanswered':null))],
       styles:[0,0,4,...cells.map(cell=>cell.status==='correct'?1:cell.status==='incorrect'?2:6)],
       height:wrappedHeight(cells.map(cell=>cell.answer))});
   }
-  rows.push({values:['Class average',null,average(submitted.map(student=>student.result.percentage/100)),...questions.map((_,index)=>average(submitted.map(student=>Number(byNumber.get(student.number)[index].status==='correct'))))],
+  rows.push({values:['Class average',null,average(submitted.map(student=>student.result.percentage/100)),...questions.map((_,index)=>average(submitted.filter(student=>byNumber.get(student.number)[index].status!=='grading').map(student=>(()=>{const a=byNumber.get(student.number)[index];return a.maxPoints?a.points/a.maxPoints:Number(a.status==='correct');})())))],
     styles:[3,3,...Array(questions.length+1).fill(5)]});
   rows.push({values:['Question',null,null,...questions.map(question=>question.text)],style:6,height:wrappedHeight(questions.map(question=>question.text))});
-  const keys=questions.map(question=>question.type==='blank'?question.acceptedAnswers.join(' / '):question.options.find(option=>option.id===question.correctOptionId)?.text||'');
+  const keys=questions.map(question=>require('./grading').answerKey(question));
   rows.push({values:['Correct Answer',null,null,...keys],styles:[3,3,3,...questions.map(()=>1)],height:wrappedHeight(keys)});
   const footer=students.length+2;
   return {rows,lastColumn:column(questions.length+2),filterEnd:students.length+1,
@@ -36,7 +36,7 @@ function workbook(session,detail=false) {
   const grid=detail?detailedSheet(session,students):null;
   const rows=grid?.rows||[
     {values:['student number','student name','absolute score','percentage']},
-    ...students.map(s=>({values:[s.number,s.name,s.score,s.score===null?null:Math.round(s.score/(s.total||1)*10000)/100]}))
+    ...students.map(s=>({values:[s.number,s.name,s.result?.pending?'Grading…':s.score,s.result?.pending?'Grading…':s.score===null?null:Math.round(s.score/(s.total||1)*10000)/100]}))
   ];
   const numbered=session.requireStudentNumber!==false;
   if(!numbered){for(const row of rows){const first=row.values.shift();if(row.styles)row.styles.shift();if(row.values[0]===null&&typeof first==='string')row.values[0]=first;}if(grid){grid.lastColumn=column(session.test.questions.length+1);const footer=students.length+2;grid.merges=['A'+(footer+1)+':B'+(footer+1),'A'+(footer+2)+':B'+(footer+2)];}}

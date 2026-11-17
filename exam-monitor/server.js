@@ -20,7 +20,7 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
   const exportMailer=createExportMailer(exportEmailOptions);
   const app = express();
   const server = http.createServer(app);
-  const io = new Server(server, { maxHttpBufferSize: 128 * 1024, cors: { origin: config.origin || false } });
+  const io = new Server(server, { maxHttpBufferSize: 1024 * 1024, cors: { origin: config.origin || false } });
   app.disable('x-powered-by');
   app.use((req, res, next) => {
     res.set('Referrer-Policy', 'no-referrer');

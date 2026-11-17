@@ -203,7 +203,7 @@ function detailedResults(s) {
       const answer=grading.textQuestion(q)?(value?.trim()||''):choice?.text||'';const assessment=grading.assessment(q,value,st);
       return {number:index+1,question:q.text,answer,optionId:choice?.id||null,letter:choice?String.fromCharCode(65+order.indexOf(choice.id)):null,
         correct:grading.answerKey(q),
-        ...assessment,status:assessment.pending?'grading':answer?assessment.status:(st.submission?'incorrect':'pending')};
+        ...assessment,status:assessment.pending?'grading':answer||q.type==='short'&&assessment.override?assessment.status:(st.submission?'incorrect':'pending')};
     });
     return {id:st.id,number:st.number,name:st.name,submitted:Boolean(st.submission),answers,incorrect:st.submission?answers.filter(row=>row.status==='incorrect'):[]};
   });
@@ -218,7 +218,7 @@ function result(s, st) {
   if (!st.submission) return null;
   const earned=grading.total(s.test,st.submission.answers,st);const score = isFailed(st) ? 0 : earned;
   return { score, originalScore: st.submission.originalScore, total: totalPoints(s.test),
-    pending:earned===null,percentage: score===null?null:Math.round(score / totalPoints(s.test) * 10000) / 100,
+    pending:score===null,percentage: score===null?null:Math.round(score / totalPoints(s.test) * 10000) / 100,
     failed: isFailed(st), submittedAt: st.submission.submittedAt };
 }
 function submit(s, id, answers, now = Date.now()) {
@@ -248,7 +248,7 @@ function finalizeFail(s,id,professorId,reason,now=Date.now()) {
  if(typeof reason!=='string'||!reason.trim()||reason.length>500)throw new Error('Reason required (maximum 500 characters)');
  const answers=validateAnswers(s,st.draft||{});
  st.submission={answers,originalScore:scoreAnswers(s.test,answers),submittedAt:now,professorFinalized:true};st.draft={};
- st.events.push({type:'fail-submitted',at:now,professorId,reason:reason.trim()});
+ grading.prepare(s);st.events.push({type:'fail-submitted',at:now,professorId,reason:reason.trim()});
 }
 function override(s, id, professorId, reason, now = Date.now()) {
   if (s.ownerId !== professorId) throw new Error('Session not found');

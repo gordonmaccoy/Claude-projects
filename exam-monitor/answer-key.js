@@ -3,12 +3,12 @@ const {validateTest}=require('./exam');const {parseTest,MAX_TEXT,GLYPH_WARNING}=
 function validateDraft(input){
  if(!input||!Array.isArray(input.questions)||input.questions.length<1||input.questions.length>100)throw new Error('Invalid test draft. Add 1–100 questions.');
  const missing=new Set();
- const prepared=input.questions.map((q,i)=>{if(!q||typeof q!=='object')return q;const blank=q.type==='blank';const absent=blank?(q.acceptedAnswers===undefined||Array.isArray(q.acceptedAnswers)&&q.acceptedAnswers.length===0):q.correctOptionId===undefined||q.correctOptionId===null||q.correctOptionId==='';if(!absent)return q;missing.add(i);return blank?{...q,acceptedAnswers:['temporary-validation-answer']}:{...q,correctOptionId:q.options?.[0]?.id};});
+ const prepared=input.questions.map((q,i)=>{if(!q||typeof q!=='object'||q.type==='short')return q;const blank=q.type==='blank';const absent=blank?(q.acceptedAnswers===undefined||Array.isArray(q.acceptedAnswers)&&q.acceptedAnswers.length===0):q.correctOptionId===undefined||q.correctOptionId===null||q.correctOptionId==='';if(!absent)return q;missing.add(i);return blank?{...q,acceptedAnswers:['temporary-validation-answer']}:{...q,correctOptionId:q.options?.[0]?.id};});
  const valid=validateTest({title:input.title===undefined||input.title===''?'Untitled test':input.title,questions:prepared});if(!valid)throw new Error('Invalid test draft. Check question text, choices, points and supplied answers.');
  for(const i of missing){const q=valid.questions[i];if(q.type==='blank')q.acceptedAnswers=[];else q.correctOptionId='';}
  return valid;
 }
-const isMissing=q=>q.type==='blank'?!q.acceptedAnswers.length:!q.correctOptionId;
+const isMissing=q=>q.type==='short'?false:q.type==='blank'?!q.acceptedAnswers.length:!q.correctOptionId;
 // Suggestions are display text only, never replacement keys for supplied answers.
 function reviewWarning(q,a,index){
  const prefix='Question '+(index+1)+': supplied answer preserved; ';
@@ -25,7 +25,7 @@ function createAnswerCompleter(options={}){
  const provider=config(options),review=createSuppliedAnswerCompleter(options);
  return async function complete(input,{reviewExisting=false,reviewSupplied=false}={}){
   if(reviewSupplied===true)return review(input,{reviewSupplied:true});
-  const test=validateDraft(input),conflicts=test.questions.filter(q=>q.answerKeyConflict),pending=test.questions.filter(q=>(reviewExisting||isMissing(q))&&!q.answerKeyConflict);
+  const test=validateDraft(input),conflicts=test.questions.filter(q=>q.answerKeyConflict),pending=test.questions.filter(q=>q.type!=='short'&&(reviewExisting||isMissing(q))&&!q.answerKeyConflict);
   const supplied=new Map(pending.filter(q=>!isMissing(q)).map(q=>[q.id,q.type==='blank'?[...q.acceptedAnswers]:q.correctOptionId]));
   const conflictWarnings=conflicts.map(q=>'Question '+(test.questions.indexOf(q)+1)+': conflicting supplied answer markers require professor review.');
   if(!pending.length)return {test,warnings:conflictWarnings.length?conflictWarnings:['All questions already have supplied answer keys. Existing answers were preserved.']};
@@ -59,7 +59,7 @@ function createSuppliedAnswerCompleter(options={}){
   reviewSupplied=reviewSupplied===true;
   const test=validateDraft(input);
   const mediaQuestions=new Set(reviewSupplied?test.questions.filter((q,i)=>{const original=input.questions[i];return original.media||original.mediaPresent===true||q.image||q.options?.some(o=>o.image);}):[]);
-  const conflicts=test.questions.filter(q=>q.answerKeyConflict),pending=test.questions.filter(q=>(reviewSupplied||isMissing(q))&&!q.answerKeyConflict&&!mediaQuestions.has(q));
+  const conflicts=test.questions.filter(q=>q.answerKeyConflict),pending=test.questions.filter(q=>q.type!=='short'&&(reviewSupplied||isMissing(q))&&!q.answerKeyConflict&&!mediaQuestions.has(q));
   const conflictWarnings=[...conflicts.map(q=>'Question '+(test.questions.indexOf(q)+1)+': conflicting supplied answer markers require professor review.'),...Array.from(mediaQuestions,q=>'Question '+(test.questions.indexOf(q)+1)+': review manually because AI did not see the media. Existing answers were preserved.')];
   if(!pending.length)return {test,warnings:conflictWarnings.length?conflictWarnings:['All questions already have supplied answer keys. Existing answers were preserved.']};
   const schema={type:'object',additionalProperties:false,required:['answers'],properties:{answers:{type:'array',items:{type:'object',additionalProperties:false,required:['questionId','correctOptionId','acceptedAnswers','uncertain','explanation'],properties:{questionId:{type:'string'},correctOptionId:{type:['string','null']},acceptedAnswers:{type:'array',items:{type:'string'}},uncertain:{type:'boolean'},explanation:{type:'string'}}}}}};

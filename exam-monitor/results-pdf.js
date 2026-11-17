@@ -14,13 +14,13 @@ async function resultsPdf(session,detail=false){
  async function text(value,{size=11,bold=false,color='#19334d'}={}){for(const line of wrap(value,W-M*2,size,bold)){await space(size*1.5);ctx.font=(bold?'bold ':'')+size+'px "Examio Korean"';ctx.fillStyle=color;ctx.fillText(line,M,y+size);y+=size*1.5;}}
  async function row(values,header=false){const widths=session.requireStudentNumber===false?[280,108,123]:[98,210,95,108],lines=values.map((v,i)=>wrap(v,widths[i]-12,10,header)),height=Math.max(...lines.map(a=>a.length))*15+12;await space(height);ctx.fillStyle=header?'#e4edf7':page%2?'#f4f7fb':'#f9fafb';ctx.fillRect(M,y,W-M*2,height);let x=M;for(let i=0;i<values.length;i++){ctx.font=(header?'bold ':'')+'10px "Examio Korean"';ctx.fillStyle='#19334d';lines[i].forEach((line,j)=>ctx.fillText(line,x+6,y+15+j*15));x+=widths[i];}y+=height+2;}
  start();await text(view.title,{size:21,bold:true});y+=10;
- const numbered=session.requireStudentNumber!==false;const students=[...view.students].sort((a,b)=>require('./delivery').compareStudents(session,a,b));await text(students.length+' students | '+students.filter(s=>s.result).length+' graded',{color:'#64748b'});y+=12;
+ const numbered=session.requireStudentNumber!==false;const students=[...view.students].sort((a,b)=>require('./delivery').compareStudents(session,a,b));await text(students.length+' students | '+students.filter(s=>s.result&&Number.isFinite(s.result.percentage)).length+' graded',{color:'#64748b'});y+=12;
  if(!detail){
  await row(numbered?['Student number','Name','Score','Percentage']:['Name','Score','Percentage'],true);
- for(const s of students)await row([...(numbered?[s.number]:[]),s.name,s.score===null?'Pending':s.score+' / '+s.total,s.result?s.result.percentage.toFixed(1)+'%':'-']);
+ for(const s of students)await row([...(numbered?[s.number]:[]),s.name,s.result?.pending?'Grading…':s.score===null?'Pending':s.score+' / '+s.total,s.result&&Number.isFinite(s.result.percentage)?s.result.percentage.toFixed(1)+'%':'-']);
  }else{
  const questions=session.test.questions,details=new Map(detailedResults(session).map((s,i)=>[session.students[i].id,s]));
- const graded=students.filter(s=>s.result),percentages=graded.map(s=>s.result.percentage);
+ const graded=students.filter(s=>s.result&&Number.isFinite(s.result.percentage)),percentages=graded.map(s=>s.result.percentage);
  const mean=percentages.length?percentages.reduce((a,b)=>a+b,0)/percentages.length:null;
  const fixed=numbered?[66,88,62,42]:[110,72,42],questionWidth=(W-M*2-fixed.reduce((a,b)=>a+b,0))/Math.max(questions.length,1);
  const widths=[...fixed,...questions.map(()=>questionWidth)],font=Math.max(5,Math.min(8,questionWidth/3.4));
@@ -44,13 +44,13 @@ async function resultsPdf(session,detail=false){
  for(const s of students){
  if(y+44>H-M-12){await save();start();await text(view.title,{size:15,bold:true});await matrixHeader();}
  const answers=details.get(s.id).answers;
- matrixRow([s.number,s.name,s.result?s.score+'/'+s.total:(s.failed?'Failed':'Pending'),s.result?s.result.percentage.toFixed(1):'-',...answers.map(a=>a.letter||a.answer||'-')],['','','','',...answers.map(a=>a.status==='correct'?'#dcf3e2':a.status==='incorrect'?'#fde1e3':'#f1f5f9')]);
+ matrixRow([s.number,s.name,s.result?.pending?'Grading…':s.result?s.score+'/'+s.total:(s.failed?'Failed':'Pending'),s.result&&Number.isFinite(s.result.percentage)?s.result.percentage.toFixed(1):'-',...answers.map(a=>a.pending?'Grading…':a.letter||(questions[a.number-1].type==='short'?a.points+'/'+a.maxPoints+' '+(a.answer||'-'):a.answer||'-'))],['','','','',...answers.map(a=>a.status==='correct'?'#dcf3e2':a.status==='incorrect'?'#fde1e3':'#f1f5f9')]);
  }
  if(y+44>H-M-12){await save();start();await matrixHeader();}
- matrixRow(['Question avg.','','','',...questions.map((_,i)=>{const count=graded.filter(s=>details.get(s.id).answers[i].status==='correct').length;return graded.length?(count/graded.length*100).toFixed(0)+'%':'-';})],[],true);
+ matrixRow(['Question avg.','','','',...questions.map((_,i)=>{const eligible=graded.filter(s=>details.get(s.id).answers[i].status!=='grading');const count=eligible.reduce((n,s)=>{const a=details.get(s.id).answers[i];return n+(a.maxPoints?a.points/a.maxPoints:Number(a.status==='correct'));},0);return eligible.length?(count/eligible.length*100).toFixed(0)+'%':'-';})],[],true);
  await text('Question averages use submitted students. Values are percent correct.',{size:8,color:'#64748b'});
  await save();start();await text('Questions and answer key',{size:16,bold:true});
- for(const [i,q]of questions.entries()){y+=8;const key='Correct answer: '+(q.type==='blank'?q.acceptedAnswers.join(' / '):q.options.find(o=>o.id===q.correctOptionId)?.text||'');const heading=(i+1)+'. '+q.text;const blockHeight=(wrap(heading,W-M*2,11,true).length+wrap(key,W-M*2,11,false).length)*16.5;if(blockHeight<H-M-80)await space(blockHeight);else await space(50);await text(heading,{bold:true});await text(key);}
+ for(const [i,q]of questions.entries()){y+=8;const key='Correct answer: '+(require('./grading').answerKey(q));const heading=(i+1)+'. '+q.text;const blockHeight=(wrap(heading,W-M*2,11,true).length+wrap(key,W-M*2,11,false).length)*16.5;if(blockHeight<H-M-80)await space(blockHeight);else await space(50);await text(heading,{bold:true});await text(key);}
  }
  await save();return Buffer.from(await pdf.save());
 }

@@ -60,7 +60,7 @@ async function quizPdf(test) {
     await reserve(42);
     await line((index+1)+'. '+q.text+' ('+(q.points??1)+' pt)',{bold:true});
     await picture(q.image);
-    if(q.type==='blank'){
+    if(q.type==='blank'||q.type==='short'){
       await line('Answer: __________________________________________',{indent:14});
     }else{
       for(const [choiceIndex,option] of q.options.entries()){

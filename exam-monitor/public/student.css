@@ -496,3 +496,5 @@ body:has(#calculator-section:not([hidden])) .student-brandbar { display: none; }
 #submit-dialog button:focus-visible{outline:2px solid var(--key-accent);outline-offset:3px}
 
 .student-delivery-panel{padding:18px 4px}.question-position{font-size:14px;font-weight:700;text-align:center}.question-feedback{padding:18px;border-radius:12px;margin:12px 0;border:1px solid}.question-feedback.is-correct{background:#e0f3e5;color:#205b39;border-color:#abd5b6}.question-feedback.is-incorrect{background:#fbe4e4;color:#852c32;border-color:#e4b5b5}.question-feedback p{margin:10px 0 0}.question-commit{padding:10px 16px;background:#0758cb;color:#fff;border:0;border-radius:8px;margin-top:16px;font:inherit}.tq-option:has(input:disabled){opacity:.8}.student-delivery-panel .join-btn{width:100%;margin-top:14px}
+
+textarea.short-answer{box-sizing:border-box;width:100%;font:inherit;border:1px solid #ccd8e6;border-radius:10px;padding:14px;resize:vertical;background:#fff;color:#123959}[data-theme=dark] textarea.short-answer{background:#102e49;color:#fff;border-color:#46627d}

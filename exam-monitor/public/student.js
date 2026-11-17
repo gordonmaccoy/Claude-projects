@@ -77,7 +77,7 @@ function setConnected(ok) { for (const el of [els.connDot,els.testConnDot]) { el
 els.form.onsubmit=async e=> { e.preventDefault(); const b=els.form.querySelector('button'); b.disabled=true; try { await join({name:els.nameInput.value.trim(),number:$('number-input').value.trim()}); } finally { b.disabled=false; } };
 let deliveryRenderKey='';
 function showView(view) {
-  const nextKey=JSON.stringify([view.flow?.index,view.flow?.locked,view.flow?.lockedIds,view.flow?.readyToSubmit]);if(nextKey!==deliveryRenderKey){renderedTest=false;deliveryRenderKey=nextKey;}
+  const nextKey=JSON.stringify([view.flow?.index,view.flow?.locked,view.flow?.lockedIds,view.flow?.readyToSubmit,view.flow?.feedback]);if(nextKey!==deliveryRenderKey){renderedTest=false;deliveryRenderKey=nextKey;}
   const previousExtension=currentView?.extensionVersion;currentView=view;
   if(previousExtension!==undefined && view.extensionVersion>previousExtension){extensionNoticeUntil=performance.now()+6000;$('time-notice').textContent=t('Your professor extended the time by {minutes} minute.', {minutes:view.lastExtension?.minutes||1});}
   if((view.result||view.failed||view.phase==='ended'||view.phase==='paused')&&$('submit-dialog').open)$('submit-dialog').close();
@@ -109,7 +109,7 @@ function showView(view) {
   }
   if(view.result) {
     els.testSection.hidden=false; els.testDone.hidden=false; els.testActions.hidden=true; els.testQuestions.replaceChildren();
-    els.testTitle.textContent=t('Test submitted'); els.doneScore.textContent=view.result.hidden?t('Your test was submitted. Your professor will share the results.'):t('Your score: {score} / {total} · {percentage}%',view.result)+(view.result.failed?' · '+t('FAIL'):'');
+    els.testTitle.textContent=t('Test submitted'); els.doneScore.textContent=view.result.pending&&!view.result.failed?t('Your answers are submitted. Grading…'):view.result.hidden?t('Your test was submitted. Your professor will share the results.'):t('Your score: {score} / {total} · {percentage}%',view.result)+(view.result.failed?' · '+t('FAIL'):'');
     renderCorrections(view.corrections);
     $('test-timer').hidden=true;$('time-notice').textContent='';try{localStorage.removeItem(draftKey);}catch{} return;
   }
@@ -121,7 +121,7 @@ function showView(view) {
 
   if(view.test && !renderedTest) {
     renderedTest=true; testAnswers={...view.draft};
-    try { const local=JSON.parse(localStorage.getItem(draftKey)||'{}'); for(const q of view.test.questions) if(!view.flow?.lockedIds?.includes(q.id)&&(q.type==='blank' ? typeof local[q.id]==='string' && local[q.id].length<=300 : q.options.some(o=>o.id===local[q.id]))) testAnswers[q.id]=local[q.id]; } catch {}
+    try { const local=JSON.parse(localStorage.getItem(draftKey)||'{}'); for(const q of view.test.questions) if(!view.flow?.lockedIds?.includes(q.id)&&(['blank','short'].includes(q.type) ? typeof local[q.id]==='string' && local[q.id].length<=(q.type==='short'?2000:300) : q.options.some(o=>o.id===local[q.id]))) testAnswers[q.id]=local[q.id]; } catch {}
     renderTestQuestions(view.test.questions);renderDeliveryControls(view);
   }
 }
@@ -144,7 +144,7 @@ function renderCorrections(rows) {
     appendQuestionImage(entry,row.image);
     const answer=document.createElement('p');answer.className='correction-incorrect';answer.textContent='Your answer: '+(row.answer||t('Unanswered'));entry.append(answer);appendQuestionImage(entry,row.answerImage);
     const correct=document.createElement('p');correct.className='correction-correct';correct.textContent='Correct answer: '+row.correct;entry.append(correct);appendQuestionImage(entry,row.correctImage);
-    container.append(entry);
+    if(row.points!=null){const detail=document.createElement('p');detail.textContent=row.points+' / '+row.maxPoints+' · '+(row.explanation||'');entry.append(detail);}container.append(entry);
   }
 }
 $('calculator-complete').onclick=async()=>{
@@ -163,8 +163,8 @@ function renderTestQuestions(questions) {
     const card=document.createElement('div');card.className='tq-card';const p=document.createElement('p');p.className='tq-text';p.textContent=`${currentView?.flow?.type!=='free'?(currentView?.flow?.index||0)+i+1:i+1}. ${q.text} (${t((q.points??1)===1?'{points} point':'{points} points',{points:q.points??1})})`;card.append(p);appendQuestionImage(card,q.image);
     card.dataset.questionId=q.id;
     const options=document.createElement('div'); options.className='tq-options';
-    if(q.type==='blank') {
-      const input=document.createElement('input');input.type='text';input.className='blank-answer';input.maxLength=300;input.setAttribute('aria-label',t('Answer to question {number}',{number:i+1}));input.autocomplete='off';input.value=testAnswers[q.id]||'';input.disabled=currentView?.flow?.lockedIds?.includes(q.id)||false;
+    if(q.type==='blank'||q.type==='short') {
+      const input=document.createElement(q.type==='short'?'textarea':'input');if(q.type==='short')input.rows=4;else input.type='text';input.className=q.type==='short'?'blank-answer short-answer':'blank-answer';input.maxLength=q.type==='short'?2000:300;input.setAttribute('aria-label',t('Answer to question {number}',{number:i+1}));input.autocomplete='off';input.value=testAnswers[q.id]||'';input.disabled=currentView?.flow?.lockedIds?.includes(q.id)||false;
       input.oninput=()=> { testAnswers[q.id]=input.value;if(input.value.trim())lastAnsweredQuestion=q.id;updateVersion++;saveDraft();clearTimeout(draftTimer);draftTimer=setTimeout(uploadDraft,400); };options.append(input);
     }
     (q.options||[]).forEach((o,j)=> {
@@ -185,10 +185,10 @@ function renderDeliveryControls(view){
  els.testSubmitBtn.hidden=!flow.readyToSubmit;
  const panel=document.createElement('div');panel.className='student-delivery-panel';
  const progress=document.createElement('p');progress.className='question-position';progress.textContent=t('Question {number} of {total}',{number:Math.min(flow.index+1,flow.total),total:flow.total});panel.append(progress);
- if(flow.feedback){const feedback=document.createElement('div');feedback.className='question-feedback '+(flow.feedback.isCorrect?'is-correct':'is-incorrect');const heading=document.createElement('strong');heading.textContent=t(flow.feedback.isCorrect?'Correct!':'Not quite.');const text=document.createElement('p');text.textContent=t('Correct answer:')+' '+flow.feedback.correct;feedback.append(heading,text);panel.append(feedback);}
+ if(flow.feedback?.pending){const note=document.createElement('p');note.className='question-feedback';note.textContent=t('Grading your answer… Please wait.');panel.append(note);}else if(flow.feedback){const feedback=document.createElement('div');feedback.className='question-feedback '+(flow.feedback.isCorrect?'is-correct':'is-incorrect');const heading=document.createElement('strong');heading.textContent=t(flow.feedback.isCorrect?'Correct!':'Not quite.');const text=document.createElement('p');text.textContent=t('Correct answer:')+' '+flow.feedback.correct;feedback.append(heading,text);if(flow.feedback.points!=null){const points=document.createElement('p');points.textContent=flow.feedback.points+' / '+flow.feedback.maxPoints+' · '+(flow.feedback.explanation||'');feedback.append(points);}panel.append(feedback);}
  if(flow.readyToSubmit){const note=document.createElement('p');note.textContent=t('All questions are complete. Submit your quiz to see your score.');panel.append(note);}
  else if(flow.type==='teacher'&&flow.locked){const note=document.createElement('p');note.textContent=t('Answer submitted. Wait for your professor to open the next question.');panel.append(note);}
- else if(flow.questionId){const next=document.createElement('button');next.type='button';next.className='join-btn';next.textContent=t(flow.locked?'Next question':'Submit answer & continue');next.onclick=async()=>{if(!flow.locked){await commitQuestion(flow.questionId,next);return;}next.disabled=true;const response=await emit('student:next-question',{questionId:flow.questionId});if(response.view)showView(response.view);if(!response.ok){message(response.error);next.disabled=false;}};panel.append(next);}
+ else if(flow.questionId&&!flow.feedback?.pending){const next=document.createElement('button');next.type='button';next.className='join-btn';next.textContent=t(flow.locked?'Next question':'Submit answer & continue');next.onclick=async()=>{if(!flow.locked){await commitQuestion(flow.questionId,next);return;}next.disabled=true;const response=await emit('student:next-question',{questionId:flow.questionId});if(response.view)showView(response.view);if(!response.ok){message(response.error);next.disabled=false;}};panel.append(next);}
  els.testQuestions.append(panel);
 }
 let lastAnsweredQuestion=null;

@@ -16,7 +16,7 @@ let accountGeneration = 0,creationVersion=0,professorTimerSnapshot=null;
 let lastWorkspaceTab = 'launch';
 let popupSessionId = null, openingDisplay = false, launching = false;
 function clearPrivateWorkspace() {
-  gameWorkspace.reset();
+  gameWorkspace.reset();if(shortGradeDialog.open)shortGradeDialog.close();shortGradeDialog.querySelector('form').reset();for(const el of shortGradeDialog.querySelectorAll('p'))el.textContent='';
   tab('launch');
   quizSharing.reset();
   closeCreation();exportsController.close();
@@ -407,9 +407,9 @@ function renderDashboard() {
   if(current.deadlineAt && (!professorTimerSnapshot||professorTimerSnapshot.id!==current.id||professorTimerSnapshot.serverNow!==current.serverNow||professorTimerSnapshot.deadlineAt!==current.deadlineAt))professorTimerSnapshot={id:current.id,serverNow:current.serverNow||Date.now(),deadlineAt:current.deadlineAt,receivedAt:performance.now()};renderProfessorTimer();
   $('session-rename').hidden=current.mode!=='test';
   $('launch-score-switch').hidden=current.mode!=='test';
-  const scores = current.students.filter(s => s.result).map(s => s.result.percentage);
+  const scores = current.students.filter(s => s.result&&Number.isFinite(s.result.percentage)).map(s => s.result.percentage);
   $('live-summary').textContent = `${current.students.length} joined · ${current.students.filter(s => s.status === 'green' && !s.result && !s.completed).length} active` +
-    (current.mode === 'test' ? ` · ${scores.length} submitted · ${current.students.filter(s => s.failed).length} FAIL${scores.length && $('launch-show-scores-live').checked ? ` · Average ${Math.round(scores.reduce((a,b) => a+b,0)/scores.length)}%` : ''}` : ' · '+current.students.filter(s=>s.completed).length+' completed');
+    (current.mode === 'test' ? ` · ${current.students.filter(s=>s.result).length} submitted · ${current.students.filter(s => s.failed).length} FAIL${scores.length && $('launch-show-scores-live').checked ? ` · Average ${Math.round(scores.reduce((a,b) => a+b,0)/scores.length)}%` : ''}` : ' · '+current.students.filter(s=>s.completed).length+' completed');
   renderTable($('live-students'), current);
 }
 function renderProfessorTimer(){
@@ -442,7 +442,7 @@ function renderTable(container, session) {
     for (const text of [s.number,masked?'••••••':s.name]) { const td=document.createElement('td'); td.textContent=text; tr.append(td); }
     const state=document.createElement('td'); const pill=document.createElement('span'); pill.className=`pill ${s.status === 'red' ? 'red' : ''}`; pill.textContent=s.failed ? t('FAILED') : s.completed ? 'Completed and closed' : s.result ? 'Test Submitted' : s.status === 'green' ? t('Active') : t('Inactive'); state.append(pill); tr.append(state);
     const progress=document.createElement('td');progress.textContent=s.progress?`${s.result?t('Finished'):s.progress.question?t('Question {number} of {total}',{number:s.progress.question,total:s.progress.total}):t('Not started')} · ${t('{answered}/{total} answered',s.progress)}`:'—';tr.append(progress);
-    if(showScores) for (const text of [s.score === null ? t('Pending') : `${s.score} / ${s.total}${s.result ? ` · ${s.result.percentage}%` : ''}`, s.result ? `${s.result.originalScore} / ${s.total}` : '—']) { const td=document.createElement('td'); td.textContent=text; tr.append(td); }
+    if(showScores) for (const text of [s.result?.pending?t('Grading…'):s.score === null ? t('Pending') : `${s.score} / ${s.total}${s.result ? ` · ${s.result.percentage}%` : ''}`, s.result?.originalScore==null?'—':s.result ? `${s.result.originalScore} / ${s.total}` : '—']) { const td=document.createElement('td'); td.textContent=text; tr.append(td); }
     const review=document.createElement('td');
     if(s.failed && !s.finalized && (s.result || session.phase==='running')) review.append(button(s.result?t('Override FAIL'):t('Unlock & continue'),()=>unlockStudent(session,s)));
     if(s.failed && !s.result)review.append(button(t('Submit Fail score'),()=>submitFail(session,s),'danger'));
@@ -510,9 +510,9 @@ function renderAnswerGrid(data){
     for(const answer of student.answers){
       const cell=row.insertCell();cell.className='answer-'+answer.status;
       const state=answer.status==='correct'?'Correct':answer.status==='incorrect'?'Incorrect':'Unanswered';
-      cell.textContent=(answer.status==='correct'?'✓ ':answer.status==='incorrect'?'✗ ':'')+(answer.letter||answer.answer||'—');
+      cell.textContent=answer.status==='grading'?t('Grading…'):(answer.status==='correct'?'✓ ':answer.status==='incorrect'?'✗ ':'')+(answer.letter||answer.answer||'—')+(answer.status==='partial'?' · '+answer.points+'/'+answer.maxPoints:'');
       cell.title=state+' · '+answer.question+' · Answer: '+(answer.answer||'Unanswered');
-      cell.setAttribute('aria-label',cell.title);
+      cell.setAttribute('aria-label',cell.title);if(data.questionDetails?.[answer.number-1]?.type==='short'&&student.submitted){const review=button(t('Review score'),()=>reviewShortAnswer(student,answer,data.questionDetails[answer.number-1]));cell.append(document.createElement('br'),review);}
     }
   }
   root.replaceChildren();
@@ -528,9 +528,9 @@ function renderQuestionDetail(){
  $('question-detail-title').textContent=(questionIndex+1)+'. '+text;$('question-detail-position').textContent=(questionIndex+1)+' / '+questionData.questions.length;$('question-detail-previous').disabled=questionIndex===0;$('question-detail-next').disabled=questionIndex===questionData.questions.length-1;$('question-detail-toggle').textContent=questionResultsVisible?t('Hide results'):t('Show results');
  const root=$('question-detail-content');root.replaceChildren();const count=document.createElement('p');count.textContent=t('{answered}/{total} students answered',{answered:stats.answered,total:questionData.students.length});root.append(count);
  if(q?.image){const image=document.createElement('img');image.src=q.image;image.alt=t('Question image');image.className='tb-image';root.append(image);}
- const options=q?.type==='blank'?null:q?.options;
+ const options=['blank','short'].includes(q?.type)?null:q?.options;
  if(options)for(const [index,option] of options.entries()){const line=document.createElement('div');line.className='question-answer-row';const label=document.createElement('span');label.textContent=String.fromCharCode(65+index)+'. '+option.text;line.append(label);if(option.image){const image=document.createElement('img');image.src=option.image;image.alt=option.text;image.className='tb-image';line.append(image);}if(questionResultsVisible){line.classList.add(option.id===q.correctOptionId?'question-answer-correct':'question-answer-incorrect');const percentage=document.createElement('strong');percentage.className='question-result-percentage';percentage.textContent=(stats.answered?Math.round((stats.options[option.id]||0)/stats.answered*10000)/100:0)+'%';line.append(percentage);}root.append(line);}
- else if(questionResultsVisible){const key=document.createElement('p');key.className='question-answer-correct';key.textContent=t('Correct answer')+': '+(q?.acceptedAnswers||[]).join(' / ');root.append(key);for(const [answer,count] of Object.entries(stats.blanks)){const row=document.createElement('p');row.textContent=answer+' · '+count;root.append(row);}}
+ else if(questionResultsVisible){const key=document.createElement('p');key.className='question-answer-correct';key.textContent=t('Correct answer')+': '+(q?.type==='short'?q.modelAnswer:(q?.acceptedAnswers||[]).join(' / '));root.append(key);for(const [answer,count] of Object.entries(stats.blanks)){const row=document.createElement('p');row.textContent=answer+' · '+count;root.append(row);}}
  if(questionResultsVisible){const average=document.createElement('p');average.textContent=t('Class average')+': '+(stats.average==null?'—':stats.average+'%');root.append(average);}
 }
 $('question-detail-close').onclick=()=> $('question-detail-dialog').close();
@@ -544,9 +544,9 @@ async function refreshAnswerGrid(){
   try{
     const data=await api('/sessions/'+encodeURIComponent(id)+'/details?live=1');
     if(version!==resultViewVersion||!detailsVisible())return;
-    detailsPhase=data.phase;
+    detailsPhase=data.summaryStudents?.some(s=>s.result?.pending)?'grading':data.phase;
     const snapshot=JSON.stringify(data);
-    if(snapshot!==detailsSnapshot){detailsSnapshot=snapshot;renderAnswerGrid(data);}
+    if(snapshot!==detailsSnapshot){detailsSnapshot=snapshot;if(data.summaryStudents){historySession.students=data.summaryStudents;renderResults();}renderAnswerGrid(data);}
   } catch(error){
     if(version===resultViewVersion&&detailsVisible())$('result-detail-rows').textContent=error.message;
     if(version===resultViewVersion)detailsSnapshot='';
@@ -653,7 +653,7 @@ document.querySelectorAll('[name="delivery-type"]').forEach(el=>el.onchange=upda
 function collectLaunchOptions(){return {...($('launch-room-enabled').checked?{roomName:$('launch-room-name').value.trim()}:{}),deliveryType:selectedDeliveryType(),onlyOneAttempt:$('launch-only-attempt').checked,immediateFeedback:$('launch-immediate-feedback').checked,requireStudentNumber:$('launch-student-numbers').checked,language:window.examioLanguage.current,durationMinutes:$('launch-time-enabled').checked?Number($('launch-duration').value):0,showScores:true,showCorrections:true,shuffleAnswers:$('launch-shuffle').checked,security:{enabled:$('launch-monitoring').checked,inactivityFail:$('launch-fail-hidden').checked,shuffleQuestions:$('launch-shuffle-questions').checked,textSelection:$('launch-text-selection').checked,copyPaste:$('launch-copy-block').checked,fullscreen:$('launch-fullscreen').checked,tabVisibility:$('launch-tab-visibility').checked,focusVisibility:$('launch-focus').checked}};}
 $('launch-save-preferences').onclick=action(async()=>{if(!$('launch-form').reportValidity())return;quickLaunchPreferences=await api('/launch-preferences','PUT',collectLaunchOptions());$('launch-error').textContent='';notice(t('Quick Launch preferences saved.'));$('launch-dialog').close();});
 $('launch-form').onsubmit=async e=>{e.preventDefault();$('launch-confirm').disabled=true;try{await launchSession({testId:launchTest.id,...collectLaunchOptions()});$('launch-dialog').close();}catch(e){$('launch-error').textContent=t(e.message);}finally{$('launch-confirm').disabled=false;}};
-function applyQuizLayout(){let layout='grid';try{layout=localStorage.getItem('examio-quiz-layout-'+account?.id)==='list'?'list':'grid';}catch{}$('launch-tests').dataset.layout=layout;document.querySelectorAll('[data-quiz-layout]').forEach(el=>el.setAttribute('aria-pressed',String(el.dataset.quizLayout===layout)));}
+function applyQuizLayout(){applyResultsLayout();let layout='grid';try{layout=localStorage.getItem('examio-quiz-layout-'+account?.id)==='list'?'list':'grid';}catch{}$('launch-tests').dataset.layout=layout;document.querySelectorAll('[data-quiz-layout]').forEach(el=>el.setAttribute('aria-pressed',String(el.dataset.quizLayout===layout)));}
 document.querySelectorAll('[data-quiz-layout]').forEach(el=>el.onclick=()=>{try{localStorage.setItem('examio-quiz-layout-'+account.id,el.dataset.quizLayout);}catch{}applyQuizLayout();});
 $('teacher-next-question').onclick=action(async()=>{if(!current)return;$('teacher-next-question').disabled=true;try{updateSession(await api('/sessions/'+current.id+'/next-question','POST',{questionIndex:current.teacherQuestion||0}));}finally{$('teacher-next-question').disabled=false;}});
 $('extend-time').onclick=action(async()=>{const updated=await api('/sessions/'+current.id+'/extend','POST',{});updateSession(updated);notice('Added 1 minute (60 seconds). New end time: '+new Date(updated.deadlineAt).toLocaleTimeString());});
@@ -761,14 +761,15 @@ function renderTestBuilder() {
   const up=button('↑',()=>moveQuestion(i,i-1));up.disabled=i===0;up.setAttribute('aria-label','Move question '+(i+1)+' up');const down=button('↓',()=>moveQuestion(i,i+1));down.disabled=i===tbQuestions.length-1;down.setAttribute('aria-label','Move question '+(i+1)+' down');header.append(up,down);
   const pointsLabel=document.createElement('label');pointsLabel.textContent=t('Points');const points=document.createElement('input');points.type='number';points.className='tb-points';points.min='0.01';points.max='1000';points.step='0.01';points.value=q.points??1;points.setAttribute('aria-label','Question '+(i+1)+' points');points.oninput=()=>q.points=Number(points.value);pointsLabel.append(points);header.append(pointsLabel);
   if(tbQuestions.length>1)header.append(button(t('Remove question'),()=>{tbQuestions.splice(i,1);renderTestBuilder();}));card.append(header);
-  const type=document.createElement('select');type.className='tb-q-type';type.setAttribute('aria-label','Question '+(i+1)+' type');for(const [value,label] of [['mc','Multiple choice'],['blank','Fill in the blank']]){const o=document.createElement('option');o.value=value;o.textContent=label;type.append(o);}type.value=q.type||'mc';type.onchange=()=>{q.type=type.value;if(q.type==='blank'){q.acceptedAnswers=q.acceptedAnswers||[];q.caseSensitive=q.caseSensitive||false;}else if(!q.options){q.options=[{id:q.id+'_a',text:''},{id:q.id+'_b',text:''}];q.correctOptionId='';}renderTestBuilder();};card.append(type);
+  const type=document.createElement('select');type.className='tb-q-type';type.setAttribute('aria-label','Question '+(i+1)+' type');for(const [value,label] of [['mc','Multiple choice'],['blank','Fill in the blank'],['truefalse','True / False'],['short','Short answer']]){const o=document.createElement('option');o.value=value;o.textContent=label;type.append(o);}type.value=q.type||'mc';type.onchange=()=>{q.type=type.value;if(q.type==='truefalse'){q.options=[{id:q.id+'_true',text:'True'},{id:q.id+'_false',text:'False'}];q.correctOptionId='';}else if(q.type==='short'){q.modelAnswer=q.modelAnswer||'';q.gradingGuidance=q.gradingGuidance||'';}else if(q.type==='blank'){q.acceptedAnswers=q.acceptedAnswers||[];q.caseSensitive=q.caseSensitive||false;}else if(!q.options){q.options=[{id:q.id+'_a',text:''},{id:q.id+'_b',text:''}];q.correctOptionId='';}renderTestBuilder();};card.append(type);
   const text=document.createElement('input');text.className='tb-q-text';text.placeholder='Question text…';text.setAttribute('aria-label','Question '+(i+1)+' text');text.maxLength=1000;text.value=q.text;text.oninput=()=>q.text=text.value;card.append(text,imageControl(q,'Question image (optional)'));
-  if(q.type==='blank') {
+  if(q.type==='short') {const model=document.createElement('label');model.textContent=t('Model answer');const input=document.createElement('textarea');input.className='tb-model-answer';input.maxLength=2000;input.rows=3;input.value=q.modelAnswer||'';input.oninput=()=>q.modelAnswer=input.value;model.append(input);const guide=document.createElement('label');guide.textContent=t('Marking guidance (optional)');const guidance=document.createElement('textarea');guidance.className='tb-grading-guidance';guidance.maxLength=2000;guidance.rows=2;guidance.value=q.gradingGuidance||'';guidance.oninput=()=>q.gradingGuidance=guidance.value;guide.append(guidance);const note=document.createElement('p');note.textContent=t('AI awards partial credit against your model answer. You can review and override the score in Detailed Results.');card.append(model,guide,note);
+  } else if(q.type==='blank') {
    const label=document.createElement('label');label.textContent=t('Accepted answers (one per line)');const answers=document.createElement('textarea');answers.className='tb-accepted';answers.rows=3;answers.value=(q.acceptedAnswers||[]).join('\n');answers.oninput=()=>q.acceptedAnswers=answers.value.split('\n').map(s=>s.trim()).filter(Boolean);label.append(answers);card.append(label);
    const sensitive=document.createElement('label');const check=document.createElement('input');check.type='checkbox';check.checked=q.caseSensitive;check.onchange=()=>q.caseSensitive=check.checked;sensitive.append(check,' Case sensitive');card.append(sensitive);
   } else {
-   (q.options||[]).forEach((o,j)=>{const row=document.createElement('div');row.className='tb-option-row';row.dataset.optionId=o.id;if(q.correctOptionId)row.classList.add(q.correctOptionId===o.id?'answer-key-correct':'answer-key-incorrect');const radio=document.createElement('input');radio.type='radio';radio.name=q.id;radio.checked=q.correctOptionId===o.id;radio.setAttribute('aria-label','Correct answer '+String.fromCharCode(65+j));radio.onchange=()=>{q.correctOptionId=o.id;for(const answerRow of card.querySelectorAll('.tb-option-row')){answerRow.classList.toggle('answer-key-correct',answerRow.dataset.optionId===o.id);answerRow.classList.toggle('answer-key-incorrect',answerRow.dataset.optionId!==o.id);}};const input=document.createElement('input');input.className='tb-opt-text';input.maxLength=500;input.placeholder='Option '+String.fromCharCode(65+j);input.value=o.text;input.oninput=()=>o.text=input.value;row.append(radio,input);if(q.options.length>2)row.append(button(t('Remove option'),()=>{q.options.splice(j,1);if(q.correctOptionId===o.id)q.correctOptionId='';renderTestBuilder();}));row.append(imageControl(o,'Image for option '+String.fromCharCode(65+j)+' (optional)',true));card.append(row);});
-   if(q.options.length<5)card.append(button(t('+ Add Option'),()=>{q.options.push({id:q.id+'_'+crypto.randomUUID(),text:''});renderTestBuilder();}));
+   (q.options||[]).forEach((o,j)=>{const row=document.createElement('div');row.className='tb-option-row';row.dataset.optionId=o.id;if(q.correctOptionId)row.classList.add(q.correctOptionId===o.id?'answer-key-correct':'answer-key-incorrect');const radio=document.createElement('input');radio.type='radio';radio.name=q.id;radio.checked=q.correctOptionId===o.id;radio.setAttribute('aria-label','Correct answer '+String.fromCharCode(65+j));radio.onchange=()=>{q.correctOptionId=o.id;for(const answerRow of card.querySelectorAll('.tb-option-row')){answerRow.classList.toggle('answer-key-correct',answerRow.dataset.optionId===o.id);answerRow.classList.toggle('answer-key-incorrect',answerRow.dataset.optionId!==o.id);}};const input=document.createElement('input');input.className='tb-opt-text';input.maxLength=500;input.placeholder='Option '+String.fromCharCode(65+j);input.value=o.text;input.readOnly=q.type==='truefalse';input.oninput=()=>o.text=input.value;row.append(radio,input);if(q.type!=='truefalse'&&q.options.length>2)row.append(button(t('Remove option'),()=>{q.options.splice(j,1);if(q.correctOptionId===o.id)q.correctOptionId='';renderTestBuilder();}));row.append(imageControl(o,'Image for option '+String.fromCharCode(65+j)+' (optional)',true));card.append(row);});
+   if(q.type!=='truefalse'&&q.options.length<5)card.append(button(t('+ Add Option'),()=>{q.options.push({id:q.id+'_'+crypto.randomUUID(),text:''});renderTestBuilder();}));
   }
   if(q.answerExplanation){const reason=document.createElement('p');reason.className='answer-rationale';reason.textContent='AI answer rationale: '+q.answerExplanation;card.append(reason);}
   updateAnswerWarning(card,q,i);card.addEventListener('input',()=>{hideTbError();updateAnswerWarning(card,q,i);});card.addEventListener('change',()=>{hideTbError();updateAnswerWarning(card,q,i);});
@@ -783,7 +784,8 @@ function collectTest() {
  for(const [i,q] of tbQuestions.entries()) {
   if(!Number.isFinite(q.points??1)||(q.points??1)<=0||(q.points??1)>1000||Math.abs((q.points??1)*100-Math.round((q.points??1)*100))>0.000001)return {error:'Q'+(i+1)+': Enter positive points, up to 1000, with at most 2 decimals.',questionIndex:i,field:'.tb-points'};
   if(!q.text.trim())return {error:'Q'+(i+1)+': Question text is required.',questionIndex:i,field:'.tb-q-text'};
-  if(q.type==='blank'){
+  if(q.type==='short'){if(!q.modelAnswer?.trim())return {error:'Question '+(i+1)+': Enter a model answer.',questionIndex:i,field:'.tb-model-answer'};}
+  else if(q.type==='blank'){
    const detail={questionIndex:i,field:'.tb-accepted'};
    if(!q.acceptedAnswers?.length)return {error:'Question '+(i+1)+' needs a correct answer before this quiz can be saved. Enter it in Accepted answers, one answer per line.',...detail};
    if(q.acceptedAnswers.length>20)return {error:'Question '+(i+1)+': Enter at most 20 accepted answers, one per line.',...detail};
@@ -791,15 +793,15 @@ function collectTest() {
   }
   else {if(q.options.some(o=>!o.text.trim()))return {error:'Q'+(i+1)+': Each option needs text.',questionIndex:i,field:'.tb-opt-text',optionIndex:q.options.findIndex(o=>!o.text.trim())};if(!q.correctOptionId)return {error:'Question '+(i+1)+': Please mark the correct answer before saving.',questionIndex:i,field:'input[type=radio]'};}
  }
- const questions=tbQuestions.map(q=>q.type==='blank'?{id:q.id,type:'blank',points:q.points??1,text:q.text,...(q.image?{image:q.image}:{}),acceptedAnswers:q.acceptedAnswers,caseSensitive:q.caseSensitive,...(q.evidence?{evidence:q.evidence}:{}),...(q.answerExplanation?{answerExplanation:q.answerExplanation}:{})}:{id:q.id,type:'mc',points:q.points??1,text:q.text,...(q.image?{image:q.image}:{}),options:q.options,correctOptionId:q.correctOptionId,...(q.evidence?{evidence:q.evidence}:{}),...(q.answerExplanation?{answerExplanation:q.answerExplanation}:{})});
+ const questions=tbQuestions.map(q=>q.type==='short'?{id:q.id,type:'short',points:q.points??1,text:q.text,modelAnswer:q.modelAnswer,gradingGuidance:q.gradingGuidance||'',...(q.image?{image:q.image}:{}),...(q.evidence?{evidence:q.evidence}:{})}:q.type==='blank'?{id:q.id,type:'blank',points:q.points??1,text:q.text,...(q.image?{image:q.image}:{}),acceptedAnswers:q.acceptedAnswers,caseSensitive:q.caseSensitive,...(q.evidence?{evidence:q.evidence}:{}),...(q.answerExplanation?{answerExplanation:q.answerExplanation}:{})}:{id:q.id,type:q.type==='truefalse'?'truefalse':'mc',points:q.points??1,text:q.text,...(q.image?{image:q.image}:{}),options:q.options,correctOptionId:q.correctOptionId,...(q.evidence?{evidence:q.evidence}:{}),...(q.answerExplanation?{answerExplanation:q.answerExplanation}:{})});
  return {test:{title,folderId:$('tb-folder').value||null,questions}};
 }
 function updateAnswerWarning(card,q,index){
  let warning=card.querySelector('.tb-answer-warning');
- const missing=q.type==='blank'?!q.acceptedAnswers?.length:!q.correctOptionId;
+ const missing=q.type==='short'?!q.modelAnswer?.trim():q.type==='blank'?!q.acceptedAnswers?.length:!q.correctOptionId;
  if(!missing){warning?.remove();return;}
  if(!warning){warning=document.createElement('p');warning.className='tb-answer-warning';card.querySelector('.tb-q-header').after(warning);}
- warning.textContent='Question '+(index+1)+' needs a correct answer. '+(q.type==='blank'?'Enter it in Accepted answers below.':'Select the correct choice below.');
+ warning.textContent='Question '+(index+1)+' needs a correct answer. '+(q.type==='short'?'Enter the model answer below.':q.type==='blank'?'Enter it in Accepted answers below.':'Select the correct choice below.');
 }
 function showTbError(detail){
  hideTbError();
@@ -824,3 +826,11 @@ function hideTbError(){
 
 document.addEventListener('click',event=>{for(const menu of document.querySelectorAll('.quiz-actions-menu[open]'))if(!menu.contains(event.target))menu.open=false;});
 document.addEventListener('keydown',event=>{if(event.key==='Escape'){const menu=document.querySelector('.quiz-actions-menu[open]');if(menu){menu.open=false;menu.querySelector('summary').focus();event.preventDefault();}}});
+
+const shortGradeDialog=document.createElement('dialog');shortGradeDialog.className='short-grade-dialog';shortGradeDialog.innerHTML='<form><h2>Review short answer</h2><p class="grade-question"></p><h3>Student response</h3><p class="grade-response"></p><h3>Model answer</h3><p class="grade-model"></p><p class="grade-assessment"></p><label>Points<input name="points" type="number" min="0" step="0.01" required></label><label>Reason for score change<textarea name="reason" required maxlength="500"></textarea></label><p class="grade-error" role="alert"></p><div class="actions"><button type="submit" class="primary">Save score</button><button type="button" class="grade-close">Cancel</button></div></form>';document.body.append(shortGradeDialog);shortGradeDialog.querySelector('.grade-close').onclick=()=>shortGradeDialog.close();
+function reviewShortAnswer(student,answer,question){const reviewSessionId=historySession.id,reviewVersion=resultViewVersion;const form=shortGradeDialog.querySelector('form');shortGradeDialog.querySelector('.grade-question').textContent=question.text;shortGradeDialog.querySelector('.grade-response').textContent=answer.answer||t('Unanswered');shortGradeDialog.querySelector('.grade-model').textContent=question.modelAnswer;shortGradeDialog.querySelector('.grade-assessment').textContent=(answer.pending?t('Grading…'):answer.points+' / '+answer.maxPoints)+' · '+(answer.explanation||'')+(answer.aiPoints!=null?' · AI original: '+answer.aiPoints:'');form.elements.points.max=answer.maxPoints;form.elements.points.value=answer.points??'';form.elements.reason.value='';shortGradeDialog.querySelector('.grade-error').textContent='';form.onsubmit=async event=>{event.preventDefault();const submit=form.querySelector('[type=submit]');submit.disabled=true;try{const updated=await api('/sessions/'+reviewSessionId+'/grade-override','POST',{studentId:student.id,questionId:question.id,points:Number(form.elements.points.value),reason:form.elements.reason.value});shortGradeDialog.close();if(historySession?.id===reviewSessionId&&resultViewVersion===reviewVersion){historySession=updated;renderResults();detailsSnapshot='';await refreshAnswerGrid();}}catch(error){shortGradeDialog.querySelector('.grade-error').textContent=error.message;}finally{submit.disabled=false;}};shortGradeDialog.showModal();}
+
+let summaryGradeRequest=false;setInterval(async()=>{if(summaryGradeRequest||!historySession||$('results').hidden||document.hidden||detailsVisible()||!historySession.students?.some(s=>s.result?.pending))return;const id=historySession.id,version=resultViewVersion;summaryGradeRequest=true;try{const updated=await api('/sessions/'+encodeURIComponent(id));if(historySession?.id===id&&resultViewVersion===version){historySession=updated;renderResults();}}catch{}finally{summaryGradeRequest=false;}},2000);
+
+function applyResultsLayout(){let layout='grid';try{layout=localStorage.getItem('examio-result-layout-'+account?.id)==='list'?'list':'grid';}catch{}$('result-sessions').dataset.layout=layout;document.querySelectorAll('[data-result-layout]').forEach(el=>el.setAttribute('aria-pressed',String(el.dataset.resultLayout===layout)));}
+document.querySelectorAll('[data-result-layout]').forEach(el=>el.onclick=()=>{if(!account)return;try{localStorage.setItem('examio-result-layout-'+account.id,el.dataset.resultLayout);}catch{}applyResultsLayout();});
