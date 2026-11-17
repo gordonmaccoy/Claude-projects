@@ -1,5 +1,9 @@
 (async()=>{
  const { $,el,status,professor,button,newQuestion,picture}=GameClient;let api,host,reports,games=[],folders=[],tests=[],draft=null,editorVersion=0,importController=null,reviewController=null;const openFolders=new Map([['uncategorized',true]]);
+ let gameLayout='grid';
+ function applyGameLayout(value){gameLayout=value==='list'?'list':'grid';$('games').dataset.layout=gameLayout;for(const button of document.querySelectorAll('[data-game-layout]'))button.setAttribute('aria-pressed',String(button.dataset.gameLayout===gameLayout));}
+ function loadGameLayout(){let value='grid';try{if(api.ownerId)value=localStorage.getItem('examio-game-layout:'+api.ownerId)||'grid';}catch{}applyGameLayout(value);}
+ for(const button of document.querySelectorAll('[data-game-layout]'))button.onclick=()=>{closeActions();applyGameLayout(button.dataset.gameLayout);try{if(api?.ownerId)localStorage.setItem('examio-game-layout:'+api.ownerId,gameLayout);}catch{}};
  let sessions=[],launching=false,sessionRevision=0;
  const sessionParam=()=>new URLSearchParams(location.search).get('session');
  function closeEditor(){editorVersion++;reviewController?.abort();reviewController=null;$('game-form').inert=false;$('save-game').disabled=false;$('cancel-edit').disabled=false;draft=null;$('editor').hidden=true;$('library').hidden=false;$('editor-error').textContent='';}
@@ -233,7 +237,7 @@
  $('copy-source').onchange=copyInfo;
  $('copy-form').onsubmit=event=>{event.preventDefault();$('copy-error').textContent='';try{const source=tests.find(test=>test.id===$('copy-source').value);if(!source)throw new Error('Choose a saved quiz.');openSourceDraft(source,$('compatible-only').checked,'Copied from '+source.title);}catch(error){$('copy-error').textContent=error.message;}};
  const refreshedPodiums=new Set();
- try{api=await professor();reports=GameReports.mount({api});host=GameHost.mount({api,onPresented:view=>{
+ try{api=await professor();loadGameLayout();reports=GameReports.mount({api});host=GameHost.mount({api,onPresented:view=>{
   if(view.phase==='podium'&&view.serverNow>=(view.podiumCompleteAt??0)&&!refreshedPodiums.has(view.id)){
    refreshedPodiums.add(view.id);void reports.refresh({announce:false});
   }

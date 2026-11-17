@@ -73,3 +73,21 @@
 [data-theme=light] .game-host-panel #stage[data-phase=podium][data-winner=true]{background:var(--prof-panel)}
 [data-theme=light] .game-host-panel #stage .winner-spotlight{opacity:.55}
 [data-theme=light] .game-host-panel #stage .rankings li:not(.top-rank){background:var(--prof-panel);color:var(--prof-text)}
+
+/* Match the quiz library: blue canvas, white cards, dark readable text. */
+:root[data-theme=dark]:has(body.game-library){background:#082d5b;color-scheme:dark}
+[data-theme=dark] body.game-library,html[data-embedded-game][data-theme=dark]:has(body.game-library),html[data-embedded-game][data-theme=dark] body.game-library{background:#082d5b;color-scheme:dark}
+.game-library #games{--prof-surface:#fff;--prof-panel:#edf5fc;--prof-text:#102b42;--prof-muted:#617383;--prof-link:#0758cb;--prof-line:#d1deeb;--prof-error:#a23030;color-scheme:light}
+.game-library #games :is(.game-folder,.game-card,.game-actions-panel){background:#fff;color:#102b42;border-color:#d1deeb}
+.game-library #games :is(h2,.game-folder>summary,.game-actions-panel button){color:#102b42}
+.game-library #games :is(.game-card small,.game-folder-count,.folder-empty){color:#617383}
+.game-library #games .game-folder>summary{border-color:#d1deeb}
+.game-library #games .game-folder>summary::marker{color:#0758cb}
+.game-library #games :is(.game-folder>summary,.game-actions-panel button):hover{background:#edf5fc}
+.game-library #games .game-actions-panel button.danger{color:#a23030;border-color:#d1deeb}
+.game-library #games .game-actions-toggle{background:white;color:#102b42;border-color:#c2d2e2}
+.game-library #games .game-actions-toggle:is(:hover,[aria-expanded=true]){background:#edf5fc;color:#102b42;border-color:#0758cb}
+.game-library :is(.library-create-actions,.library-secondary-actions,.report-actions) button:not(.primary),[data-theme=dark] .game-library #game-tour{background:white;color:#102b42;border-color:#c2d2e2}
+.game-library .library-secondary-actions .game-layout-switch button[aria-pressed=true]{background:#0758cb;color:white;border-color:#0758cb}
+.game-library #games .game-card-actions>.primary{background:#0758cb;color:white;border-color:#0758cb}
+.game-library #game-report-list{--prof-surface:#fff;--prof-panel:#edf5fc;--prof-text:#102b42;--prof-muted:#617383;--prof-link:#0758cb;--prof-line:#d1deeb;--prof-error:#a23030;color-scheme:light}

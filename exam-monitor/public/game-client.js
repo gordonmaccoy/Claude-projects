@@ -101,6 +101,7 @@
     call.onSessionInvalidated=callback=>auth.auth.onAuthStateChange?.((event,next)=>{
       if(!invalidated&&(event==='SIGNED_OUT'||sessionChanged(next))){invalidated=true;callback();}
     });
+    call.ownerId=ownerId;
     call.config=Object.freeze({aiConfigured:config.aiConfigured===true,uploadMaxBytes:config.uploadMaxBytes});
     return call;
   }
