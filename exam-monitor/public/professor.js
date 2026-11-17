@@ -9,7 +9,7 @@ const els = { tbTitle: $('tb-title'), tbQuestions: $('tb-questions'), tbError: $
 const socket = io();
 let resultViewVersion=0;
 let trashVersion=0, pendingTrashDelete=null;
-let sessionPreferences=null;
+let sessionPreferences=null;let resultSort='newest';
 let auth, account, current, historySession, library = [], folders = [], aiConfigured=false, exportEmailConfigured=false, uploadMaxBytes=5*1024*1024, importMode="import", sessionList = [], editingId = null, tbQuestions = [], popup, recoveringPassword = false;
 let accountGeneration = 0,creationVersion=0,professorTimerSnapshot=null;
 
@@ -21,10 +21,10 @@ function clearPrivateWorkspace() {
   quizSharing.reset();
   closeCreation();exportsController.close();
   $('workspace-tabs').hidden=true;finishFolderDrag();if($('question-detail-dialog').open)$('question-detail-dialog').close();questionData=null;
-  settings.reset();tour.reset();$('launch-show-names').checked=false;$('launch-show-scores-live').checked=false;$('result-detail-rows').replaceChildren();lastWorkspaceTab='launch';accountGeneration++;creationVersion++;professorTimerSnapshot=null;if($('answer-ai-dialog').open)$('answer-ai-dialog').close();$('answer-ai-status').textContent='';closeEntry();launchTest=null;$('new-title').value='';for(const id of ['tb-folder','new-folder-choice'])$(id).replaceChildren();$('launch-test-title').textContent='';if($('launch-dialog').open)$('launch-dialog').close();$('creation-choice').hidden=true;
+  settings.reset();tour.reset();$('launch-show-names').checked=false;$('launch-show-scores-live').checked=false;$('result-detail-rows').replaceChildren();$('result-settings-content').replaceChildren();delete $('result-settings-content').dataset.signature;delete $('result-settings-content').dataset.sessionId;$('result-settings').open=false;lastWorkspaceTab='launch';accountGeneration++;creationVersion++;professorTimerSnapshot=null;if($('answer-ai-dialog').open)$('answer-ai-dialog').close();$('answer-ai-status').textContent='';closeEntry();launchTest=null;$('new-title').value='';for(const id of ['tb-folder','new-folder-choice'])$(id).replaceChildren();$('launch-test-title').textContent='';if($('launch-dialog').open)$('launch-dialog').close();$('creation-choice').hidden=true;
   trashVersion++;pendingTrashDelete=null;if($('trash-confirm').open)$('trash-confirm').close();$('trash-confirm-message').textContent='';$('trash-items').replaceChildren();
-  current=null; historySession=null; library=[]; folders=[]; sessionList=[]; $('import-source').value='';$('import-file').value='';$('import-panel').hidden=true;$('draft-review').textContent=''; editingId=null; tbQuestions=[];
-  detachResultsPanel();
+  resultSort='newest';current=null; historySession=null; library=[]; folders=[]; sessionList=[]; $('import-source').value='';$('import-file').value='';$('import-panel').hidden=true;$('draft-review').textContent=''; editingId=null; tbQuestions=[];
+  detachResultsPanel();$('in-session-section').append($('dashboard'));document.querySelectorAll('.session-group').forEach(el=>el.remove());sessionGroupSelection.clear();
   for(const id of ['launch-tests','library-tests','active-sessions','result-sessions','live-students','result-students','tb-questions']) $(id).replaceChildren();
   for(const id of ['dashboard','result-detail','test-builder']) $(id).hidden=true;
   $('calculator-card').hidden=false;
@@ -39,7 +39,7 @@ const notice = message => {
   $('notice').textContent = t(message || '');
   if(message) noticeTimer=setTimeout(()=>notice(''),8000);
 };
-async function token() { return (await auth.auth.getSession()).data.session?.access_token || ''; }
+async function token() { if(sessionPreferences?.blocked)return '';const session=(await auth.auth.getSession()).data.session;return sessionPreferences?.blocked?'':session?.access_token||''; }
 async function api(route, method = 'GET', body) {
   const generation=accountGeneration;
   const response = await fetch(`/api${route}`, { method, headers: { Authorization: `Bearer ${await token()}`, 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -246,6 +246,7 @@ async function refresh() {
   if(draggedTest||draggedFolder)return;
   renderFolderOptions();
   detachResultsPanel();
+  $('in-session-section').append($('dashboard'));
   for (const id of ['launch-tests', 'library-tests', 'active-sessions', 'result-sessions']) $(id).replaceChildren();
   if (!library.length) {
     $('launch-tests').append(card(t('A fresh start'), t('Create your first test in Library, or launch the calculator.')));
@@ -301,15 +302,17 @@ async function refresh() {
   }
   for (const s of sessionList) {
     if (s.mode === 'test') {
-      const c = card(s.title, `${new Date(s.createdAt).toLocaleString()} · ${s.phase} · ${s.students.length} joined`);
+      const c = card(s.title, `${new Date(window.examioResultOrder.completedAt(s)).toLocaleString()} · ${s.phase} · ${s.students.length} joined`);
       c.classList.add('result-session-card');c.dataset.sessionId=s.id;
       c.append(button(t('View results'), async () => { const version=++resultViewVersion; const session=await api(`/sessions/${s.id}`); if(version!==resultViewVersion)return; historySession=session; showResultSummary();renderResults(); }));
       $('result-sessions').append(c);
     }
-    if (s.phase !== 'ended') $('active-sessions').append(button(`${s.title} · ${t(s.phase)}`, () => openSession(s.id)));
+
   }
   if (!sessionList.some(s => s.mode === 'test')) $('result-sessions').append(card('No test results yet', 'Results from tests will be saved here. Calculator sessions do not create results.'));
   if(current && !sessionList.some(s=>s.id===current.id && s.phase!=='ended')){current=null;renderDashboard();}
+  renderSessionGroups();
+  applyResultSort();
   if(historySession&&!placeResultsPanel())closeResults();
   quizSharing.start();
 }
@@ -378,7 +381,7 @@ async function openClassroomDisplay(session) {
     openingDisplay = false; $('display-open').disabled = false; $('calculator-launch').disabled = false;
   }
 }
-async function openSession(id) { current = await api(`/sessions/${id}`); await watch(); renderDashboard(); tab('launch'); }
+async function openSession(id) { current = await api(`/sessions/${id}`);sessionGroupSelection.set(sessionGroupKey(current),id);await watch();renderSessionGroups();renderDashboard();tab('launch'); }
 // Access tokens are refreshed by Supabase; every new watch is verified by the server.
 async function watch() {
   if (!current || !socket.connected) return;
@@ -426,9 +429,9 @@ function renderProfessorTimer(){
 setInterval(renderProfessorTimer,500);
 for(const id of ['launch-show-names','launch-show-scores-live'])$(id).onchange=()=>{if(current)renderDashboard();};
 function renderTable(container, session) {
-  const isLaunch=container.id==='live-students';
-  const masked=isLaunch&&!$('launch-show-names').checked;
-  const showScores=!isLaunch||$('launch-show-scores-live').checked;
+  const isLaunch=container.id==='live-students'||container.dataset.live==='true';
+  const masked=isLaunch&&!(container.dataset.live==='true'?container.closest('.session-group').querySelector('[data-show-names]').checked:$('launch-show-names').checked);
+  const showScores=!isLaunch||(container.dataset.live==='true'?container.closest('.session-group').querySelector('[data-show-scores]').checked:$('launch-show-scores-live').checked);
   const table = document.createElement('table');
   if(session.mode === 'calculator') {
     table.innerHTML='<thead><tr><th>'+t('Student number')+'</th><th>'+t('Name')+'</th><th>'+t('Status')+'</th><th>'+t('Review')+'</th></tr></thead>';
@@ -451,7 +454,7 @@ function renderTable(container, session) {
     const review=document.createElement('td');
     if(s.failed && !s.finalized && (s.result || session.phase==='running')) review.append(button(s.result?t('Override FAIL'):t('Unlock & continue'),()=>unlockStudent(session,s)));
     if(s.failed && !s.result)review.append(button(t('Submit Fail score'),()=>submitFail(session,s),'danger'));
-    const details=document.createElement('details'); const summary=document.createElement('summary'); summary.textContent=t('{count} monitoring events',{count:s.events.length});if(s.events.length>5)summary.className='monitoring-alert'; details.append(summary);
+    const details=document.createElement('details');details.dataset.studentId=s.id; const summary=document.createElement('summary'); summary.textContent=t('{count} monitoring events',{count:s.events.length});if(s.events.length>5)summary.className='monitoring-alert'; details.append(summary);
     const list=document.createElement('ul'); for (const e of s.events) { const li=document.createElement('li'); li.textContent=`${new Date(e.at).toLocaleTimeString()} · ${e.type}${e.reason ? ` · ${e.reason}` : ''}`; list.append(li); } details.append(list); review.append(details); tr.append(review); tbody.append(tr);
   }
   table.append(tbody);if(session.requireStudentNumber===false)for(const row of table.rows)row.cells[0]?.remove();container.replaceChildren(table);
@@ -468,7 +471,7 @@ function closeResults() {
 }
 $('result-close').onclick=()=>{const row=[...document.querySelectorAll('.result-session-card')].find(el=>el.dataset.sessionId===historySession?.id);closeResults();(row?.querySelector('button')||$('results-refresh')).focus();};
 function renderResultStatistics(students){const stats=window.examioResultAnalysis.statistics(students),root=$('result-stats');root.replaceChildren();for(const [label,value] of [[t('Students'),stats.students],[t('Completion'),stats.completion+'%'],[t('Class average'),stats.average==null?'—':stats.average+'%']]){const cell=document.createElement('div'),title=document.createElement('span'),number=document.createElement('strong');title.textContent=label;number.textContent=value;cell.append(title,number);root.append(cell);}}
-function renderResults() { placeResultsPanel();$('result-detail').hidden=false; $('result-title').textContent=historySession.title; $('result-delete').hidden=false; $('result-rename').hidden=false;renderResultStatistics(historySession.students); renderTable($('result-students'),historySession); }
+function renderResults() { placeResultsPanel();$('result-detail').hidden=false; $('result-title').textContent=historySession.title;renderResultSettings(historySession); $('result-delete').hidden=false; $('result-rename').hidden=false;renderResultStatistics(historySession.students); renderTable($('result-students'),historySession); }
 async function deleteResults(session) {
   if(!confirm(`Move the saved results for “${session.title}” to Trash for 30 days?${session.phase!=='ended'?' This will end the active session first.':''}`)) return;
   if(session.phase!=='ended')await api(`/sessions/${session.id}/end`,'POST',{});
@@ -568,13 +571,14 @@ $('result-details-tab').onclick=action(async()=>{
   await refreshAnswerGrid();
 });
 setInterval(()=>{if(detailsPhase!=='ended')void refreshAnswerGrid();},2000);
-const exportsController=window.createExamioExports({getSession:()=>historySession,getEmail:()=>account?.email,getEmailConfigured:()=>exportEmailConfigured,downloadFile,api,saveToDrive:async(session,detail)=>{const generation=accountGeneration;const response=await fetch('/api/sessions/'+encodeURIComponent(session.id)+'/export?format=xlsx&detail='+(detail?'1':'0'),{headers:{Authorization:'Bearer '+await token()}});if(!response.ok)throw Error('Unable to load grades. Please sign in and retry.');const workbook=await response.blob();if(generation!==accountGeneration)throw Error('Account changed. Please retry.');return window.examioSaveGoogleSheet({accessToken:sessionPreferences?.getGoogleProviderToken(account.id),workbook,title:session.title+(detail?' - Detailed Results':' - Summary Grades')});},connectDrive:async(session,detail)=>{sessionStorage.setItem('examio-drive-return',JSON.stringify({owner:account.id,session:session.id,detail}));const {error}=await auth.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+'/professor.html',scopes:'https://www.googleapis.com/auth/drive.file',queryParams:{prompt:'consent',login_hint:account.email,include_granted_scopes:'true'}}});if(error){sessionStorage.removeItem('examio-drive-return');throw error;}},notify:notice}); $('results-refresh').onclick=action(refresh);
+const exportsController=window.createExamioExports({getSession:()=>historySession,getEmail:()=>account?.email,getEmailConfigured:()=>exportEmailConfigured,downloadFile,api,saveToDrive:async(session,detail)=>{const generation=accountGeneration;const response=await fetch('/api/sessions/'+encodeURIComponent(session.id)+'/export?format=xlsx&detail='+(detail?'1':'0'),{headers:{Authorization:'Bearer '+await token()}});if(!response.ok)throw Error('Unable to load grades. Please sign in and retry.');const workbook=await response.blob();if(generation!==accountGeneration)throw Error('Account changed. Please retry.');return window.examioSaveGoogleSheet({accessToken:sessionPreferences?.getGoogleProviderToken(account.id),workbook,title:session.title+(detail?' - Detailed Results':' - Summary Grades')});},connectDrive:async(session,detail)=>{sessionStorage.setItem('examio-drive-return',JSON.stringify({owner:account.id,session:session.id,detail}));sessionPreferences.beginSignIn({oauth:true});const {error}=await auth.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+'/professor.html',scopes:'https://www.googleapis.com/auth/drive.file',queryParams:{prompt:'consent',login_hint:account.email,include_granted_scopes:'true'}}});if(error){sessionPreferences.cancelNavigation();sessionStorage.removeItem('examio-drive-return');throw error;}},notify:notice}); $('results-refresh').onclick=action(refresh);
 socket.on('connect',()=> { if (account) { if($('notice').textContent.startsWith('Live connection lost'))notice(''); watch().catch(e=>notice(e.message)); } });
 socket.on('disconnect',()=> { if (account) notice('Live connection lost. Sessions remain saved; reconnecting…'); });
-socket.on('professor:update',view=> { const listed=sessionList.find(s=>s.id===view.id);if(view.phase==='ended'||(listed&&(listed.title!==view.title||listed.phase!==view.phase)))refresh().catch(e=>notice(e.message));if (current?.id === view.id) { current={...current,...view}; renderDashboard(); } if (historySession?.id===view.id) { historySession={...historySession,...view}; renderResults(); } });
+socket.on('professor:update',view=> { const listed=sessionList.find(s=>s.id===view.id);if(view.phase==='ended'||(listed&&(listed.title!==view.title||listed.phase!==view.phase)))refresh().catch(e=>notice(e.message));const index=sessionList.findIndex(s=>s.id===view.id);if(index!==-1)sessionList[index]={...sessionList[index],...view};renderOtherSessionPanels();if (current?.id === view.id) { current={...current,...view}; renderDashboard(); } if (historySession?.id===view.id) { historySession={...historySession,...view}; renderResults(); } });
 socket.on('auth:expired',()=> { notice('Please sign in again to reconnect the private dashboard.'); });
 let workspaceSignIn,registration;
 function signedIn() {
+  if(sessionPreferences?.blocked)return Promise.resolve();
   if(!workspaceSignIn)workspaceSignIn=loadSignedInWorkspace().finally(()=>{workspaceSignIn=null;});
   return workspaceSignIn;
 }
@@ -585,7 +589,7 @@ async function loadSignedInWorkspace() {
     if(account && account.id!==verified.id) clearPrivateWorkspace();
     generation=accountGeneration;account=verified;
     if(recoveringPassword)return;
-    const authSession=(await auth.auth.getSession()).data.session;
+    const authSession=(await auth.auth.getSession()).data.session;if(generation!==accountGeneration||sessionPreferences?.blocked||!authSession)return;
     if(registration&&await registration.resume(authSession))return;
     settings.setAccount(verified);$('account-name').textContent=account.email;$('login').hidden=true;$('workspace').hidden=false;$('workspace-tabs').hidden=false;$('signout').hidden=false;
     if(openGameTab&&workspaceTab==='launch')tab('games');
@@ -603,24 +607,29 @@ async function initAuth() {
   aiConfigured=Boolean(config.aiConfigured);exportEmailConfigured=Boolean(config.exportEmailConfigured);if(Number.isSafeInteger(config.uploadMaxBytes)&&config.uploadMaxBytes>0)uploadMaxBytes=config.uploadMaxBytes;
   const preferences=sessionPreferences=window.createExamioSessionPreferences(config.supabaseUrl);
   $('remember-login').checked=preferences.remember;
-  $('remember-login').onchange=()=>preferences.setRemember($('remember-login').checked);
+  $('remember-login').onchange=()=>{preferences.beginSignIn();preferences.setRemember($('remember-login').checked);};
   auth=window.createOnScreenAuth(config.supabaseUrl, config.supabaseKey, {auth:{flowType:'pkce',detectSessionInUrl:true,persistSession:true,storage:preferences.storage}});
-  registration=window.createExamioRegistration({auth,api,onComplete:()=>setTimeout(()=>{void signedIn();},0)});
+  registration=window.createExamioRegistration({auth,api,onBeginSignIn:oauth=>preferences.beginSignIn({oauth}),onComplete:()=>setTimeout(()=>{void signedIn();},0)});
+  let localSignout=null;
+  function showSignedOut(){clearPrivateWorkspace();account=null;registration.reset();$('workspace').hidden=true;$('login').hidden=false;$('signout').hidden=true;$('remember-login').checked=false;if($('signout-dialog').open)$('signout-dialog').close();if(localSignout)localSignout.done=true;}
+  // A stale tab must not broadcast another SDK sign-out over a newer login.
+  preferences.onInvalidated(()=>{showSignedOut();auth.auth.stopAutoRefresh?.();});
   auth.auth.onAuthStateChange((event) => {
     if (event==='PASSWORD_RECOVERY') { recoveringPassword=true; $('login').hidden=false; $('workspace').hidden=true; $('login-form').hidden=true; $('google').hidden=true; $('new-password-form').hidden=false; }
-    if (event==='SIGNED_IN' && !account) setTimeout(()=>{if(!account)void signedIn();},0);
-    if (event==='TOKEN_REFRESHED') setTimeout(()=>{if(account)watch().catch(e=>notice(e.message));},0);
-    if (event==='SIGNED_OUT') { clearPrivateWorkspace(); account=null; registration.reset(); $('workspace').hidden=true; $('login').hidden=false; $('signout').hidden=true; }
+    if (event==='SIGNED_IN' && !account&&!preferences.blocked) setTimeout(()=>{if(!account)void signedIn();},0);
+    if (event==='TOKEN_REFRESHED'&&!preferences.blocked) setTimeout(()=>{if(account)watch().catch(e=>notice(e.message));},0);
+    if (event==='SIGNED_OUT') {if(!preferences.blocked)preferences.clearSession({broadcast:!!localSignout&&!localSignout.done});showSignedOut();}
   });
-  $('login-form').onsubmit=async e=> { e.preventDefault(); try{const {error}=await auth.auth.signInWithPassword({email:$('email').value,password:$('password').value}); $('auth-message').textContent=t(error?.message || '');}catch(error){$('auth-message').textContent=error.message;} };
-  $('google').onclick=async()=> { const {error}=await auth.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+'/professor.html'}}); if(error) $('auth-message').textContent=error.message; };
+  $('login-form').onsubmit=async e=> { e.preventDefault();preferences.beginSignIn(); try{const {error}=await auth.auth.signInWithPassword({email:$('email').value,password:$('password').value}); $('auth-message').textContent=t(error?.message || '');}catch(error){$('auth-message').textContent=error.message;} };
+  $('google').onclick=async()=> {preferences.beginSignIn({oauth:true}); const {error}=await auth.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+'/professor.html'}}); if(error){preferences.cancelNavigation();$('auth-message').textContent=error.message;} };
   $('signout').onclick=()=> { $('signout-error').textContent='';$('settings-menu').open=false;$('signout-dialog').showModal();$('signout-cancel').focus(); };
   for(const id of ['signout-cancel','signout-close'])$(id).onclick=()=> $('signout-dialog').close();
   $('signout-confirm').onclick=async()=>{
     $('signout-confirm').disabled=true;
-    try{const {error}=await auth.auth.signOut();if(error)throw error;$('signout-dialog').close();}
-    catch(error){$('signout-error').textContent=error.message;}
-    finally{$('signout-confirm').disabled=false;}
+    const job=localSignout={done:false};
+    try{const {error}=await auth.auth.signOut({scope:'local'});if(!job.done){preferences.clearSession();showSignedOut();}if(error&&!account)$('auth-message').textContent=t('Signed out on this computer. Server sign-out could not be confirmed.');}
+    catch(error){if(!job.done){preferences.clearSession();showSignedOut();}if(!account)$('auth-message').textContent=t('Signed out on this computer. Server sign-out could not be confirmed.');}
+    finally{if(localSignout===job)localSignout=null;$('signout-confirm').disabled=false;}
   };
   $('reset-password').onclick=async()=> { const {error}=await auth.auth.resetPasswordForEmail($('email').value,{redirectTo:location.origin+'/professor.html'}); $('auth-message').textContent=error?.message || t('Check your email for a password reset link.'); };
   $('new-password-form').onsubmit=async e=> { e.preventDefault(); const {error}=await auth.auth.updateUser({password:$('new-password').value}); $('auth-message').textContent=error?.message || t('Password updated.'); if(!error) { recoveringPassword=false; $('new-password-form').hidden=true; $('login-form').hidden=false; $('google').hidden=false; await signedIn(); } };
@@ -675,7 +684,7 @@ $('entry-form').onsubmit=async e=>{e.preventDefault();const value=$('entry-value
  try{await fn(value);if(generation===accountGeneration)closeEntry();}catch(e){if(generation===accountGeneration)$('entry-error').textContent=e.message;}finally{if(generation===accountGeneration){$('entry-save').disabled=false;$('entry-cancel').disabled=false;}}
 };
 $('new-folder').onclick=()=>openEntry({title:'New class folder',max:80},async name=>{await api('/folders','POST',{name});await refresh();});
-function updateSession(updated){if(current?.id===updated.id){current=updated;renderDashboard();}if(historySession?.id===updated.id){historySession=updated;renderResults();}}
+function updateSession(updated){const index=sessionList.findIndex(s=>s.id===updated.id);if(index!==-1)sessionList[index]={...sessionList[index],...updated};renderOtherSessionPanels();if(current?.id===updated.id){current=updated;renderDashboard();}if(historySession?.id===updated.id){historySession=updated;renderResults();}}
 function unlockStudent(session,student){openEntry({title:student.result?t('Override FAIL'):t('Unlock & continue'),label:'Reason',max:500,help:'Review '+student.name+'’s incident, then record why you are allowing continuation.',save:student.result?t('Override FAIL'):t('Unlock & continue')},async reason=>updateSession(await api('/sessions/'+session.id+'/override','POST',{studentId:student.id,reason})));}
 function submitFail(session,student){openEntry({title:t('Submit Fail score'),label:'Reason',value:'Confirmed by professor',max:500,help:'Finalize '+student.name+' at 0%. This closes their attempt and stops their connection. Their saved answers and original score remain in the private record.',save:t('Submit Fail score')},async reason=>updateSession(await api('/sessions/'+session.id+'/finalize-fail','POST',{studentId:student.id,reason})));}
 function renameResults(session){openEntry({title:session.phase==='ended'?'Rename results':'Rename session',value:session.title,help:'This name will be used for this session, its results and Excel filename. The Library test stays unchanged.'},async title=>{updateSession(await api('/sessions/'+session.id,'PATCH',{title}));await refresh();});}
@@ -841,3 +850,23 @@ let summaryGradeRequest=false;setInterval(async()=>{if(summaryGradeRequest||!his
 
 function applyResultsLayout(){let layout='grid';try{layout=localStorage.getItem('examio-result-layout-'+account?.id)==='list'?'list':'grid';}catch{}$('result-sessions').dataset.layout=layout;document.querySelectorAll('[data-result-layout]').forEach(el=>el.setAttribute('aria-pressed',String(el.dataset.resultLayout===layout)));}
 document.querySelectorAll('[data-result-layout]').forEach(el=>el.onclick=()=>{if(!account)return;try{localStorage.setItem('examio-result-layout-'+account.id,el.dataset.resultLayout);}catch{}applyResultsLayout();});
+
+function applyResultSort(){const root=$('result-sessions'),cards=new Map([...root.querySelectorAll('.result-session-card')].map(el=>[el.dataset.sessionId,el]));for(const s of window.examioResultOrder.sort(sessionList,resultSort,window.examioLanguage.current))if(cards.has(s.id))root.append(cards.get(s.id));document.querySelectorAll('[data-result-sort]').forEach(el=>el.setAttribute('aria-pressed',String(el.dataset.resultSort===resultSort)));placeResultsPanel();}
+document.querySelectorAll('[data-result-sort]').forEach(el=>el.onclick=()=>{resultSort=el.dataset.resultSort;applyResultSort();});
+
+function renderResultSettings(session){const root=$('result-settings-content');const signature=JSON.stringify(['id','deliveryType','roomName','requireStudentNumber','durationMinutes','onlyOneAttempt','immediateFeedback','showScores','showCorrections','security','shuffleAnswers','createdAt','startedAt','endedAt'].map(key=>session[key]));if(root.dataset.signature===signature)return;if(root.dataset.sessionId!==session.id)$('result-settings').open=false;root.dataset.sessionId=session.id;root.dataset.signature=signature;root.replaceChildren();const sec=session.security||{};const row=(label,value)=>{const el=document.createElement('div');el.className='result-setting-row';const name=document.createElement('strong');name.textContent=t(label);const val=document.createElement('span');val.textContent=value;el.append(name,val);root.append(el);};const yes=value=>t(value?'On':'Off');row('Test type',t(({free:'Free Navigation',one:'One & Done!',teacher:'Teacher Lead'})[session.deliveryType]||'Free Navigation'));row('Room name',session.roomName||'—');row('Student numbers',yes(session.requireStudentNumber!==false));row('Time limit',session.durationMinutes?session.durationMinutes+' min':t('None'));row('Only one attempt',yes(session.onlyOneAttempt));row('Immediate feedback',yes(session.immediateFeedback));row('Show final score',yes(session.showScores!==false));row('Show errors & corrections',yes(session.showCorrections));row('Monitoring & cheating deterrents',yes(sec.enabled!==false));for(const [key,label] of [['inactivityFail','5 second inactivity fail'],['shuffleQuestions','Shuffle questions'],['textSelection','Text-selection restrictions'],['copyPaste','Copy/paste blocking'],['fullscreen','Fullscreen requests'],['tabVisibility','Tab visibility monitoring'],['focusVisibility','Focus & visibility changes']])row(label,yes(sec[key]===true));row('Shuffle answers',yes(session.shuffleAnswers));for(const [key,label]of [['createdAt','Launched'],['startedAt','Started'],['endedAt','Completed']])row(label,session[key]?new Date(session[key]).toLocaleString():'—');}
+document.addEventListener('click',event=>{const info=$('result-settings');if(info&&!info.contains(event.target))info.open=false;});
+document.addEventListener('keydown',event=>{if(event.key==='Escape')$('result-settings').open=false;});
+
+const sessionGroupSelection=new Map();
+function sessionGroupKey(session){return session.mode==='calculator'?'calculator':folders.some(f=>f.id===session.folderId)?session.folderId:'';}
+function renderSessionGroups(){
+ const staging=$('in-session-section');staging.hidden=true;staging.append($('dashboard'));document.querySelectorAll('.session-group').forEach(el=>el.remove());
+ const active=sessionList.filter(s=>s.phase!=='ended'),groups=new Map();for(const session of active){const key=sessionGroupKey(session);if(!groups.has(key))groups.set(key,[]);groups.get(key).push(session);}
+ for(const [key,sessions]of groups){const group=document.createElement('section');group.className='card session-group';group.dataset.folderId=key;const heading=document.createElement('h2');heading.className='session-group-title';heading.textContent=t('Tests In Session');group.append(heading);const tabs=document.createElement('div');tabs.className='session-group-tabs';tabs.setAttribute('role','tablist');group.append(tabs);const selected=current&&sessionGroupKey(current)===key?current.id:sessions.some(s=>s.id===sessionGroupSelection.get(key))?sessionGroupSelection.get(key):sessions[0].id;sessionGroupSelection.set(key,selected);for(const session of sessions){const tab=button(session.title+' · '+t(session.phase),()=>openSession(session.id));tab.setAttribute('role','tab');tab.setAttribute('aria-selected',String(session.id===selected));tabs.append(tab);}const body=document.createElement('div');body.className='session-group-body';body.dataset.sessionId=selected;group.append(body);const folder=[...document.querySelectorAll('#launch-tests>.folder')].find(el=>el.dataset.folderId===key);if(key==='calculator')$('calculator-card').after(group);else if(folder)folder.after(group);else $('launch-tests').append(group);if(current?.id===selected){body.append($('dashboard'));renderDashboard();}else renderOtherSessionPanel(body,sessions.find(s=>s.id===selected));}
+}
+function renderOtherSessionPanel(body,session){if(!session)return;const snapshot=JSON.stringify({...session,remainingMs:undefined,serverNow:undefined});if(body.dataset.snapshot===snapshot)return;body.dataset.snapshot=snapshot;const names=body.querySelector('[data-show-names]')?.checked||false,scores=body.querySelector('[data-show-scores]')?.checked||false;const expandedEvents=new Set([...body.querySelectorAll('details[open][data-student-id]')].map(el=>el.dataset.studentId));body.replaceChildren();const title=document.createElement('h2');title.textContent=session.title;const phase=document.createElement('p');phase.textContent=t(session.phase);body.append(title,phase);const actions=document.createElement('div');actions.className='actions';const run=(verb,payload={})=>action(async()=>{const updated=await api('/sessions/'+session.id+'/'+verb,'POST',payload);updateSession(updated);if(verb==='end')await refresh();});if(session.phase==='waiting')actions.append(button(t('Start test'),action(async()=>{if(confirm(t('Start this test now?')))await run('start')();}),'primary'));if(['running','paused'].includes(session.phase)&&session.mode==='test')actions.append(button(t(session.phase==='paused'?'Resume test':'Pause test'),run(session.phase==='paused'?'resume':'pause'),'primary'));if(session.deliveryType==='teacher'&&session.phase==='running'&&session.teacherQuestion<session.questionCount)actions.append(button(t('Next question →'),run('next-question',{questionIndex:session.teacherQuestion||0}),'primary'));actions.append(button(t('Open classroom display ↗'),action(async()=>openClassroomDisplay(await api('/sessions/'+session.id)))),button(t('Rename session'),()=>renameResults(session)),button(t('End session'),action(async()=>{if(confirm(t('End this session?')))await run('end')();}),'danger'));if(session.deadlineAt||session.remainingMs!=null)actions.append(button(t('Extend 1 minute'),run('extend')));body.append(actions);const privacy=document.createElement('div');privacy.className='actions';for(const [key,label,checked]of [['names','Show names',names],['scores','Show scores',scores]]){const el=document.createElement('label');el.className='privacy-switch';const input=document.createElement('input');input.type='checkbox';input.setAttribute('role','switch');input.dataset[key==='names'?'showNames':'showScores']='';input.checked=checked;const track=document.createElement('span');track.className='switch-track';track.setAttribute('aria-hidden','true');el.append(input,track,document.createTextNode(t(label)));privacy.append(el);input.onchange=()=>renderTable(table,session);}body.append(privacy);const summary=document.createElement('p');summary.textContent=session.students.length+' '+t('joined')+' · '+session.students.filter(s=>s.result).length+' '+t('submitted');body.append(summary);const table=document.createElement('div');table.className='table-wrap';table.dataset.live='true';body.append(table);renderTable(table,session);for(const details of table.querySelectorAll('details[data-student-id]'))details.open=expandedEvents.has(details.dataset.studentId);}
+function renderOtherSessionPanels(){for(const body of document.querySelectorAll('.session-group-body')){if(body.contains($('dashboard')))continue;renderOtherSessionPanel(body,sessionList.find(s=>s.id===body.dataset.sessionId));}}
+let sessionGroupPolling=false;setInterval(async()=>{if(!account||document.hidden||$('launch').hidden||sessionGroupPolling||!sessionList.some(s=>s.phase!=='ended'))return;sessionGroupPolling=true;const generation=accountGeneration;try{const list=await api('/sessions');if(generation!==accountGeneration)return;const changed=list.filter(s=>s.phase!=='ended').map(s=>s.id+':'+s.phase+':'+s.title).join('|')!==sessionList.filter(s=>s.phase!=='ended').map(s=>s.id+':'+s.phase+':'+s.title).join('|');sessionList=list;if(changed){if(current)current=list.find(s=>s.id===current.id)||null;renderSessionGroups();}else renderOtherSessionPanels();}catch{}finally{sessionGroupPolling=false;}},2000);
+
+$('result-settings').addEventListener('toggle',()=>{const info=$('result-settings');if(!info.open)return;const rect=info.querySelector('summary').getBoundingClientRect(),width=Math.min(340,innerWidth*.8),height=Math.min(520,innerHeight-24),below=innerHeight-rect.bottom-20;const top=below>=240?rect.bottom+8:Math.max(12,rect.top-height-8);const content=$('result-settings-content');content.style.setProperty('--settings-left',Math.max(12,Math.min(rect.left,innerWidth-width-12))+'px');content.style.setProperty('--settings-top',top+'px');content.style.setProperty('--settings-height',Math.min(height,innerHeight-top-12)+'px');});

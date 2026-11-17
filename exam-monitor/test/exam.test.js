@@ -184,3 +184,5 @@ test('validated question and choice images reach only the authorized test view',
   input.questions[0].image='data:image/svg+xml;base64,AAAA';
   assert.equal(exam.validateTest(input),null);
 });
+
+test('private results expose the saved launch settings without changing student data',()=>{const session=exam.newSession('p1',{...fixture().test,folderId:'economics'},1000,{deliveryType:'one',immediateFeedback:true,requireStudentNumber:false,showCorrections:true,durationMinutes:15,security:{enabled:false}});const view=exam.privateView(session);assert.equal(view.folderId,'economics');assert.equal(view.deliveryType,'one');assert.equal(view.immediateFeedback,true);assert.equal(view.onlyOneAttempt,false);assert.equal(view.requireStudentNumber,false);assert.equal(view.showCorrections,true);assert.equal(view.durationMinutes,15);assert.equal(view.security.enabled,false);assert.equal(exam.publicView(session).onlyOneAttempt,undefined);});

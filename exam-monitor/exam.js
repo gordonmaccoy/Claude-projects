@@ -268,7 +268,7 @@ function publicView(s, now = Date.now()) {
     students: s.students.map(st => ({ name: st.name, fullscreen:effectiveSecurity(s).fullscreen&&st.fullscreen===true, submitted:Boolean(st.submission||st.completedAt),status: isFailed(st)?'failed':st.completedAt?'completed':st.submission?'submitted':status(st,now,s) })) };
 }
 function privateView(s, now = Date.now()) {
-  return { id: s.id, deliveryType:delivery.type(s),requireStudentNumber:s.requireStudentNumber!==false,teacherQuestion:s.teacherQuestion||0,questionCount:s.test?.questions.length||0, security:effectiveSecurity(s),roomName:s.roomName||null,mode: s.mode, language:s.language??'en', title: s.resultTitle || s.test?.title || 'Classroom calculator', phase: s.phase,
+  return { folderId:s.test?.folderId||null,onlyOneAttempt:!!s.onlyOneAttempt,immediateFeedback:!!s.immediateFeedback,showCorrections:s.showCorrections===true, id: s.id, deliveryType:delivery.type(s),requireStudentNumber:s.requireStudentNumber!==false,teacherQuestion:s.teacherQuestion||0,questionCount:s.test?.questions.length||0, security:effectiveSecurity(s),roomName:s.roomName||null,mode: s.mode, language:s.language??'en', title: s.resultTitle || s.test?.title || 'Classroom calculator', phase: s.phase,
     remainingMs:remainingTime(s,now),durationMinutes:s.durationMinutes||0,deadlineAt:s.deadlineAt||null,showScores:s.showScores!==false,shuffleAnswers:effectiveSecurity(s).enabled&&!!s.shuffleAnswers,extensionVersion:s.extensionVersion||0,
     createdAt: s.createdAt, startedAt: s.startedAt, endedAt: s.endedAt, displayToken: s.displayToken,
     students: s.students.map(st => ({ id: st.id, number: st.number, name: st.name, status: status(st, now,s),

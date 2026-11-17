@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-window.createExamioRegistration=function({auth,api,onComplete}){
+window.createExamioRegistration=function({auth,api,onComplete,onBeginSignIn=()=>{}}){
  const $=id=>document.getElementById(id),t=text=>window.examioLanguage?.t(text)||text;
  const root=$('registration'),signup=new URLSearchParams(location.search).has('signup');
  let step=1,session=null,busy=false,pendingEmail='',saving=null;
@@ -35,7 +35,7 @@ window.createExamioRegistration=function({auth,api,onComplete}){
  $('registration-form').onsubmit=event=>{event.preventDefault();if(!validStep())return;if(step!==3){page(step+1);return;}run(async()=>{
   const data=profile();if(session)return save(data);
   const email=input('reg-email').toLowerCase();
-  const response=await auth.auth.signUp({email,password:$('reg-password').value,options:{emailRedirectTo:location.origin+'/professor.html',data:{examio_registration:data}}});
+  onBeginSignIn(false);const response=await auth.auth.signUp({email,password:$('reg-password').value,options:{emailRedirectTo:location.origin+'/professor.html',data:{examio_registration:data}}});
   if(response.error)throw response.error;
   $('reg-password').value='';$('reg-password-confirm').value='';
   if(response.data?.session){session=response.data.session;return save(data);}
@@ -43,12 +43,12 @@ window.createExamioRegistration=function({auth,api,onComplete}){
  });};
  $('reg-verify-form').onsubmit=event=>{event.preventDefault();run(async()=>{
   if(session)return save(session.user?.user_metadata?.examio_registration||profile());
-  const response=await auth.auth.verifyOtp({email:pendingEmail,token:input('reg-code'),type:'email'});if(response.error)throw response.error;
+  onBeginSignIn(false);const response=await auth.auth.verifyOtp({email:pendingEmail,token:input('reg-code'),type:'email'});if(response.error)throw response.error;
   if(!response.data?.session)throw Error('Verification could not be confirmed. Please try again.');
   session=response.data.session;await save(session.user?.user_metadata?.examio_registration||profile());
  });};
  $('reg-resend').onclick=()=>{if(Date.now()<resendAt)return;run(async()=>{const {error}=await auth.auth.resend({type:'signup',email:pendingEmail,options:{emailRedirectTo:location.origin+'/professor.html'}});if(error)throw error;cooldown();message('A new verification email has been sent. Check your spam folder too.');});};
- $('reg-google').onclick=()=>run(async()=>{const {error}=await auth.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+'/professor.html?signup=1'}});if(error)throw error;});
+ $('reg-google').onclick=()=>run(async()=>{onBeginSignIn(true);const {error}=await auth.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+'/professor.html?signup=1'}});if(error)throw error;});
  if(signup)page(1);
  return {resume,reset(){session=null;root.hidden=true;$('reg-password').value='';$('reg-password-confirm').value='';$('reg-code').value='';}};
 };

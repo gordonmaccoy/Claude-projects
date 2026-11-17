@@ -1,38 +1,25 @@
 (() => {
-  window.createExamioSessionPreferences = url => {
-    function available(getStore){try{const store=getStore(),probe='examio-storage-probe';store.setItem(probe,'1');store.removeItem(probe);return store;}catch{const memory=new Map();return {getItem:key=>memory.get(key)??null,setItem:(key,value)=>memory.set(key,value),removeItem:key=>memory.delete(key)};}}
-    const persistent=available(()=>localStorage),temporary=available(()=>sessionStorage);
-    const prefix='sb-'+new URL(url).hostname.split('.')[0]+'-auth-token';
-    const preference='examio-remember-login';
-    let remember=persistent.getItem(preference)==='true';
-    const legacy=persistent.getItem(preference)===null;
-    const keys=new Set([prefix,prefix+'-user']);
-    let googleToken=null,providerOwner=null;
-    function withoutProviderTokens(key,value){
-      if(key!==prefix||value===null)return value;
-      try{
-        const session=JSON.parse(value),owner=session?.user?.id;
-        if(!session||typeof session!=='object'||Array.isArray(session))return value;
-        if(owner!==providerOwner){googleToken=null;providerOwner=owner;}
-        if(typeof session.provider_token==='string')googleToken=session.provider_token;
-        delete session.provider_token;delete session.provider_refresh_token;
-        return JSON.stringify(session);
-      }catch{return value;}
-    }
-    for(const store of [persistent,temporary]){const value=store.getItem(prefix);if(value!==null)store.setItem(prefix,withoutProviderTokens(prefix,value));}
-    function move(from,to,key){const value=from.getItem(key);if(value!==null){to.setItem(key,value);from.removeItem(key);}}
-    if(legacy)for(const key of keys)move(persistent,temporary,key);
-    // PKCE verifier is transient, not a login session. Email links may open in another tab.
-    const destination=key=>key.endsWith('-code-verifier')||remember?persistent:temporary;
-    const storage={
-      getItem(key){if(!key.endsWith('-code-verifier'))keys.add(key);return destination(key).getItem(key);},
-      setItem(key,value){if(!key.endsWith('-code-verifier'))keys.add(key);const target=destination(key);target.setItem(key,withoutProviderTokens(key,value));(target===persistent?temporary:persistent).removeItem(key);},
-      removeItem(key){if(key===prefix){googleToken=null;providerOwner=null;}persistent.removeItem(key);temporary.removeItem(key);}
-    };
-    return {storage,getGoogleProviderToken:owner=>owner===providerOwner?googleToken:null,get remember(){return remember;},setRemember(value){
-      const next=Boolean(value);
-      if(next!==remember)for(const key of keys)move(next?temporary:persistent,next?persistent:temporary,key);
-      remember=next;persistent.setItem(preference,String(remember));
-    }};
-  };
+ window.createExamioSessionPreferences=url=>{
+  function available(get){try{const s=get(),probe='examio-storage-probe';s.setItem(probe,'1');s.removeItem(probe);return s;}catch{const m=new Map();return {getItem:k=>m.get(k)??null,setItem:(k,v)=>m.set(k,String(v)),removeItem:k=>m.delete(k)};}}
+  const persistent=available(()=>localStorage),temporary=available(()=>sessionStorage);
+  const prefix='sb-'+new URL(url).hostname.split('.')[0]+'-auth-token',preference='examio-remember-login',epochKey=prefix+'-signed-out',versionKey=prefix+'-generation';
+  const keys=new Set([prefix,prefix+'-user']),listeners=new Set();let remember=persistent.getItem(preference)==='true',epoch=persistent.getItem(epochKey)||'',blocked=false,preservingNavigation=false,oauthPending=false,googleToken=null,providerOwner=null;
+  const legacy=persistent.getItem(preference)===null;
+  function purge(store){for(const key of keys)store.removeItem(key);store.removeItem(versionKey);}
+  function check(){const latest=persistent.getItem(epochKey)||'';if(latest!==epoch&&!blocked){remember=false;blocked=true;googleToken=null;providerOwner=null;purge(temporary);if((persistent.getItem(versionKey)||'')!==latest)purge(persistent);for(const fn of listeners)fn();}return !blocked;}
+  function clean(key,value){if(key!==prefix||value===null)return value;try{const session=JSON.parse(value),owner=session?.user?.id;if(!session||typeof session!=='object'||Array.isArray(session))return value;if(owner!==providerOwner){googleToken=null;providerOwner=owner;}if(typeof session.provider_token==='string')googleToken=session.provider_token;delete session.provider_token;delete session.provider_refresh_token;return JSON.stringify(session);}catch{return value;}}
+  for(const store of [persistent,temporary]){if((store.getItem(versionKey)||'')!==epoch)purge(store);const value=store.getItem(prefix);if(value!==null)store.setItem(prefix,clean(prefix,value));}
+  function move(from,to,key){const value=from.getItem(key);if(value!==null){to.setItem(key,value);from.removeItem(key);to.setItem(versionKey,epoch);}}
+  if(legacy)for(const key of keys)move(persistent,temporary,key);
+  const destination=key=>key.endsWith('-code-verifier')||remember?persistent:temporary;
+  const storage={getItem(key){if(!key.endsWith('-code-verifier'))keys.add(key);if(!check())return null;const store=destination(key);if(!key.endsWith('-code-verifier')&&(store.getItem(versionKey)||'')!==(persistent.getItem(epochKey)||'')){purge(store);return null;}return store.getItem(key);},setItem(key,value){if(!check())return;if(!key.endsWith('-code-verifier'))keys.add(key);const store=destination(key);store.setItem(key,clean(key,value));if(!key.endsWith('-code-verifier'))store.setItem(versionKey,epoch);(store===persistent?temporary:persistent).removeItem(key);},removeItem(key){if(!check())return;if(key===prefix){googleToken=null;providerOwner=null;}persistent.removeItem(key);temporary.removeItem(key);}};
+  function clearSession({broadcast=true}={}){temporary.removeItem('examio-reload-session');purge(temporary);purge(persistent);for(const store of [persistent,temporary]){store.removeItem(prefix+'-code-verifier');for(let i=(store.length||0)-1;i>=0;i--){const key=store.key(i);if(key?.startsWith(prefix)&&key.endsWith('-code-verifier'))store.removeItem(key);}}googleToken=null;providerOwner=null;blocked=true;preservingNavigation=false;oauthPending=false;remember=false;persistent.setItem(preference,'false');if(broadcast){epoch=window.crypto?.randomUUID?.()||Date.now()+'-'+Math.random();persistent.setItem(epochKey,epoch);}try{temporary.removeItem('examio-drive-return');}catch{}}
+  function beginSignIn({oauth=false}={}){epoch=persistent.getItem(epochKey)||'';blocked=false;preservingNavigation=oauth;oauthPending=oauth;if(oauth)window.examioSessionLifecycle?.beginOAuth();}
+  window.addEventListener?.('storage',event=>{if(event.key===epochKey)check();});
+  window.addEventListener?.('pageshow',event=>{preservingNavigation=false;oauthPending=false;check();if(event.persisted&&!blocked&&!destination(prefix).getItem(prefix)){blocked=true;googleToken=null;providerOwner=null;for(const fn of listeners)fn();}});
+  if(!window.examioSessionLifecycle)window.navigation?.addEventListener('navigate',event=>{preservingNavigation=!event.destination.sameDocument&&(oauthPending||new URL(event.destination.url).origin===window.location.origin);event.signal?.addEventListener('abort',()=>{preservingNavigation=false;},{once:true});});
+  if(!window.examioSessionLifecycle)window.navigation?.addEventListener('navigateerror',()=>{preservingNavigation=false;});
+  const closeTemporary=()=>{if(!remember){purge(temporary);googleToken=null;providerOwner=null;blocked=true;}};if(window.examioSessionLifecycle)window.examioSessionLifecycle.onClose(closeTemporary);else window.addEventListener?.('pagehide',event=>{if(!event.persisted&&!preservingNavigation)closeTemporary();});
+  return {storage,clearSession,beginSignIn,cancelNavigation(){window.examioSessionLifecycle?.cancel();oauthPending=false;preservingNavigation=false;},onInvalidated(fn){listeners.add(fn);return ()=>listeners.delete(fn);},get blocked(){return !check();},getGoogleProviderToken:owner=>check()&&owner===providerOwner?googleToken:null,get remember(){return remember;},setRemember(value){if(!check())return;const next=Boolean(value);if(next!==remember)for(const key of keys)move(next?temporary:persistent,next?persistent:temporary,key);remember=next;persistent.setItem(preference,String(remember));}};
+ };
 })();

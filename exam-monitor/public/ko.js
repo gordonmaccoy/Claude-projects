@@ -614,3 +614,8 @@ Object.assign(window.examioKorean,{"True / False":"참 / 거짓","Short answer":
 Object.assign(window.examioKorean,{"Results layout":"결과 보기 형식"});
 
 Object.assign(window.examioKorean,{"Quiz preview":"퀴즈 미리 보기"});
+
+Object.assign(window.examioKorean,{"Signed out on this computer. Server sign-out could not be confirmed.":"이 컴퓨터에서 로그아웃되었습니다. 서버 로그아웃은 확인하지 못했습니다."});
+
+Object.assign(window.examioKorean,{"Sort results":"결과 정렬","Newest first":"최신 완료순","Name A–Z":"이름순"});
+Object.assign(window.examioKorean,{"Test settings":"시험 설정","Test type":"시험 유형","On":"켜짐","Off":"꺼짐","None":"없음","Launched":"개설 시간","Started":"시작 시간","Completed":"완료 시간","5 second inactivity fail":"5초 비활성 시 실패 처리","Text-selection restrictions":"텍스트 선택 제한","Tab visibility monitoring":"탭 표시 상태 모니터링","Focus & visibility changes":"포커스 및 표시 상태 변경"});
