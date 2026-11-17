@@ -94,6 +94,7 @@ async function simulatePhone({record={},largeClass=true,requireNames=true,takenA
  const ids=Array.from({length:50},(_,i)=>avatarId(i+1));const src=fs.readFileSync(require.resolve('../public/game-player.js'),'utf8');
  await vm.runInNewContext(src,{URLSearchParams,location:{search:'?session=room'},history:{replaceState(){}},document:{createElement:el,body:el()},localStorage:{setItem(){}},
   setTimeout(fn){timers.set(++sequence,fn);return sequence;},clearTimeout(id){timers.delete(id);},
+  GameTeamPlayer:{updateLobby(){},selection(){return {};},show(){}},
   GameAvatars:{ids,names:ids.map(x=>'Name '+x),thumbnail:x=>'thumb-'+x,feature:x=>'feature-'+x},
   GameClient:{$,status(){},resumeRecord:()=>({resumeToken:token(10),...record}),forgetExpiredSession:()=>false,isOlderView:()=>false,nextPollDelay:()=>1000,render(){},
    async json(path,body){calls.push([path,body]);if(path.endsWith('/lobby'))return lobby;if(path.endsWith('/join'))return onJoin?onJoin(body):{playerId:'p',view:{avatarId:body.avatarId}};if(path.endsWith('/recovery'))return onRecovery?onRecovery(body):{code:'SYNTHETIC'};return {avatarId:record.avatarId};}}

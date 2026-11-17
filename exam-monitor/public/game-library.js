@@ -55,6 +55,9 @@
  window.addEventListener('scroll',positionActions,true);
  let launchTarget=null;
  const launchDialog=$('launch-dialog');
+ function teamSetup(){const team=$('launch-game-mode').value==='team',random=$('launch-team-assignment').value==='random';$('launch-team-options').hidden=!team;$('launch-team-count-label').hidden=!team||!random;$('launch-team-count').disabled=!team||!random;$('launch-team-count').max=$('launch-large-class').checked?'25':'15';}
+ for(const id of ['launch-game-mode','launch-team-assignment','launch-large-class'])$(id).addEventListener('change',teamSetup);
+ teamSetup();
  $('cancel-launch').onclick=()=>launchDialog.close();
  launchDialog.addEventListener('close',()=>{if(!launchDialog.open)launchTarget=null;});
  $('launch-form').onsubmit=async event=>{
@@ -64,7 +67,7 @@
   launching=true;$('launch-large-class').disabled=true;launchDialog.close();
   const display=window.open('about:blank','_blank','popup,width=1280,height=800');if(display)display.opener=null;
   try{
-   const session=await api('/game-sessions','POST',{gameId,requireNames,largeClass});
+   const session=await api('/game-sessions','POST',{gameId,requireNames,largeClass,...($('launch-game-mode').value==='team'?{gameMode:'team',teamAssignment:$('launch-team-assignment').value,teamSize:Number($('launch-team-size').value),teamCount:Number($('launch-team-count').value)}:{})});
    $('launch-large-class').checked=false;
    sessionRevision++;sessions=[...sessions.filter(s=>s.id!==session.id),session];
    selectSession(session.id,true);
@@ -82,7 +85,7 @@
    closeActions();launchTarget=game;
    $('launch-title').textContent=game.title;
    $('launch-require-names').checked=true;
-   $('launch-large-class').checked=false;
+   $('launch-large-class').checked=false;$('launch-game-mode').value='classic';$('launch-team-assignment').value='choose';$('launch-team-size').value='4';$('launch-team-count').value='2';teamSetup();
    launchDialog.showModal();
    $('launch-require-names').focus();
   };

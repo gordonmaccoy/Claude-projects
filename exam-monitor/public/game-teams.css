@@ -1,0 +1,11 @@
+/* Shared team identity: every member keeps their own character. */
+.team-avatar.player-avatar{display:inline-grid!important;grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:1fr;width:76px;height:76px;min-width:76px;gap:3px;border-radius:12px;overflow:hidden;vertical-align:middle;background:#e9f3ff;padding:4px}
+.team-avatar[data-size="5"],.team-avatar[data-size="6"]{grid-template-columns:repeat(3,minmax(0,1fr))}
+.team-avatar .team-member-avatar{width:100%!important;height:100%!important;min-height:0;object-fit:contain;display:block}
+.team-avatar.feature-avatar{width:clamp(100px,16vw,180px);height:clamp(100px,16vw,180px)}
+.roster .team-avatar{background:#e9f3ff;padding:4px}
+.team-setup{border:1px solid var(--prof-line,#527494);border-radius:12px;padding:14px;margin:18px 0}.team-setup legend{font-weight:750}.team-setup p,.team-setup small{line-height:1.5}
+.player-team{text-align:center;border:1px solid #527494;background:#102b42;color:#edf6ff;padding:16px;border-radius:16px;margin:16px 0}.player-team h2{font-size:20px;margin:0 0 10px}.player-team form{display:flex;align-items:end;justify-content:center;gap:10px;flex-wrap:wrap}.player-team form label{text-align:left}.player-team form button{margin-bottom:14px}.team-ranking-caption{color:#c1d7ed}
+
+.game-player #play-area:has(>#player-team:not([hidden])){grid-template-rows:auto auto minmax(0,1fr)}
+.player-team:not([data-phase=lobby]){display:flex;align-items:center;justify-content:center;gap:6px 12px;flex-wrap:wrap;padding:6px 10px;margin:0;border-radius:10px;min-height:0}.player-team:not([data-phase=lobby]) h2{font-size:15px;margin:0}.player-team:not([data-phase=lobby])>.team-avatar{width:38px;height:38px;min-width:38px;padding:2px;gap:1px}.player-team:not([data-phase=lobby])>p{font-size:12px;margin:0}.player-team:not([data-phase=lobby])>p:first-of-type{display:none}

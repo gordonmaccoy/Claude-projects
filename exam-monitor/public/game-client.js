@@ -111,6 +111,11 @@
     const img=el('img');img.src=cls.includes('feature-avatar')&&GameAvatars.feature ? GameAvatars.feature(id) : GameAvatars.image(id);img.alt='';img.className=cls;
     img.decoding='async';return img;
   }
+  function teamAvatar(row,cls='player-avatar'){
+   if(!row.members)return avatar(row.avatarId,cls);
+   const box=el('span',undefined,cls+' team-avatar');box.dataset.size=String(row.members.length);box.setAttribute('aria-label',row.members.length+' team members');
+   for(const member of row.members){const image=avatar(member.avatarId,'team-member-avatar');image.title=member.nickname;box.append(image);}return box;
+  }
   const reduced=()=>root.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   const warmedIntros=new Set();
   function warmNextArtwork(view){
@@ -122,11 +127,11 @@
     warmedIntros.add(src);
     const image=new root.Image();image.fetchPriority='low';image.src=src;
   }
-  const pointsText=value=>Number(value||0).toLocaleString()+' pts';
+  const pointsText=value=>Math.round(Number(value||0)).toLocaleString()+' pts';
   const countEpoch=new WeakMap();
   function countUp(node, from, to, timeline, prefix='', suffix=' pts') {
     const epoch=(countEpoch.get(node)||0)+1;countEpoch.set(node,epoch);
-    const show=n=>{node.textContent=prefix+Number(n).toLocaleString()+suffix;};
+    const show=n=>{node.textContent=prefix+Math.round(Number(n)).toLocaleString()+suffix;};
     if(!timeline||!Number.isFinite(from)||!Number.isFinite(to)||from===to||reduced()||!root.requestAnimationFrame){show(to);return;}
     const frame=now=>{
       if (!node.isConnected||countEpoch.get(node)!==epoch) return;
@@ -140,7 +145,7 @@
     const box=el('div',undefined,'rankings'),list=el('ol');
     (view.leaderboard||[]).forEach(p=>{
       const row=el('li',undefined,p.rank<=3?'top-rank':'');row.dataset.player=p.id;
-      row.append(el('span',String(p.rank),'rank'),avatar(p.avatarId),el('strong',p.nickname),el('span',pointsText(p.score),'points'));
+      row.append(el('span',String(p.rank),'rank'),teamAvatar(p),el('strong',p.nickname),el('span',pointsText(p.score),'points'));
       list.append(row);
     });
     box.append(list);return box;
@@ -229,11 +234,11 @@
       card.append(el('h2',"You're in!"),avatar(view.avatarId,'player-avatar feature-avatar'),el('strong',view.nickname,'result-detail'));
       stage.append(card);return;
     }
-    stage.append(el('h2','Waiting for game to start'),el('p',(view.players||[]).length+' players connected'));
+    stage.append(el('h2','Waiting for game to start'),el('p',view.gameMode==='team'?view.playerCount+' players · '+(view.players||[]).length+' teams':(view.players||[]).length+' players connected'));
     const roster=el('div',undefined,'roster');
     for(const p of view.players||[]){
       const item=el('span',undefined,'roster-player');
-      item.append(avatar(p.avatarId),el('span',p.nickname+(p.connected?'':' · reconnecting')));roster.append(item);
+      item.append(teamAvatar(p),el('span',p.nickname+(p.connected?'':' · reconnecting')));roster.append(item);
     }
     stage.append(roster);
   }
@@ -300,7 +305,7 @@
       const tile=el('div',undefined,'player-rank-tile');
       if(Number.isInteger(view.rank)){
         tile.dataset.place=String(view.rank);
-        tile.append(el('span','Final place'),el('strong','#'+view.rank));
+        tile.append(el('span',view.gameMode==='team'?'Team place':'Final place'),el('strong','#'+view.rank));
         if(Number.isFinite(view.score))tile.append(el('span',pointsText(view.score)));
       }else tile.append(el('span','Watch the classroom podium'));
       card.append(tile);
@@ -315,7 +320,7 @@
         const earned=el('strong','+'+view.answer.points.toLocaleString()+' pts','result-detail round-earned');
         earned.setAttribute('aria-live','off');card.append(earned);
       }
-      card.append(el('span','Your place: #'+view.rank,'result-detail'));
+      card.append(el('span',(view.gameMode==='team'?'Team place: #':'Your place: #')+view.rank,'result-detail'));
     }
     else card.append(el('span',view.finalRound?'Watch the classroom podium':kind==='correct'?'Score reveal on the classroom screen.':'Keep going!','result-detail'));
     return card;
@@ -333,7 +338,7 @@
     const prior=previous?.phase==='podium'?previous.leaderboard||[]:[];
     const recentlyRevealed=rank=>!reduced()&&previous?.id===view.id&&
       !prior.some(p=>p.rank===rank)&&schedule.some(x=>x.rank===rank&&view.serverNow>=x.at&&view.serverNow-x.at<1800);
-    stage.append(el('div','EXAMIO FINALE','podium-kicker'));
+    stage.append(el('div',view.gameMode==='team'?'TEAM RACE FINALE':'EXAMIO FINALE','podium-kicker'));
     const first=winners.some(p=>p.rank===1);
     if(first){
       stage.dataset.winner='true';const spot=el('span',undefined,'winner-spotlight');spot.setAttribute('aria-hidden','true');stage.append(spot);
@@ -360,8 +365,8 @@
       const names=el('ul',undefined,'podium-names');
       for(const p of groupWinners.slice(0,podiumNameLimit)){
         const entry=el('article',undefined,'podium-person');
-        entry.append(avatar(p.avatarId,'player-avatar feature-avatar'));people.append(entry);
-        const label=el('li');label.append(el('strong',p.nickname),el('span',pointsText(p.score),'podium-total'));names.append(label);
+        entry.append(teamAvatar(p,'player-avatar feature-avatar'));people.append(entry);
+        const label=el('li');label.append(el('strong',p.nickname),el('span',pointsText(p.score)+(p.members?' avg':''),'podium-total'));names.append(label);
       }
       if(groupWinners.length>podiumNameLimit)names.append(el('li','+'+(groupWinners.length-podiumNameLimit)+' tied','podium-total'));
       base.append(names);
@@ -469,7 +474,7 @@
       if(podiumComplete(view)){const credits=standingsCredits(view);if(credits)stage.append(credits);}
     }
     if(!isPlayer&&view.phase==='leaderboard'){
-      const board=leaderboard(view);stage.append(board);
+      if(view.gameMode==='team')stage.append(el('p','Team rankings · average member points','team-ranking-caption'));const board=leaderboard(view);stage.append(board);
       animateBoard(board,view.leaderboard||[],timeline);
     }
     if(view.phase==='closed')stage.append(el('h2','Thanks for playing!'));
@@ -482,5 +487,5 @@
     }
     runRoundClock(view,stage);
   }
-  Object.assign(api,{$,el,status,json,professor,button,picture,render,leaderboard});root.GameClient=api;
+  Object.assign(api,{$,el,status,json,professor,button,picture,render,leaderboard,teamAvatar});root.GameClient=api;
 })(typeof window==='undefined'?globalThis:window);

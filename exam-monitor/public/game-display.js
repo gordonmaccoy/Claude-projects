@@ -53,7 +53,7 @@
     clearCelebration();
     celebration.dataset.cue = 'lead';
     celebration.querySelector('.celebration-name').textContent = player.nickname;
-    celebration.querySelector('.player-avatar').src = GameAvatars.image(player.avatarId);
+    celebration.querySelector('.player-avatar').replaceWith(GameClient.teamAvatar(player));
     celebration.hidden = false;
     celebrationTimer = setTimeout(clearCelebration, 3400);
   }

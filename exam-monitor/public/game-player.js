@@ -66,7 +66,7 @@
   try{
    lobby=await json('/game-api/'+encodeURIComponent(id)+'/lobby');
    if(joined||recovering)return;
-   taken=new Set(lobby.takenAvatarIds);
+   taken=new Set(lobby.takenAvatarIds);GameTeamPlayer.updateLobby(lobby);
    if(lobbyError&&$('status').textContent===lobbyError)status('');
    lobbyError='';$('nickname-label').hidden=!requireNames();$('nickname').required=requireNames();$('recover').hidden=false;drawPicker();
   }catch(e){delay=e.status===429?8000:3500;if(clearExpired(e))return;if(!lobby){lobbyError=e.message;status(e.message,true);}}
@@ -76,14 +76,14 @@
  function save(){localStorage.setItem('examio-game:'+id,JSON.stringify(record));}
  async function resolve(){if(!id){const result=await json('/game-api/resolve',{pin:$('join-pin').value.trim()});id=result.sessionId;history.replaceState(null,'','/game-player.html?session='+encodeURIComponent(id));$('join-pin-label').hidden=true;$('join-pin').required=false;}if(!record){record=resumeRecord(localStorage,id);if(record.nickname&&!$('nickname').value)$('nickname').value=record.nickname;}return id;}
  const payload=()=>({playerId:record.playerId,resumeToken:record.resumeToken});
- function show(next){if(isOlderView(next,view))return;view=next;viewReceived=Date.now();clearTimeout(lobbyTimer);document.body.classList.add('is-playing');if(next.avatarId&&record.avatarId!==next.avatarId){record.avatarId=next.avatarId;save();}joined=true;recovering=false;$('join-form-section').hidden=true;$('play-area').hidden=false;render(view,{answer});}
+ function show(next){if(isOlderView(next,view))return;view=next;viewReceived=Date.now();clearTimeout(lobbyTimer);document.body.classList.add('is-playing');if(next.avatarId&&record.avatarId!==next.avatarId){record.avatarId=next.avatarId;save();}joined=true;recovering=false;$('join-form-section').hidden=true;$('play-area').hidden=false;render(view,{answer});GameTeamPlayer.show(next,async name=>{const result=await json('/game-api/'+encodeURIComponent(id)+'/team',{...payload(),name});show(result.view);});}
  async function join(){
   await resolve();
   const body={resumeToken:record.resumeToken};
   // Reconnect and pending recovery must never create a new player.
   if(!record.playerId&&!recovering){
    if(requireNames()){body.nickname=$('nickname').value.trim();if(!body.nickname)throw new Error('Enter a nickname.');}
-   body.avatarId=avatarId;
+   body.avatarId=avatarId;Object.assign(body,GameTeamPlayer.selection());
   }
   const result=await json('/game-api/'+encodeURIComponent(id)+'/join',body);
   record.playerId=result.playerId;record.resumeToken=result.resumeToken||record.resumeToken;

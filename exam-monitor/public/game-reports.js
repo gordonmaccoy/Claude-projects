@@ -78,6 +78,7 @@
     panel.replaceChildren(index===0?summary(data):index===1?
      (participants.length?table('Participants',['Name','Rank','Correct','Unanswered','Final score'],participants.map(p=>[p.name,String(p.rank),badge(p.percentCorrect),number.format(p.unanswered),number.format(p.score)])):el('p','No participants.')):
      (questions.length?table('Questions',['Question','Correct'],questions.map((q,i)=>[(i+1)+'. '+q.prompt,badge(q.percentCorrect)])):el('p','No questions to show.')));
+    if(index===0&&data.gameMode==='team'&&data.teams?.length)panel.append(el('h3','Team Race results'),table('Team standings',['Team','Rank','Members','Average points'],data.teams.map(t=>[t.name,String(t.rank),String(t.memberCount),number.format(Math.round(t.score))])));
    }
    tabs.forEach((tab,index)=>{
     tab.onclick=()=>activate(index);

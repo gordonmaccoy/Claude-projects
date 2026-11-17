@@ -21,7 +21,7 @@ test('large class is a launch-only choice, unchecked by default and sent per ses
  assert.match(js,/\$\('launch-large-class'\)\.checked=false/);
  assert.doesNotMatch(js,/slot\.append\(setting\)/);
  assert.match(js,/largeClass=\$\('launch-large-class'\)\.checked/);
- assert.match(js,/api\('\/game-sessions','POST',\{gameId,requireNames,largeClass\}\)/);
+ assert.match(js,/api\('\/game-sessions','POST',\{gameId,requireNames,largeClass,/);
  assert.doesNotMatch(js,/creationOptions\.largeClass|\$\('large-class'\)/);
 });
 test('projector lobby shows room name, current site home and QR as a separate presentation layout',()=>{
