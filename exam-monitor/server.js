@@ -15,7 +15,7 @@ const {extractDocument,parseTest,MAX_BYTES,MAX_TEXT}=require('./documents');
 const {createGenerator}=require('./generation');
 const {createAIImporter,createAnswerCompleter}=require('./answer-key');
 
-function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweepInterval = 1000, generate=createGenerator(), completeAnswers=createAnswerCompleter(),importWithAI=createAIImporter(), aiConfigured=Boolean(process.env.OPENAI_API_KEY && process.env.OPENAI_MODEL), exportEmailOptions={} }) {
+function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweepInterval = 1000, generate=createGenerator(), completeAnswers=createAnswerCompleter(),importWithAI=createAIImporter(), aiConfigured=Boolean(process.env.OPENAI_API_KEY && process.env.OPENAI_MODEL), exportEmailOptions={}, gradeShortAnswer=require('./short-answer-ai').createShortAnswerGrader() }) {
   const settingsController=require('./settings-routes').createSettingsController({store,config,...settingsOptions});
   const exportMailer=createExportMailer(exportEmailOptions);
   const app = express();
@@ -83,6 +83,9 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
     changed(`display:${s.id}`, 'display:update', exam.publicView(s),true);
     for (const st of s.students) changed(`student:${s.id}:${st.id}`, 'student:update', exam.studentView(s, st),true);
   }
+  const grader=require('./grading-worker').createGradingWorker({store,grade:gradeShortAnswer,broadcast});
+  const queueGrading=s=>{if(s.gradingPending)void grader.process(s.id).catch(()=>console.error('Short-answer grading retry delayed'));};
+  api.post('/sessions/:id/grade-override',wrap(async(req,res)=>{await owned(req.params.id,req.user);const {session}=await store.mutate(req.params.id,s=>require('./grading').override(s,req.body.studentId,req.body.questionId,req.user.id,req.body.points,req.body.reason));await broadcast(session);res.json(await decorate(session,req));}));
   api.use(settingsController.router);
   api.get('/me', (req, res) => res.json(req.user));
   const shareWrap=fn=>wrap(async(req,res)=>{try{return await fn(req,res);}catch(error){if([400,404,409,410,423,429].includes(error.status))return res.status(error.status).json({error:error.message});throw error;}});
@@ -247,11 +250,11 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
       if (action === 'start') exam.start(s);
       if (action === 'pause') exam.pause(s,req.user.id);
       if (action === 'resume') exam.resume(s,req.user.id);
-      if (action === 'end') { exam.sweep(s); s.phase = 'ended'; s.endedAt = Date.now(); }
+      if (action === 'end') {if(s.mode==='test')exam.end(s);else{s.phase='ended';s.endedAt=Date.now();}}
       if(action==='finalize-fail')exam.finalizeFail(s,req.body.studentId,req.user.id,req.body.reason);
       if (action === 'override') exam.override(s, req.body.studentId, req.user.id, req.body.reason);
     });
-    await broadcast(session);
+    await broadcast(session);queueGrading(session);
     if(action==='finalize-fail') {
       for(const client of io.sockets.sockets.values())if(client.data.student?.sessionId===session.id && client.data.student.studentId===req.body.studentId){client.emit('student:finished',studentWireView(session,exam.student(session,req.body.studentId)));client.disconnect(true);}
     }
@@ -356,7 +359,7 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
         if(!allowLocked && exam.isFailed(exam.student(s,identity.studentId))) return {blocked:true};
         return fn(s, identity.studentId,now);
       });
-      await broadcast(session);
+      await broadcast(session);queueGrading(session);
       return { ...(result?.blocked ? {ok:false,error:'Call professor: activity is locked'} : {}), view: studentWireView(session, exam.student(session, identity.studentId)) };
     }
     on('student:sync',()=>studentMutation(()=>null,true));
@@ -402,6 +405,7 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
           else p.verifiedAt = Date.now();
         }
       }
+      void grader.tick().catch(()=>console.error('Short-answer grading recovery delayed'));
       for (const s of await store.activeSessions()) {
         const { session } = await store.mutate(s.id, draft => exam.sweep(draft));
         await broadcast(session);
@@ -416,7 +420,7 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
   const trashTimer=sweepInterval?setInterval(purgeTrash,60*60*1000):null;
   if(trashTimer) void purgeTrash();
   const settingsTimer = sweepInterval ? setInterval(()=>settingsController.runJobs().catch(()=>console.error('Support background retry failed')),60000) : null;
-  return { app, server, io, tick, runSettingsJobs:()=>settingsController.runJobs(), close: async () => { if (timer) clearInterval(timer);if(gameTimer)clearInterval(gameTimer);if(settingsTimer)clearInterval(settingsTimer);if(trashTimer)clearInterval(trashTimer); await new Promise(resolve => io.close(resolve)); } };
+  return { app, server, io, tick, runGrading:()=>grader.tick(), runSettingsJobs:()=>settingsController.runJobs(), close: async () => { if (timer) clearInterval(timer);if(gameTimer)clearInterval(gameTimer);if(settingsTimer)clearInterval(settingsTimer);if(trashTimer)clearInterval(trashTimer); await grader.close(); await new Promise(resolve => io.close(resolve)); } };
 }
 async function main() {
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required. Configure PostgreSQL for this deployment.');

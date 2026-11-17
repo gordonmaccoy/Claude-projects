@@ -1,4 +1,5 @@
 const delivery=require('./delivery');
+const grading=require('./grading');
 const { randomBytes, randomInt, createHash } = require('node:crypto');
 const {validateSecurity,effectiveSecurity}=require('./security');
 const token = () => randomBytes(24).toString('base64url');
@@ -28,6 +29,8 @@ function validateTest(input) {
     const answerKeyConflict=q.answerKeyConflict===true;
     const answerExplanation=typeof q.answerExplanation==='string'?q.answerExplanation.slice(0,1000):'';
     const evidence = typeof q.evidence === 'string' ? q.evidence.slice(0,1000) : '';
+    if(q.type==='short'){if(typeof q.modelAnswer!=='string'||!q.modelAnswer.trim()||q.modelAnswer.length>2000||(q.gradingGuidance!==undefined&&(typeof q.gradingGuidance!=='string'||q.gradingGuidance.length>2000)))return null;questions.push({id:q.id,type:'short',points,...picture,text:q.text.trim(),modelAnswer:q.modelAnswer.trim(),gradingGuidance:q.gradingGuidance||'',evidence});continue;}
+    if(q.type==='truefalse'&&(!Array.isArray(q.options)||q.options.length!==2||q.options[0]?.text!=='True'||q.options[1]?.text!=='False'))return null;
     if (q.type === 'blank') {
       if (!Array.isArray(q.acceptedAnswers) || !q.acceptedAnswers.length || q.acceptedAnswers.length > 20 ||
           q.acceptedAnswers.some(a => typeof a !== 'string' || !a.trim() || a.length > 300) ||
@@ -35,7 +38,7 @@ function validateTest(input) {
       questions.push({ id:q.id, type:'blank', points,...picture,answerExplanation,answerKeyConflict, text:q.text.trim(), acceptedAnswers:[...new Set(q.acceptedAnswers.map(a=>a.trim()))], caseSensitive:q.caseSensitive === true, evidence });
       continue;
     }
-    if ((q.type !== undefined && q.type !== 'mc') || !Array.isArray(q.options) || q.options.length < 2 || q.options.length > 5 || typeof q.correctOptionId !== 'string') return null;
+    if ((q.type !== undefined && q.type !== 'mc' && q.type !== 'truefalse') || !Array.isArray(q.options) || q.options.length < 2 || q.options.length > 5 || typeof q.correctOptionId !== 'string') return null;
     const seenOptions = new Set(), options = [];
     for (const o of q.options) {
       if (!o || typeof o.id !== 'string' || !o.id || o.id.length > 100 || seenOptions.has(o.id) ||
@@ -44,7 +47,7 @@ function validateTest(input) {
       seenOptions.add(o.id); options.push({id:o.id,text:o.text.trim(),...optionPicture});
     }
     if (!seenOptions.has(q.correctOptionId)) return null;
-    questions.push({id:q.id,type:'mc',points,...picture,answerExplanation,answerKeyConflict,text:q.text.trim(),options,correctOptionId:q.correctOptionId,evidence});
+    questions.push({id:q.id,type:q.type==='truefalse'?'truefalse':'mc',points,...picture,answerExplanation,answerKeyConflict,text:q.text.trim(),options,correctOptionId:q.correctOptionId,evidence});
   }
   return { title: input.title.trim(), questions };
 }
@@ -82,7 +85,7 @@ function join(s, input, now = Date.now()) {
   const resumeToken = input.resumeToken || token();
   const st = { id: token(), tokenHash: hash(resumeToken), number, name, visible: true, lastSeen: now,
     hiddenSince: null, failedAt: null, overrideAt: null, draft: {}, submission: null, events: [] };
-  if(effectiveSecurity(s).enabled && s.shuffleAnswers && s.test){st.optionOrder={};for(const q of s.test.questions){if(q.type==='blank')continue;const order=q.options.map(o=>o.id);shuffle(order);st.optionOrder[q.id]=order;}}
+  if(effectiveSecurity(s).enabled && s.shuffleAnswers && s.test){st.optionOrder={};for(const q of s.test.questions){if(grading.textQuestion(q))continue;const order=q.options.map(o=>o.id);shuffle(order);st.optionOrder[q.id]=order;}}
   if(effectiveSecurity(s).shuffleQuestions&&s.test&&delivery.type(s)!=='teacher'){st.questionOrder=s.test.questions.map(q=>q.id);shuffle(st.questionOrder);}
   s.students.push(st);
   return { studentId: st.id, resumeToken };
@@ -108,7 +111,7 @@ function sweep(s, now = Date.now()) {
   }
   if(s.deadlineAt && now>=s.deadlineAt){
     for(const st of s.students)if(!st.submission){const answers=validateAnswers(s,st.draft||{});st.submission={answers,originalScore:scoreAnswers(s.test,answers),submittedAt:s.deadlineAt,autoSubmitted:true};st.draft={};if(effectiveSecurity(s).enabled)st.events.push({type:'time-expired',at:s.deadlineAt});}
-    s.phase='ended';s.endedAt=s.deadlineAt;changed=true;
+    s.phase='ended';s.endedAt=s.deadlineAt;grading.prepare(s);changed=true;
   }
   return changed;
 }
@@ -166,7 +169,7 @@ function validateAnswers(s, answers) {
   for (const [id, value] of Object.entries(answers)) {
     const q = s.test?.questions.find(q => q.id === id);
     if (!q) throw new Error('Invalid question');
-    if (q.type === 'blank') { if (typeof value !== 'string' || value.length > 300) throw new Error('Invalid blank answer'); }
+    if (grading.textQuestion(q)) { if (typeof value !== 'string' || value.length > (q.type==='short'?2000:300)) throw new Error('Invalid blank answer'); }
     else if (!q.options.some(o => o.id === value)) throw new Error('Invalid answer option');
     valid[id] = value;
   }
@@ -174,7 +177,7 @@ function validateAnswers(s, answers) {
 }
 function correctAnswer(q, answer) {
   const normalize=(value,sensitive)=> { const v=String(value || '').normalize('NFKC').trim().replace(/\s+/g,' '); return sensitive ? v : v.toLowerCase(); };
-  return q.type==='blank'?q.acceptedAnswers.some(a=>normalize(a,q.caseSensitive)===normalize(answer,q.caseSensitive)):answer===q.correctOptionId;
+  return q.type==='short'?normalize(answer,false)===normalize(q.modelAnswer,false):q.type==='blank'?q.acceptedAnswers.some(a=>normalize(a,q.caseSensitive)===normalize(answer,q.caseSensitive)):answer===q.correctOptionId;
 }
 function scoreAnswers(test,answers) {
   return test.questions.reduce((sum,q)=>sum+(correctAnswer(q,answers[q.id])?Math.round((q.points??1)*100):0),0)/100;
@@ -183,10 +186,10 @@ function incorrectAnswers(s,st) {
   if(!st.submission||!s.test)return [];
   return s.test.questions.flatMap((q,index)=>{
     const answer=st.submission.answers?.[q.id];
-    if(correctAnswer(q,answer))return [];
+    const a=grading.assessment(q,answer,st);if(a.pending||a.points===(q.points??1))return [];
     const chosen=q.options?.find(o=>o.id===answer), key=q.options?.find(o=>o.id===q.correctOptionId);
-    return [{number:st.questionOrder?st.questionOrder.indexOf(q.id)+1:index+1,question:q.text,image:q.image,answer:q.type==='blank'?(answer?.trim()||''):chosen?.text||'',
-      correct:q.type==='blank'?q.acceptedAnswers.join(' / '):key?.text||'',answerImage:chosen?.image,correctImage:key?.image}];
+    return [{number:st.questionOrder?st.questionOrder.indexOf(q.id)+1:index+1,question:q.text,image:q.image,answer:grading.textQuestion(q)?(answer?.trim()||''):chosen?.text||'',
+      correct:grading.answerKey(q),answerImage:chosen?.image,correctImage:key?.image,points:a.points,maxPoints:a.maxPoints,explanation:a.explanation}];
   }).sort((a,b)=>a.number-b.number);
 }
 function detailedResults(s) {
@@ -197,12 +200,12 @@ function detailedResults(s) {
       const choice=q.options?.find(option=>option.id===value);
       const key=q.options?.find(option=>option.id===q.correctOptionId);
       const order=st.optionOrder?.[q.id]||q.options?.map(option=>option.id);
-      const answer=q.type==='blank'?(value?.trim()||''):choice?.text||'';
+      const answer=grading.textQuestion(q)?(value?.trim()||''):choice?.text||'';const assessment=grading.assessment(q,value,st);
       return {number:index+1,question:q.text,answer,optionId:choice?.id||null,letter:choice?String.fromCharCode(65+order.indexOf(choice.id)):null,
-        correct:q.type==='blank'?q.acceptedAnswers.join(' / '):key?.text||'',
-        status:answer?(correctAnswer(q,value)?'correct':'incorrect'):(st.submission?'incorrect':'pending')};
+        correct:grading.answerKey(q),
+        ...assessment,status:assessment.pending?'grading':answer?assessment.status:(st.submission?'incorrect':'pending')};
     });
-    return {number:st.number,name:st.name,submitted:Boolean(st.submission),answers,incorrect:st.submission?answers.filter(row=>row.status==='incorrect'):[]};
+    return {id:st.id,number:st.number,name:st.name,submitted:Boolean(st.submission),answers,incorrect:st.submission?answers.filter(row=>row.status==='incorrect'):[]};
   });
 }
 function completeCalculator(s,id,now=Date.now()) {
@@ -213,9 +216,9 @@ function completeCalculator(s,id,now=Date.now()) {
 function totalPoints(test){return (test?.questions||[]).reduce((sum,q)=>sum+Math.round((q.points??1)*100),0)/100;}
 function result(s, st) {
   if (!st.submission) return null;
-  const score = isFailed(st) ? 0 : st.submission.originalScore;
+  const earned=grading.total(s.test,st.submission.answers,st);const score = isFailed(st) ? 0 : earned;
   return { score, originalScore: st.submission.originalScore, total: totalPoints(s.test),
-    percentage: Math.round(score / totalPoints(s.test) * 10000) / 100,
+    pending:earned===null,percentage: score===null?null:Math.round(score / totalPoints(s.test) * 10000) / 100,
     failed: isFailed(st), submittedAt: st.submission.submittedAt };
 }
 function submit(s, id, answers, now = Date.now()) {
@@ -228,9 +231,10 @@ function submit(s, id, answers, now = Date.now()) {
   sweep(s, now);
   if (isFailed(st)) throw new Error('Call professor: activity is locked');
   st.submission = { answers: valid, originalScore: scoreAnswers(s.test, valid), submittedAt: now };
-  st.draft = {};
+  st.draft = {};grading.prepare(s);
   return result(s, st);
 }
+function end(s,now=Date.now()){sweep(s,now);for(const st of s.students){if(st.submission)continue;const answers=validateAnswers(s,st.draft||{});st.submission={answers,originalScore:scoreAnswers(s.test,answers),submittedAt:now,autoSubmitted:true};st.draft={};}s.phase='ended';s.endedAt=now;grading.prepare(s);}
 function progress(s,id,questionId) {
  const st=student(s,id);
  if(s.mode!=='test'||s.phase!=='running'||st.submission||isFailed(st))throw new Error('Invalid progress state');
@@ -274,13 +278,13 @@ function privateView(s, now = Date.now()) {
       score: result(s, st)?.score ?? (isFailed(st) ? 0 : null), total: totalPoints(s.test) })) };
 }
 function studentView(s, st) {
-  const internal=result(s,st);const final=internal?{score:internal.score,total:internal.total,percentage:internal.percentage,failed:internal.failed,submittedAt:internal.submittedAt}:null;
+  const internal=result(s,st);const final=internal?{score:internal.score,total:internal.total,percentage:internal.percentage,failed:internal.failed,pending:internal.pending,submittedAt:internal.submittedAt}:null;
   return { ...(s.test?{flow:delivery.flow(s,st)}:{}),requireStudentNumber:s.requireStudentNumber!==false,security:effectiveSecurity(s),phase: s.phase, remainingMs:remainingTime(s), mode: s.mode, language:s.language??'en', name: st.name, failed: isFailed(st), completed:Boolean(st.completedAt),terminal:Boolean(st.completedAt||st.submission?.professorFinalized),deadlineAt:s.deadlineAt||null,extensionVersion:s.extensionVersion||0,lastExtension:s.lastExtension?{minutes:s.lastExtension.minutes}:null,
     test: s.test && s.phase === 'running' && !st.submission ? { title: s.resultTitle || s.test.title,
-      questions: delivery.visibleQuestions(s,st).map(id=>s.test.questions.find(q=>q.id===id)).map(q => ({ id: q.id, type:q.type || 'mc', points:q.points??1,text: q.text, ...(q.image?{image:q.image}:{}), ...(q.type === 'blank' ? {} : {options:st.optionOrder?.[q.id]?st.optionOrder[q.id].map(id=>q.options.find(o=>o.id===id)):q.options}) })) } : null,
+      questions: delivery.visibleQuestions(s,st).map(id=>s.test.questions.find(q=>q.id===id)).map(q => ({ id: q.id, type:q.type || 'mc', points:q.points??1,text: q.text, ...(q.image?{image:q.image}:{}), ...(grading.textQuestion(q) ? {} : {options:st.optionOrder?.[q.id]?st.optionOrder[q.id].map(id=>q.options.find(o=>o.id===id)):q.options}) })) } : null,
     ...(final && !final.failed && s.showCorrections===true?{corrections:incorrectAnswers(s,st)}:{}),
     draft: st.submission ? {} : st.draft, result:final && s.showScores===false?{hidden:true,failed:final.failed,submittedAt:final.submittedAt}:final };
 }
 module.exports = { ...delivery,validateTest, newSession, join, student, start, sweep, visibility, submit, override,
-  pause,resume,launchOptions,securityEvent,detailedResults,completeCalculator,totalPoints,extend,finalizeFail, progress, scoreAnswers, validateAnswers, publicView, privateView, studentView, hash, isFailed };
+  end,result,correctAnswer,pause,resume,launchOptions,securityEvent,detailedResults,completeCalculator,totalPoints,extend,finalizeFail, progress, scoreAnswers, validateAnswers, publicView, privateView, studentView, hash, isFailed };
 

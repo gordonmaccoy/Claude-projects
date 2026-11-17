@@ -147,6 +147,7 @@ function createStore(pool) {
     async listSessions(ownerId) {
       return (await pool.query("SELECT data FROM onscreen_v2_sessions WHERE owner_id=$1 AND data->>'deletedAt' IS NULL ORDER BY created_at DESC", [ownerId])).rows.map(r => r.data);
     },
+    async gradingSessions(){return (await pool.query("SELECT data FROM onscreen_v2_sessions WHERE data->>'gradingPending'='true' AND data->>'deletedAt' IS NULL AND NOT EXISTS(SELECT 1 FROM onscreen_v2_accounts a WHERE a.owner_id=onscreen_v2_sessions.owner_id AND a.state<>'active') ORDER BY created_at LIMIT 25")).rows.map(r=>r.data);},
     async activeSessions() {
       return (await pool.query("SELECT data FROM onscreen_v2_sessions WHERE data->>'phase' <> 'ended' AND NOT EXISTS(SELECT 1 FROM onscreen_v2_accounts a WHERE a.owner_id=onscreen_v2_sessions.owner_id AND a.state<>'active')")).rows.map(r => r.data);
     },
@@ -157,6 +158,7 @@ function createStore(pool) {
         const s = (await client.query("SELECT data FROM onscreen_v2_sessions WHERE id=$1 AND data->>'deletedAt' IS NULL FOR UPDATE", [id])).rows[0]?.data;
         if (!s) throw new Error('Session not found');
         const result = await fn(s);
+        require('./grading').prepare(s);
         await client.query('UPDATE onscreen_v2_sessions SET data=$2 WHERE id=$1', [id, JSON.stringify(s)]);
         await client.query('COMMIT');
         return { session: s, result };

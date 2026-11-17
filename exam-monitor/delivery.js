@@ -1,5 +1,6 @@
 // Authoritative delivery rules. Session JSON persists cursors and locked answers.
 const exam=()=>require('./exam');
+const grading=require('./grading');
 const type=s=>s.deliveryType||'free';
 const sequential=s=>type(s)!=='free';
 const order=(s,st)=>st.questionOrder||s.test.questions.map(q=>q.id);
@@ -30,12 +31,12 @@ function answerQuestion(s,id,questionId,answer,now=Date.now()){
  st.committedAnswers[questionId]=valid[questionId];st.draft={...st.draft,...st.committedAnswers};st.progressQuestionId=questionId;st.lastSeen=now;
  if(type(s)==='one'&&!s.immediateFeedback)st.questionCursor=index(s,st)+1;
 }
-function nextQuestion(s,id,questionId){const st=writable(s,id);if(type(s)!=='one')throw Error('Your professor controls the next question');if(typeof questionId!=='string')throw Error('Invalid question position');const qid=order(s,st)[index(s,st)];if(qid!==questionId){if(Object.hasOwn(st.committedAnswers||{},questionId))return;throw Error('Invalid question position');}if(!Object.hasOwn(st.committedAnswers||{},qid))throw Error('Submit this answer first');st.questionCursor=index(s,st)+1;}
+function nextQuestion(s,id,questionId){const st=writable(s,id);if(type(s)!=='one')throw Error('Your professor controls the next question');if(typeof questionId!=='string')throw Error('Invalid question position');const qid=order(s,st)[index(s,st)];if(qid!==questionId){if(Object.hasOwn(st.committedAnswers||{},questionId))return;throw Error('Invalid question position');}if(s.immediateFeedback&&grading.assessment(s.test.questions.find(q=>q.id===qid),st.committedAnswers?.[qid],st).pending)throw Error('Answer is still grading');if(!Object.hasOwn(st.committedAnswers||{},qid))throw Error('Submit this answer first');st.questionCursor=index(s,st)+1;}
 function advanceQuestion(s,ownerId,expected,now=Date.now()){if(s.ownerId!==ownerId)throw Error('Session not found');exam().sweep(s,now);if(type(s)!=='teacher'||s.phase!=='running')throw Error('Teacher Lead is not running');if(!Number.isInteger(expected)||expected<0||expected>s.test.questions.length)throw Error('Invalid question position');if(expected!==(s.teacherQuestion||0))return;const qid=s.test.questions[expected]?.id;for(const st of s.students){if(st.submission)continue;if(typeof st.draft?.[qid]==='string'&&st.draft[qid].trim()){st.committedAnswers||=Object.create(null);st.committedAnswers[qid]=st.draft[qid];}else if(st.draft){delete st.draft[qid];}}s.teacherQuestion=Math.min(s.test.questions.length,expected+1);}
 function flow(s,st){
  const ids=order(s,st),i=index(s,st),id=ids[i],locked=Object.hasOwn(st.committedAnswers||{},id),ready=sequential(s)&&(i>=ids.length||(type(s)==='teacher'&&i===ids.length-1&&locked));
  const value={type:type(s),onlyOneAttempt:!!s.onlyOneAttempt,immediateFeedback:!!s.immediateFeedback,total:ids.length,index:i,questionId:id||null,locked,readyToSubmit:ready,lockedIds:Object.keys(st.committedAnswers||{})};
- if(s.immediateFeedback&&locked&&s.phase==='running'&&!st.submission){const q=s.test.questions.find(q=>q.id===id),a=st.committedAnswers[id],choice=q.options?.find(o=>o.id===a),key=q.options?.find(o=>o.id===q.correctOptionId);value.feedback={question:q.text,answer:q.type==='blank'?a:choice?.text||'',correct:q.type==='blank'?q.acceptedAnswers.join(' / '):key?.text||'',isCorrect:exam().scoreAnswers({questions:[q]},{[id]:a})>0};}
+ if(s.immediateFeedback&&locked&&s.phase==='running'&&!st.submission){const q=s.test.questions.find(q=>q.id===id),a=st.committedAnswers[id],choice=q.options?.find(o=>o.id===a),key=q.options?.find(o=>o.id===q.correctOptionId);const aResult=grading.assessment(q,a,st);value.feedback=aResult.pending?{pending:true}:{question:q.text,answer:grading.textQuestion(q)?a:choice?.text||'',correct:grading.answerKey(q),isCorrect:aResult.points===aResult.maxPoints,points:aResult.points,maxPoints:aResult.maxPoints,explanation:aResult.explanation};}
  return value;
 }
 function visibleQuestions(s,st){if(!sequential(s))return order(s,st);const id=order(s,st)[index(s,st)];return id?[id]:[];}
