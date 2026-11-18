@@ -390,7 +390,7 @@ async function watch() {
   const accessToken = await token();
   const res = await new Promise(resolve => socket.timeout(10000).emit('professor:watch', { sessionId: current.id, token: accessToken }, (err,r) => resolve(err ? { ok:false,error:'Connection timed out' } : r)));
   if (!res.ok) throw new Error(res.error);
-  if(current?.id===res.view?.id){current={...current,...res.view};renderDashboard();}
+  if(current?.id===res.view?.id){current=mergeSessionPolicy(current,res.view);renderDashboard();}
 };
 $('calculator-launch').onclick = action(async () => {
   const existing = sessionList.find(s => s.mode === 'calculator' && s.phase !== 'ended');
@@ -398,14 +398,43 @@ $('calculator-launch').onclick = action(async () => {
   else await launchSession({ mode: 'calculator',language:window.examioLanguage.current });
 });
 $('display-open').onclick = action(() => current && openClassroomDisplay(current));
-$('test-start').onclick = action(async () => { if (!confirm(current.security?.inactivityFail===false?'Start this test now?':'Start this test now? Hidden pages for more than 5 seconds will receive FAIL.')) return; current = await api(`/sessions/${current.id}/start`, 'POST', {}); renderDashboard(); });
+$('test-start').onclick = action(async () => { if(!current)return;const id=current.id;if (!confirm(current.security?.inactivityFail===false?'Start this test now?':'Start this test now? Hidden pages for more than 5 seconds will receive FAIL.')) return; updateSession(await api(`/sessions/${id}/start`, 'POST', {})); });
 $('session-end').onclick = action(async () => {
-  if (!confirm('End this session?')) return;
-  current = await api(`/sessions/${current.id}/end`, 'POST', {});
-  current=null;renderDashboard();
+  if (!current||!confirm('End this session?')) return;
+  const id=current.id;await api(`/sessions/${id}/end`, 'POST', {});
+  if(current?.id===id){current=null;renderDashboard();}
   await refresh();
 });
+const inactivityFailPending = new Set();
+function mergeSessionPolicy(previous,updated) {
+  const next={...previous,...updated};
+  if((updated.inactivityFailVersion??0)<(previous.inactivityFailVersion??0)){
+    next.security=previous.security;next.inactivityFailVersion=previous.inactivityFailVersion;
+  }
+  return next;
+}
+function renderInactivityFailControl() {
+  const available=current?.mode==='test'&&['waiting','running','paused'].includes(current.phase);
+  $('session-fail-control').hidden=!available;
+  $('session-fail-toggle').checked=current?.security?.inactivityFail===true;
+  $('session-fail-toggle').disabled=!available||current.security?.enabled!==true||inactivityFailPending.has(current.id);
+  $('session-fail-hint').textContent=t(current?.security?.enabled===false?'Monitoring is off. Existing FAIL results stay unchanged.':'Existing FAIL results stay unchanged.');
+}
+async function changeInactivityFail() {
+  const id=current?.id;
+  if(!id||current.mode!=='test'||!['waiting','running','paused'].includes(current.phase)||current.security?.enabled!==true||inactivityFailPending.has(id)){renderInactivityFailControl();return;}
+  const enabled=$('session-fail-toggle').checked;
+  inactivityFailPending.add(id);renderInactivityFailControl();notice('');
+  try {
+    const updated=await api(`/sessions/${id}/inactivity-fail`,'POST',{enabled});
+    // Socket updates may have changed phase/students while the request was pending.
+    if(current?.id===id&&updated.id===id)current=mergeSessionPolicy(current,{security:updated.security,inactivityFailVersion:updated.inactivityFailVersion??0});
+  } catch(error) {if(current?.id===id)notice(error.message);}
+  finally {inactivityFailPending.delete(id);renderDashboard();}
+}
+$('session-fail-toggle').onchange=changeInactivityFail;
 function renderDashboard() {
+  renderInactivityFailControl();
   if (!current || current.phase==='ended') {professorTimerSnapshot=null;current=null;$('dashboard').hidden=true;$('live-students').replaceChildren();$('calculator-card').hidden=false;return;}
   $('dashboard').hidden = false; $('session-title').textContent = current.title;
   $('calculator-card').hidden = current.mode === 'calculator' && current.phase !== 'ended';
@@ -418,7 +447,7 @@ function renderDashboard() {
   $('session-rename').hidden=current.mode!=='test';
   $('launch-score-switch').hidden=current.mode!=='test';
   const scores = current.students.filter(s => s.result&&Number.isFinite(s.result.percentage)).map(s => s.result.percentage);
-  $('live-summary').textContent = `${current.students.length} joined · ${current.students.filter(s => s.status === 'green' && !s.result && !s.completed).length} active` +
+  $('live-summary').textContent = `${current.students.length} joined · ${current.students.filter(s => s.status === 'green' && !s.result && !s.completed && !s.recoveryState).length} active` +
     (current.mode === 'test' ? ` · ${current.students.filter(s=>s.result).length} submitted · ${current.students.filter(s => s.failed).length} FAIL${scores.length && $('launch-show-scores-live').checked ? ` · Average ${Math.round(scores.reduce((a,b) => a+b,0)/scores.length)}%` : ''}` : ' · '+current.students.filter(s=>s.completed).length+' completed');
   renderTable($('live-students'), current);
 }
@@ -450,10 +479,17 @@ function renderTable(container, session) {
   for (const s of [...session.students].sort((a,b) => session.requireStudentNumber===false?a.name.localeCompare(b.name):a.number.localeCompare(b.number, undefined, { numeric:true }))) {
     const tr = document.createElement('tr');
     for (const text of [s.number,masked?'••••••':s.name]) { const td=document.createElement('td'); td.textContent=text; tr.append(td); }
-    const state=document.createElement('td'); const pill=document.createElement('span'); pill.className=`pill ${s.status === 'red' ? 'red' : ''}`; pill.textContent=s.failed ? t('FAILED') : s.completed ? 'Completed and closed' : s.result ? 'Test Submitted' : s.status === 'green' ? t('Active') : t('Inactive'); state.append(pill); tr.append(state);
+    const recovery=isLaunch&&['running','paused'].includes(session.phase)&&!s.result&&!s.completed&&!s.finalized&&['offline','awaiting-unlock'].includes(s.recoveryState)?s.recoveryState:null;
+    const state=document.createElement('td'); const pill=document.createElement('span');
+    pill.className=`pill ${s.failed||(s.status==='red'&&!recovery)?'red':recovery?'reconnect-pill':''}`;
+    pill.textContent=s.failed?t('FAILED'):s.completed?t('Completed and closed'):s.result?t('Test Submitted'):recovery?t(recovery==='offline'?'Logged out':'Waiting for unlock'):s.status==='green'?t('Active'):t('Inactive');
+    state.append(pill);
+    if(s.failed&&recovery){const badge=document.createElement('span');badge.className='pill reconnect-pill';badge.textContent=t(recovery==='offline'?'Logged out':'Waiting for unlock');state.append(badge);}
+    tr.append(state);
     const progress=document.createElement('td');progress.textContent=s.progress?`${s.result?t('Finished'):s.progress.question?t('Question {number} of {total}',{number:s.progress.question,total:s.progress.total}):t('Not started')} · ${t('{answered}/{total} answered',s.progress)}`:'—';tr.append(progress);
     if(showScores) for (const text of [s.result?.pending?t('Grading…'):s.score === null ? t('Pending') : `${s.score} / ${s.total}${s.result ? ` · ${s.result.percentage}%` : ''}`, s.result?.originalScore==null?'—':s.result ? `${s.result.originalScore} / ${s.total}` : '—']) { const td=document.createElement('td'); td.textContent=text; tr.append(td); }
     const review=document.createElement('td');
+    if(!s.failed&&recovery==='awaiting-unlock')review.append(button('Unlock reconnect',()=>unlockReconnectStudent(session,s)));
     if(s.failed && !s.finalized && (s.result || session.phase==='running')) review.append(button(s.result?t('Override FAIL'):t('Unlock & continue'),()=>unlockStudent(session,s)));
     if(s.failed && !s.result)review.append(button(t('Submit Fail score'),()=>submitFail(session,s),'danger'));
     const details=document.createElement('details');details.dataset.studentId=s.id; const summary=document.createElement('summary'); summary.textContent=t('{count} monitoring events',{count:s.events.length});if(s.events.length>5)summary.className='monitoring-alert'; details.append(summary);
@@ -576,7 +612,7 @@ setInterval(()=>{if(detailsPhase!=='ended')void refreshAnswerGrid();},2000);
 const exportsController=window.createExamioExports({getSession:()=>historySession,getEmail:()=>account?.email,getEmailConfigured:()=>exportEmailConfigured,downloadFile,api,saveToDrive:async(session,detail)=>{const generation=accountGeneration;const response=await fetch('/api/sessions/'+encodeURIComponent(session.id)+'/export?format=xlsx&detail='+(detail?'1':'0'),{headers:{Authorization:'Bearer '+await token()}});if(!response.ok)throw Error('Unable to load grades. Please sign in and retry.');const workbook=await response.blob();if(generation!==accountGeneration)throw Error('Account changed. Please retry.');return window.examioSaveGoogleSheet({accessToken:sessionPreferences?.getGoogleProviderToken(account.id),workbook,title:session.title+(detail?' - Detailed Results':' - Summary Grades')});},connectDrive:async(session,detail)=>{sessionStorage.setItem('examio-drive-return',JSON.stringify({owner:account.id,session:session.id,detail}));sessionPreferences.beginSignIn({oauth:true});const {error}=await auth.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+'/professor.html',scopes:'https://www.googleapis.com/auth/drive.file',queryParams:{prompt:'consent',login_hint:account.email,include_granted_scopes:'true'}}});if(error){sessionPreferences.cancelNavigation();sessionStorage.removeItem('examio-drive-return');throw error;}},notify:notice}); $('results-refresh').onclick=action(refresh);
 socket.on('connect',()=> { if (account) { if($('notice').textContent.startsWith('Live connection lost'))notice(''); watch().catch(e=>notice(e.message)); } });
 socket.on('disconnect',()=> { if (account) notice('Live connection lost. Sessions remain saved; reconnecting…'); });
-socket.on('professor:update',view=> { const listed=sessionList.find(s=>s.id===view.id);if(view.phase==='ended'||(listed&&(listed.title!==view.title||listed.phase!==view.phase)))refresh().catch(e=>notice(e.message));const index=sessionList.findIndex(s=>s.id===view.id);if(index!==-1)sessionList[index]={...sessionList[index],...view};renderOtherSessionPanels();if (current?.id === view.id) { current={...current,...view}; renderDashboard(); } if (historySession?.id===view.id) { historySession={...historySession,...view}; renderResults(); } });
+socket.on('professor:update',view=> { const listed=sessionList.find(s=>s.id===view.id);if(view.phase==='ended'||(listed&&(listed.title!==view.title||listed.phase!==view.phase)))refresh().catch(e=>notice(e.message));const index=sessionList.findIndex(s=>s.id===view.id);if(index!==-1)sessionList[index]=mergeSessionPolicy(sessionList[index],view);renderOtherSessionPanels();if (current?.id === view.id) { current=mergeSessionPolicy(current,view); renderDashboard(); } if (historySession?.id===view.id) { historySession=mergeSessionPolicy(historySession,view); renderResults(); } });
 socket.on('auth:expired',()=> { notice('Please sign in again to reconnect the private dashboard.'); });
 let workspaceSignIn,registration;
 function signedIn() {
@@ -675,7 +711,7 @@ $('launch-form').onsubmit=async e=>{e.preventDefault();$('launch-confirm').disab
 function applyQuizLayout(){applyResultsLayout();let layout='grid';try{layout=localStorage.getItem('examio-quiz-layout-'+account?.id)==='list'?'list':'grid';}catch{}$('launch-tests').dataset.layout=layout;document.querySelectorAll('[data-quiz-layout]').forEach(el=>el.setAttribute('aria-pressed',String(el.dataset.quizLayout===layout)));}
 document.querySelectorAll('[data-quiz-layout]').forEach(el=>el.onclick=()=>{try{localStorage.setItem('examio-quiz-layout-'+account.id,el.dataset.quizLayout);}catch{}applyQuizLayout();});
 $('teacher-next-question').onclick=action(async()=>{if(!current)return;$('teacher-next-question').disabled=true;try{updateSession(await api('/sessions/'+current.id+'/next-question','POST',{questionIndex:current.teacherQuestion||0}));}finally{$('teacher-next-question').disabled=false;}});
-$('extend-time').onclick=action(async()=>{const updated=await api('/sessions/'+current.id+'/extend','POST',{});updateSession(updated);notice('Added 1 minute (60 seconds). New end time: '+new Date(updated.deadlineAt).toLocaleTimeString());});
+$('extend-time').onclick=action(async()=>{if(!current)return;const id=current.id;const updated=await api('/sessions/'+id+'/extend','POST',{});updateSession(updated);if(current?.id===id)notice('Added 1 minute (60 seconds). New end time: '+new Date(updated.deadlineAt).toLocaleTimeString());});
 $('test-pause').onclick=action(async()=>{if(!current||!['running','paused'].includes(current.phase))return;const id=current.id,verb=current.phase==='paused'?'resume':'pause';$('test-pause').disabled=true;try{updateSession(await api('/sessions/'+id+'/'+verb,'POST',{}));}finally{$('test-pause').disabled=false;}});
 let entryAction=null;
 function closeEntry(){entryAction=null;if($('entry-dialog').open)$('entry-dialog').close();}
@@ -687,7 +723,8 @@ $('entry-form').onsubmit=async e=>{e.preventDefault();const value=$('entry-value
  try{await fn(value);if(generation===accountGeneration)closeEntry();}catch(e){if(generation===accountGeneration)$('entry-error').textContent=e.message;}finally{if(generation===accountGeneration){$('entry-save').disabled=false;$('entry-cancel').disabled=false;}}
 };
 $('new-folder').onclick=()=>openEntry({title:'New class folder',max:80},async name=>{await api('/folders','POST',{name});await refresh();});
-function updateSession(updated){const index=sessionList.findIndex(s=>s.id===updated.id);if(index!==-1)sessionList[index]={...sessionList[index],...updated};renderOtherSessionPanels();if(current?.id===updated.id){current=updated;renderDashboard();}if(historySession?.id===updated.id){historySession=updated;renderResults();}}
+function updateSession(updated){const index=sessionList.findIndex(s=>s.id===updated.id);if(index!==-1)sessionList[index]=mergeSessionPolicy(sessionList[index],updated);renderOtherSessionPanels();if(current?.id===updated.id){current=mergeSessionPolicy(current,updated);renderDashboard();}if(historySession?.id===updated.id){historySession=mergeSessionPolicy(historySession,updated);renderResults();}}
+async function unlockReconnectStudent(session,student){updateSession(await api('/sessions/'+encodeURIComponent(session.id)+'/unlock-reconnect','POST',{studentId:student.id}));}
 function unlockStudent(session,student){openEntry({title:student.result?t('Override FAIL'):t('Unlock & continue'),label:'Reason',max:500,help:'Review '+student.name+'’s incident, then record why you are allowing continuation.',save:student.result?t('Override FAIL'):t('Unlock & continue')},async reason=>updateSession(await api('/sessions/'+session.id+'/override','POST',{studentId:student.id,reason})));}
 function submitFail(session,student){openEntry({title:t('Submit Fail score'),label:'Reason',value:'Confirmed by professor',max:500,help:'Finalize '+student.name+' at 0%. This closes their attempt and stops their connection. Their saved answers and original score remain in the private record.',save:t('Submit Fail score')},async reason=>updateSession(await api('/sessions/'+session.id+'/finalize-fail','POST',{studentId:student.id,reason})));}
 function renameResults(session){openEntry({title:session.phase==='ended'?'Rename results':'Rename session',value:session.title,help:'This name will be used for this session, its results and Excel filename. The Library test stays unchanged.'},async title=>{updateSession(await api('/sessions/'+session.id,'PATCH',{title}));await refresh();});}

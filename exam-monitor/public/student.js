@@ -17,14 +17,18 @@ const resumeKey=`onscreen-resume-${sessionId}`, draftKey=`onscreen-draft-${sessi
 const socket=io({autoConnect:false}); let joined=false, currentView=null, renderedTest=false, testAnswers={}, submitting=false, draftTimer, updateVersion=0, memoryToken=null;
 let completingCalculator=false;
 const securityGuard=window.examioStudentSecurity({document,window,root:els.testQuestions,button:$('student-fullscreen'),status:$('fullscreen-status'),t,report:type=>{if(joined&&socket.connected)socket.emit('student:security',{type},()=>{});}});
-let reconnectTimer, connectionVersion=0;
+let reconnectTimer, connectionVersion=0, resumeRetryDelay=1500, resumePending=false;
 const connectionNotice=$('student-connection');
+els.form.querySelector('button').disabled=true;
 const message=text=>$('student-notice').textContent=t(text || '');
 const emit=(event,data)=>new Promise(resolve=>socket.timeout(10000).emit(event,data,(err,res)=>resolve(err?{ok:false,timedOut:true,error:t('The connection timed out. Please try again.')}:res)));
 function showJoinError(text) { els.joinError.hidden=false; els.joinError.textContent=t(text); }
 function savedToken() { try { return memoryToken || localStorage.getItem(resumeKey); } catch { return memoryToken; } }
 function saveDraft() { try { localStorage.setItem(draftKey,JSON.stringify(testAnswers)); } catch {} }
 async function join(input) {
+  clearTimeout(reconnectTimer);
+  resumePending=true;els.form.querySelector('button').disabled=true;
+  if(input.resumeToken&&!input.name)connectionNotice.textContent=t('Resuming your saved attempt…');
   if(input.name) {
     memoryToken = savedToken() || Array.from(crypto.getRandomValues(new Uint8Array(24)),b=>b.toString(16).padStart(2,'0')).join('');
     input.resumeToken=memoryToken;
@@ -33,11 +37,25 @@ async function join(input) {
   const connection=connectionVersion;
   const res=await emit('student:join',{sessionId,...input});
   if(connection!==connectionVersion)return;
-  if(!res.ok) { if(joined) {
-    connectionNotice.textContent=res.timedOut?t('Still reconnecting…'):t(res.error);
-    if(res.timedOut&&input.resumeToken&&socket.connected) reconnectTimer=setTimeout(()=>join({resumeToken:input.resumeToken}),1500);
-  } else showJoinError(res.error); return; }
-  clearTimeout(reconnectTimer);connectionNotice.textContent='';setConnected(true);
+  if(!res.ok) {
+    if(res.timedOut&&input.resumeToken) {
+      connectionNotice.textContent=t('Still reconnecting…');
+      // A newly reopened page is not joined yet. Retry its saved capability too;
+      // never retry enrollment by number/name or change the capability.
+      if(socket.connected) {
+        reconnectTimer=setTimeout(()=>join({resumeToken:input.resumeToken}),resumeRetryDelay);
+        resumeRetryDelay=Math.min(resumeRetryDelay*2,10000);
+      }
+    } else {
+      resumePending=false;els.form.querySelector('button').disabled=false;
+      if(joined)connectionNotice.textContent=t(res.error);
+      else {connectionNotice.textContent='';showJoinError(res.error);}
+    }
+    return;
+  }
+  clearTimeout(reconnectTimer);resumeRetryDelay=1500;resumePending=false;
+  els.form.querySelector('button').disabled=false;
+  connectionNotice.textContent='';setConnected(true);
   joined=true; memoryToken=res.resumeToken; try{localStorage.setItem(resumeKey,res.resumeToken);}catch{ message(t('Resume is available while this page stays open. This browser cannot save the resume link across reloads.')); }
   els.joinError.hidden=true; els.meName.textContent=res.view.name;
   showView(res.view); await visibility();
@@ -61,26 +79,31 @@ async function initializeStudentLanguage() {
 }
 initializeStudentLanguage();
 socket.on('connect',async()=> {
-  clearTimeout(reconnectTimer);
+  clearTimeout(reconnectTimer);resumeRetryDelay=1500;
   const resumeToken=savedToken();
   if(resumeToken){await join({resumeToken});securityGuard.syncFullscreen();}
-  else setConnected(true);
+  else {setConnected(true);resumePending=false;els.form.querySelector('button').disabled=!sessionId;}
 });
 socket.on('disconnect',()=> {
   connectionVersion++;
   setConnected(false);
+  els.form.querySelector('button').disabled=true;
   clearTimeout(reconnectTimer);
   if(!joined || currentView?.result || currentView?.terminal)return;
   reconnectTimer=setTimeout(()=>{if(!socket.connected)connectionNotice.textContent=t('Reconnecting… Keep this page open.');},1500);
 });
 function setConnected(ok) { for (const el of [els.connDot,els.testConnDot]) { el.classList.toggle('offline',!ok); el.title=ok?t('Connected'):t('Disconnected'); } }
-els.form.onsubmit=async e=> { e.preventDefault(); const b=els.form.querySelector('button'); b.disabled=true; try { await join({name:els.nameInput.value.trim(),number:$('number-input').value.trim()}); } finally { b.disabled=false; } };
+els.form.onsubmit=async e=> { e.preventDefault(); if(!sessionId||resumePending||!socket.connected)return; const b=els.form.querySelector('button'); b.disabled=true; try { await join({name:els.nameInput.value.trim(),number:$('number-input').value.trim()}); } finally { b.disabled=resumePending||!socket.connected||!sessionId; } };
+function reconnectLocked(view){
+ return view?.mode==='test'&&view.phase==='running'&&view.recoveryLocked===true&&!view.failed&&!view.result&&!view.completed&&!view.terminal;
+}
 let deliveryRenderKey='';
 function showView(view) {
   const nextKey=JSON.stringify([view.flow?.index,view.flow?.locked,view.flow?.lockedIds,view.flow?.readyToSubmit,view.flow?.feedback]);if(nextKey!==deliveryRenderKey){renderedTest=false;deliveryRenderKey=nextKey;}
   const previousExtension=currentView?.extensionVersion;currentView=view;
   if(previousExtension!==undefined && view.extensionVersion>previousExtension){extensionNoticeUntil=performance.now()+6000;$('time-notice').textContent=t('Your professor extended the time by {minutes} minute.', {minutes:view.lastExtension?.minutes||1});}
-  if((view.result||view.failed||view.phase==='ended'||view.phase==='paused')&&$('submit-dialog').open)$('submit-dialog').close();
+  const recovery=reconnectLocked(view);
+  if((view.result||view.failed||recovery||view.phase==='ended'||view.phase==='paused')&&$('submit-dialog').open)$('submit-dialog').close();
   timerSnapshot={deadlineAt:view.deadlineAt,serverNow:view.serverNow,receivedAt:performance.now()};
   if(view.terminal){clearTimeout(draftTimer);clearTimeout(reconnectTimer);connectionNotice.textContent='';if(!view.completed||!completingCalculator)socket.disconnect();}
   securityGuard.update(view);
@@ -92,10 +115,13 @@ function showView(view) {
   $('security-policy-warning').textContent=warnings.join(' ');
   const paused=view.phase==='paused'&&!view.result&&!view.completed;
   $('pause-lock').hidden=!paused;
-  if(paused)clearTimeout(draftTimer);
+  if(paused||recovery)clearTimeout(draftTimer);
   const locked=Boolean(view.failed && !view.result && view.phase==='running');
   $('activity-lock').hidden=!locked;
-  els.calcSection.inert=locked||paused; els.testSection.inert=locked||paused;
+  const recoveryWasHidden=$('reconnect-lock').hidden;
+  $('reconnect-lock').hidden=!recovery;
+  els.calcSection.inert=locked||paused; els.testSection.inert=locked||paused||recovery;
+  if(recovery&&recoveryWasHidden)$('reconnect-lock').focus({preventScroll:true});
   if(!locked && $('student-notice').textContent.startsWith(t('FAIL'))) message('');
   els.joinSection.hidden=true; els.calcSection.hidden=true; els.testSection.hidden=true; $('waiting-section').hidden=true;
   if(view.completed) {
@@ -117,7 +143,7 @@ function showView(view) {
   if(view.mode==='calculator') { els.calcSection.hidden=false; return; }
   if(paused){els.testSection.hidden=false;els.testTitle.textContent=view.test?.title||t('Test');els.testActions.hidden=true;return;}
   if(view.phase==='waiting') { $('waiting-section').hidden=false; return; }
-  els.testSection.hidden=false; els.testTitle.textContent=view.test?.title || t('Test'); els.testActions.hidden=false; els.testDone.hidden=true;
+  els.testSection.hidden=false; els.testTitle.textContent=view.test?.title || (recovery&&renderedTest?els.testTitle.textContent:t('Test')); els.testActions.hidden=false; els.testDone.hidden=true;
 
   if(view.test && !renderedTest) {
     renderedTest=true; testAnswers={...view.draft};
@@ -165,11 +191,11 @@ function renderTestQuestions(questions) {
     const options=document.createElement('div'); options.className='tq-options';
     if(q.type==='blank'||q.type==='short') {
       const input=document.createElement(q.type==='short'?'textarea':'input');if(q.type==='short')input.rows=4;else input.type='text';input.className=q.type==='short'?'blank-answer short-answer':'blank-answer';input.maxLength=q.type==='short'?2000:300;input.setAttribute('aria-label',t('Answer to question {number}',{number:i+1}));input.autocomplete='off';input.value=testAnswers[q.id]||'';input.disabled=currentView?.flow?.lockedIds?.includes(q.id)||false;
-      input.oninput=()=> { testAnswers[q.id]=input.value;if(input.value.trim())lastAnsweredQuestion=q.id;updateVersion++;saveDraft();clearTimeout(draftTimer);draftTimer=setTimeout(uploadDraft,400); };options.append(input);
+      input.oninput=()=> { if(reconnectLocked(currentView))return;testAnswers[q.id]=input.value;if(input.value.trim())lastAnsweredQuestion=q.id;updateVersion++;saveDraft();clearTimeout(draftTimer);draftTimer=setTimeout(uploadDraft,400); };options.append(input);
     }
     (q.options||[]).forEach((o,j)=> {
       const label=document.createElement('label');label.className='tq-option';const radio=document.createElement('input');radio.type='radio';radio.name=q.id;radio.value=o.id;radio.checked=testAnswers[q.id]===o.id;radio.disabled=currentView?.flow?.lockedIds?.includes(q.id)||false;
-      radio.onchange=()=> { testAnswers[q.id]=o.id;lastAnsweredQuestion=q.id; updateVersion++;saveDraft();clearTimeout(draftTimer);draftTimer=setTimeout(uploadDraft,400); };
+      radio.onchange=()=> { if(reconnectLocked(currentView))return;testAnswers[q.id]=o.id;lastAnsweredQuestion=q.id; updateVersion++;saveDraft();clearTimeout(draftTimer);draftTimer=setTimeout(uploadDraft,400); };
       const letter=document.createElement('span');letter.className='tq-opt-letter';letter.textContent=String.fromCharCode(65+j);
       const text=document.createElement('span');text.className='tq-opt-text';text.textContent=o.text;label.append(radio,letter,text);appendQuestionImage(text,o.image);options.append(label);
     });card.append(options);if(currentView?.flow?.type==='free'&&currentView.flow.onlyOneAttempt&&!currentView.flow.lockedIds.includes(q.id)){const lock=document.createElement('button');lock.type='button';lock.className='question-commit';lock.textContent=t('Submit answer');lock.onclick=()=>commitQuestion(q.id,lock);card.append(lock);}els.testQuestions.append(card);
@@ -193,25 +219,25 @@ function renderDeliveryControls(view){
 }
 let lastAnsweredQuestion=null;
 async function uploadDraft() {
-  if(!joined || currentView?.failed || currentView?.result || currentView?.phase!=='running' || currentView?.mode!=='test') return;
+  if(!joined || currentView?.failed || reconnectLocked(currentView) || currentView?.result || currentView?.phase!=='running' || currentView?.mode!=='test') return;
   if(!socket.connected)return;
   const version=updateVersion;const res=await emit('student:draft',{answers:testAnswers,questionId:lastAnsweredQuestion});
-  if(currentView?.result||currentView?.terminal)return;
+  if(currentView?.result||currentView?.terminal||reconnectLocked(currentView))return;
   if(!res.ok && version===updateVersion) message(res.timedOut?t('Answers are saved on this device. Waiting to sync…'):res.error);
   else if(res.ok && version===updateVersion && !currentView?.failed) message(t('Answers saved.'));
 }
 els.testSubmitBtn.onclick=()=> {
- if(submitting||currentView?.failed||currentView?.result||currentView?.phase!=='running')return;
+ if(submitting||currentView?.failed||reconnectLocked(currentView)||currentView?.result||currentView?.phase!=='running')return;
  const unanswered=currentView.test.questions.map((q,i)=>testAnswers[q.id]?.trim()?null:i+1).filter(n=>n!==null);
  $('submit-warning').textContent=unanswered.length?t(unanswered.length===1?'You have {count} unanswered question ({numbers}). Unanswered questions receive zero points. Submit anyway?':'You have {count} unanswered questions ({numbers}). Unanswered questions receive zero points. Submit anyway?',{count:unanswered.length,numbers:unanswered.join(', ')}):'';
  $('submit-dialog').showModal();
 };
 $('submit-review').onclick=()=> $('submit-dialog').close();
 $('submit-confirm').onclick=async()=>{
- if(submitting||currentView?.failed||currentView?.result||currentView?.phase!=='running')return;
+ if(submitting||currentView?.failed||reconnectLocked(currentView)||currentView?.result||currentView?.phase!=='running')return;
  submitting=true;els.testSubmitBtn.disabled=true;$('submit-confirm').disabled=true;clearTimeout(draftTimer);
  const res=await emit('student:submit',{answers:testAnswers});
- submitting=false;els.testSubmitBtn.disabled=false;$('submit-confirm').disabled=false;
+ submitting=false;els.testSubmitBtn.disabled=reconnectLocked(currentView);$('submit-confirm').disabled=false;
  if(res.ok){$('submit-dialog').close();message('');showView(res.view);}else{if(res.view)showView(res.view);message(res.error);}
 };
 let timerSnapshot=null,extensionNoticeUntil=0,timerSyncing=false;
@@ -222,7 +248,7 @@ function updateTimer(){
  $('time-left').textContent=remaining<=10?String(remaining):`${Math.floor(remaining/60)}:${String(remaining%60).padStart(2,'0')}`;$('test-timer').classList.toggle('critical',remaining<=10);
  if(performance.now()>extensionNoticeUntil)$('time-notice').textContent=remaining===0?t('Time is up. Submitting your saved answers…'):remaining<=10?t('Submitting automatically in {seconds} seconds.',{seconds:remaining}):remaining<=60?t('One minute or less remains.'):'';
  if(remaining===0){els.testQuestions.inert=true;els.testSubmitBtn.disabled=true;if(socket.connected&&!timerSyncing){timerSyncing=true;emit('student:sync',{}).then(r=>{timerSyncing=false;if(r.view)showView(r.view);});}}
- else{els.testQuestions.inert=!!currentView?.failed;els.testSubmitBtn.disabled=submitting;}
+ else{const blocked=!!currentView?.failed||reconnectLocked(currentView);els.testQuestions.inert=blocked;els.testSubmitBtn.disabled=submitting||blocked;}
 }
 setInterval(updateTimer,250);
 async function visibility() { if(!joined || currentView?.result || currentView?.phase==='ended' || !socket.connected) return; const res=await emit('student:visibility',{visible:!document.hidden}); if(res.view)showView(res.view);if(!res.ok && !res.timedOut && !currentView?.terminal) message(res.error); }

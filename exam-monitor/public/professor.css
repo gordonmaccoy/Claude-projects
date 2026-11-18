@@ -261,3 +261,7 @@ select,textarea{font:inherit;background:#fff;color:#223c31;border:1px solid #c5c
  #result-sessions>.result-session-card{width:100%;margin:0;padding:18px}
  #result-sessions[data-layout=list]>.result-session-card{width:100%;padding:16px}
 }
+
+.pill.reconnect-pill{display:inline-block;margin:2px 4px 2px 0;background:#fff0d3;border:1px solid #ddb978;color:#5c390a}
+
+#session-fail-control{display:flex;flex-direction:column;gap:6px;max-width:245px}#session-fail-control .privacy-switch{margin:0;white-space:nowrap}#session-fail-hint{font-size:12px;color:var(--muted,#526574);line-height:1.4}#session-fail-toggle:disabled~.switch-track{opacity:.5}#session-main-controls{flex-wrap:wrap}

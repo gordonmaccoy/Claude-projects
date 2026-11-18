@@ -42,3 +42,6 @@
 [data-theme=dark] .class-activity-switch input:checked+.class-switch-track::after{background:#0758cb}
 
 .student .student-fullscreen{color:#fff;font-size:13px;font-weight:600;white-space:nowrap;margin-left:auto}
+
+.student.reconnect{background:#423323;border-color:#c9a765;color:#ffdf9f}
+.student .student-reconnect-label{color:#ffdf9f;max-width:12ch;font-size:12px;font-weight:750;line-height:1.15;text-align:right;overflow-wrap:anywhere}

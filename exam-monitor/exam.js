@@ -96,6 +96,29 @@ function student(s, id) {
   return st;
 }
 function isFailed(st) { return st.failedAt !== null && st.overrideAt === null; }
+// Re-entry permission is independent of grading and of the five-second FAIL rule.
+function recoveryEligible(s,st) {return s.mode==='test'&&effectiveSecurity(s).enabled&&['running','paused'].includes(s.phase)&&!st.submission&&!st.completedAt;}
+function recoveryLocked(s,st) {return recoveryEligible(s,st)&&st.reconnectLockedAt!=null;}
+function recoveryState(s,st) {return recoveryLocked(s,st)?(st.connectionId?'awaiting-unlock':'offline'):null;}
+function disconnectStudent(s,id,connectionId,now=Date.now()) {
+ const st=student(s,id);
+ if(st.connectionId!==connectionId)return;
+ st.connectionId=null;
+ if(recoveryEligible(s,st)&&s.phase==='running'&&st.disconnectSince==null)st.disconnectSince=now;
+}
+function connectStudent(s,id,connectionId,now=Date.now()) {
+ sweep(s,now); // Settle elapsed grace before clearing the disconnect marker.
+ const st=student(s,id);st.connectionId=connectionId;st.disconnectSince=null;
+}
+function unlockReconnect(s,id,ownerId,now=Date.now()) {
+ if(s.ownerId!==ownerId)throw new Error('Session not found');
+ sweep(s,now);
+ const st=student(s,id);
+ if(!recoveryLocked(s,st))throw new Error('Student has no active reconnect lock');
+ if(!st.connectionId)throw new Error('Wait for the student to reconnect');
+ st.reconnectLockedAt=null;st.disconnectSince=null;
+ recordMonitoring(st,{type:'reconnect-unlocked',at:now,professorId:ownerId});
+}
 function shuffle(order){for(let i=order.length-1;i>0;i--){const j=randomInt(i+1);[order[i],order[j]]=[order[j],order[i]];}}
 function recordMonitoring(st,event){if(st.events.length<1000)st.events.push(event);}
 function sweep(s, now = Date.now()) {
@@ -109,11 +132,31 @@ function sweep(s, now = Date.now()) {
       changed = true;
     }
   }
+  for(const st of s.students) {
+    if(recoveryEligible(s,st)&&st.disconnectSince!=null&&st.reconnectLockedAt==null&&cutoff-st.disconnectSince>=10000) {
+      st.reconnectLockedAt=st.disconnectSince+10000;
+      recordMonitoring(st,{type:'reconnect-locked',at:st.reconnectLockedAt});changed=true;
+    }
+  }
   if(s.deadlineAt && now>=s.deadlineAt){
     for(const st of s.students)if(!st.submission){const answers=validateAnswers(s,st.draft||{});st.submission={answers,originalScore:scoreAnswers(s.test,answers),submittedAt:s.deadlineAt,autoSubmitted:true};st.draft={};if(effectiveSecurity(s).enabled)st.events.push({type:'time-expired',at:s.deadlineAt});}
     s.phase='ended';s.endedAt=s.deadlineAt;grading.prepare(s);changed=true;
   }
   return changed;
+}
+// Change only the automatic hidden-page failure rule, never the master policy.
+function setInactivityFail(s,ownerId,enabled,now=Date.now()) {
+ if(s.ownerId!==ownerId)throw Object.assign(new Error('Session not found'),{status:404});
+ if(typeof enabled!=='boolean')throw Object.assign(new Error('FAIL setting must be a boolean'),{status:400});
+ if(s.mode!=='test')throw Object.assign(new Error('Only test sessions have this control'),{status:409});
+ if(enabled&&!effectiveSecurity(s).enabled)throw Object.assign(new Error('Monitoring is disabled for this session'),{status:409});
+ // Settle time already spent under the prior policy and commit timer expiry.
+ sweep(s,now);
+ if(!['waiting','running','paused'].includes(s.phase))throw Object.assign(new Error('Session has ended'),{status:409});
+ if(effectiveSecurity(s).inactivityFail===enabled)return;
+ s.security={...(s.security||effectiveSecurity(s)),inactivityFail:enabled};
+ s.inactivityFailVersion=(s.inactivityFailVersion||0)+1;
+ for(const st of s.students)st.hiddenSince=enabled&&s.phase==='running'&&!st.visible&&!st.completedAt&&!st.submission&&!isFailed(st)?now:null;
 }
 function pause(s,ownerId,now=Date.now()) {
  if(s.ownerId!==ownerId)throw new Error('Session not found');
@@ -121,13 +164,13 @@ function pause(s,ownerId,now=Date.now()) {
  if(s.mode!=='test'||s.phase!=='running')throw new Error('Test is not running');
  s.remainingMs=s.deadlineAt==null?null:Math.max(0,s.deadlineAt-now);
  s.deadlineAt=null;s.phase='paused';s.pausedAt=now;
- for(const st of s.students)st.hiddenSince=null;
+ for(const st of s.students){st.hiddenSince=null;st.disconnectSince=null;}
 }
 function resume(s,ownerId,now=Date.now()) {
  if(s.ownerId!==ownerId)throw new Error('Session not found');
  if(s.mode!=='test'||s.phase!=='paused')throw new Error('Test is not paused');
  s.phase='running';s.deadlineAt=s.remainingMs==null?null:now+s.remainingMs;s.remainingMs=null;s.pausedAt=null;
- for(const st of s.students){st.hiddenSince=!effectiveSecurity(s).inactivityFail||st.visible||st.submission||isFailed(st)?null:now;st.focused=true;}
+ for(const st of s.students){if(recoveryEligible(s,st)&&st.connectionId===null)st.disconnectSince=now;st.hiddenSince=!effectiveSecurity(s).inactivityFail||st.visible||st.submission||isFailed(st)?null:now;st.focused=true;}
 }
 function remainingTime(s,now=Date.now()){return s.phase==='paused'?s.remainingMs??null:s.deadlineAt?Math.max(0,s.deadlineAt-now):null;}
 function extend(s,ownerId,minutes=1,now=Date.now()){
@@ -229,7 +272,7 @@ function submit(s, id, answers, now = Date.now()) {
   const valid = delivery.mergedAnswers(s,st,answers);
   if(delivery.sequential(s)&&!delivery.flow(s,st).readyToSubmit)throw Error('Complete the questions before submitting');
   sweep(s, now);
-  if (isFailed(st)) throw new Error('Call professor: activity is locked');
+  if (isFailed(st)||recoveryLocked(s,st)) throw new Error('Call professor: activity is locked');
   st.submission = { answers: valid, originalScore: scoreAnswers(s.test, valid), submittedAt: now };
   st.draft = {};grading.prepare(s);
   return result(s, st);
@@ -237,7 +280,7 @@ function submit(s, id, answers, now = Date.now()) {
 function end(s,now=Date.now()){sweep(s,now);for(const st of s.students){if(st.submission)continue;const answers=validateAnswers(s,st.draft||{});st.submission={answers,originalScore:scoreAnswers(s.test,answers),submittedAt:now,autoSubmitted:true};st.draft={};}s.phase='ended';s.endedAt=now;grading.prepare(s);}
 function progress(s,id,questionId) {
  const st=student(s,id);
- if(s.mode!=='test'||s.phase!=='running'||st.submission||isFailed(st))throw new Error('Invalid progress state');
+ if(s.mode!=='test'||s.phase!=='running'||st.submission||isFailed(st)||recoveryLocked(s,st))throw new Error('Invalid progress state');
  if(typeof questionId!=='string'||!s.test.questions.some(q=>q.id===questionId)||typeof st.draft?.[questionId]!=='string'||!st.draft[questionId].trim())throw new Error('Invalid answered question');
  st.progressQuestionId=questionId;
 }
@@ -258,20 +301,21 @@ function override(s, id, professorId, reason, now = Date.now()) {
   if(!st.submission && s.phase!=='running')throw new Error('Session ended; continuation is unavailable');
   if (typeof reason !== 'string' || !reason.trim() || reason.length > 500) throw new Error('Override reason required (maximum 500 characters)');
   st.overrideAt = now;
+  if(recoveryLocked(s,st)&&st.connectionId){st.reconnectLockedAt=null;st.disconnectSince=null;}
   // Forgive the existing interval; any later hidden transition can create a new incident.
   st.hiddenSince = null;
   st.events.push({ type: 'override', at: now, professorId, reason: reason.trim() });
 }
-function status(st, now,s) { if(st.completedAt)return 'completed'; if(st.submission) return isFailed(st)?'red':'green';const security=effectiveSecurity(s);if(!security.enabled)return 'green';return isFailed(st)||(security.tabVisibility&&!st.visible)||(security.focusVisibility&&st.focused===false)?'red':'green'; }
+function status(st, now,s) { if(st.completedAt)return 'completed'; if(st.submission) return isFailed(st)?'red':'green';const security=effectiveSecurity(s);if(!security.enabled)return 'green';return recoveryLocked(s,st)||isFailed(st)||(security.tabVisibility&&!st.visible)||(security.focusVisibility&&st.focused===false)?'red':'green'; }
 function publicView(s, now = Date.now()) {
   return { roomName:s.roomName||null,title: s.resultTitle || s.test?.title || 'Classroom calculator', language:s.language??'en', phase: s.phase,remainingMs:remainingTime(s,now),calculator:s.mode==='calculator'&&!s.resultTitle,deadlineAt:s.deadlineAt||null,
-    students: s.students.map(st => ({ name: st.name, fullscreen:effectiveSecurity(s).fullscreen&&st.fullscreen===true, submitted:Boolean(st.submission||st.completedAt),status: isFailed(st)?'failed':st.completedAt?'completed':st.submission?'submitted':status(st,now,s) })) };
+    students: s.students.map(st => ({ name: st.name, recoveryState:recoveryState(s,st), fullscreen:effectiveSecurity(s).fullscreen&&st.fullscreen===true, submitted:Boolean(st.submission||st.completedAt),status: isFailed(st)?'failed':st.completedAt?'completed':st.submission?'submitted':status(st,now,s) })) };
 }
 function privateView(s, now = Date.now()) {
-  return { folderId:s.test?.folderId||null,onlyOneAttempt:!!s.onlyOneAttempt,immediateFeedback:!!s.immediateFeedback,showCorrections:s.showCorrections===true, id: s.id, deliveryType:delivery.type(s),requireStudentNumber:s.requireStudentNumber!==false,teacherQuestion:s.teacherQuestion||0,questionCount:s.test?.questions.length||0, security:effectiveSecurity(s),roomName:s.roomName||null,mode: s.mode, language:s.language??'en', title: s.resultTitle || s.test?.title || 'Classroom calculator', phase: s.phase,
+  return { folderId:s.test?.folderId||null,onlyOneAttempt:!!s.onlyOneAttempt,immediateFeedback:!!s.immediateFeedback,showCorrections:s.showCorrections===true, id: s.id, deliveryType:delivery.type(s),requireStudentNumber:s.requireStudentNumber!==false,teacherQuestion:s.teacherQuestion||0,questionCount:s.test?.questions.length||0, inactivityFailVersion:s.inactivityFailVersion||0, security:effectiveSecurity(s),roomName:s.roomName||null,mode: s.mode, language:s.language??'en', title: s.resultTitle || s.test?.title || 'Classroom calculator', phase: s.phase,
     remainingMs:remainingTime(s,now),durationMinutes:s.durationMinutes||0,deadlineAt:s.deadlineAt||null,showScores:s.showScores!==false,shuffleAnswers:effectiveSecurity(s).enabled&&!!s.shuffleAnswers,extensionVersion:s.extensionVersion||0,
     createdAt: s.createdAt, startedAt: s.startedAt, endedAt: s.endedAt, displayToken: s.displayToken,
-    students: s.students.map(st => ({ id: st.id, number: st.number, name: st.name, status: status(st, now,s),
+    students: s.students.map(st => ({ id: st.id, number: st.number, name: st.name, recoveryState:recoveryState(s,st), status: status(st, now,s),
       failed: isFailed(st), completed:Boolean(st.completedAt), result: result(s, st), events: st.events,
       finalized:Boolean(st.submission?.professorFinalized),
       progress:s.mode==='test'?{question:Math.max(0,(st.questionOrder||s.test.questions.map(q=>q.id)).indexOf(st.progressQuestionId)+1),answered:s.test.questions.filter(q=>{const a=(st.submission?.answers||st.draft||{})[q.id];return typeof a==='string'&&a.trim();}).length,total:s.test.questions.length}:null,
@@ -279,12 +323,12 @@ function privateView(s, now = Date.now()) {
 }
 function studentView(s, st) {
   const internal=result(s,st);const final=internal?{score:internal.score,total:internal.total,percentage:internal.percentage,failed:internal.failed,pending:internal.pending,submittedAt:internal.submittedAt}:null;
-  return { ...(s.test?{flow:delivery.flow(s,st)}:{}),requireStudentNumber:s.requireStudentNumber!==false,security:effectiveSecurity(s),phase: s.phase, remainingMs:remainingTime(s), mode: s.mode, language:s.language??'en', name: st.name, failed: isFailed(st), completed:Boolean(st.completedAt),terminal:Boolean(st.completedAt||st.submission?.professorFinalized),deadlineAt:s.deadlineAt||null,extensionVersion:s.extensionVersion||0,lastExtension:s.lastExtension?{minutes:s.lastExtension.minutes}:null,
-    test: s.test && s.phase === 'running' && !st.submission ? { title: s.resultTitle || s.test.title,
+  return { recoveryLocked:recoveryLocked(s,st),...(s.test?{flow:delivery.flow(s,st)}:{}),requireStudentNumber:s.requireStudentNumber!==false,security:effectiveSecurity(s),phase: s.phase, remainingMs:remainingTime(s), mode: s.mode, language:s.language??'en', name: st.name, failed: isFailed(st), completed:Boolean(st.completedAt),terminal:Boolean(st.completedAt||st.submission?.professorFinalized),deadlineAt:s.deadlineAt||null,extensionVersion:s.extensionVersion||0,lastExtension:s.lastExtension?{minutes:s.lastExtension.minutes}:null,
+    test: s.test && s.phase === 'running' && !st.submission && !recoveryLocked(s,st) ? { title: s.resultTitle || s.test.title,
       questions: delivery.visibleQuestions(s,st).map(id=>s.test.questions.find(q=>q.id===id)).map(q => ({ id: q.id, type:q.type || 'mc', points:q.points??1,text: q.text, ...(q.image?{image:q.image}:{}), ...(grading.textQuestion(q) ? {} : {options:st.optionOrder?.[q.id]?st.optionOrder[q.id].map(id=>q.options.find(o=>o.id===id)):q.options}) })) } : null,
     ...(final && !final.failed && s.showCorrections===true?{corrections:incorrectAnswers(s,st)}:{}),
     draft: st.submission ? {} : st.draft, result:final && s.showScores===false?{hidden:true,failed:final.failed,submittedAt:final.submittedAt}:final };
 }
-module.exports = { ...delivery,validateTest, newSession, join, student, start, sweep, visibility, submit, override,
-  end,result,correctAnswer,pause,resume,launchOptions,securityEvent,detailedResults,completeCalculator,totalPoints,extend,finalizeFail, progress, scoreAnswers, validateAnswers, publicView, privateView, studentView, hash, isFailed };
+module.exports = { ...delivery,recoveryLocked,connectStudent,disconnectStudent,unlockReconnect,validateTest, newSession, join, student, start, sweep, visibility, submit, override,
+  end,result,correctAnswer,pause,resume,launchOptions,securityEvent,detailedResults,completeCalculator,totalPoints,extend,finalizeFail, setInactivityFail, progress, scoreAnswers, validateAnswers, publicView, privateView, studentView, hash, isFailed };
 

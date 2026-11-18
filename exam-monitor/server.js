@@ -244,7 +244,25 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, admin
     });
     res.json({ ok: true });
   }));
+  api.post('/sessions/:id/inactivity-fail',wrap(async(req,res)=>{
+    await owned(req.params.id,req.user);
+    const {session,result}=await store.mutate(req.params.id,s=>{
+      // Catch domain validation so a deadline settled inside it remains durable.
+      try{exam.setInactivityFail(s,req.user.id,req.body?.enabled);return null;}
+      catch(error){if(![400,404,409].includes(error.status))throw error;return {error:error.message,status:error.status};}
+    });
+    await broadcast(session);
+    if(result?.error)return res.status(result.status).json({error:result.error});
+    res.json(await decorate(session,req));
+  }));
   api.post('/sessions/:id/extend',wrap(async(req,res)=>{await owned(req.params.id,req.user);const {session,result}=await store.mutate(req.params.id,s=>{try{exam.extend(s,req.user.id,1);return null;}catch(e){return {error:e.message};}});await broadcast(session);if(result?.error)return res.status(409).json({error:result.error});res.json(await decorate(session,req));}));
+  api.post('/sessions/:id/unlock-reconnect',wrap(async(req,res)=>{
+    await owned(req.params.id,req.user);
+    const {session,result}=await store.mutate(req.params.id,s=>{try{exam.unlockReconnect(s,req.body.studentId,req.user.id);return null;}catch(e){return {error:e.message};}});
+    await broadcast(session);
+    if(result?.error)return res.status(409).json({error:result.error});
+    res.json(await decorate(session,req));
+  }));
   for (const action of ['start', 'pause', 'resume', 'end', 'override','finalize-fail','next-question']) api.post(`/sessions/:id/${action}`, wrap(async (req, res) => {
     await owned(req.params.id, req.user);
     const { session } = await store.mutate(req.params.id, s => {
@@ -338,13 +356,20 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, admin
       const { session, result } = await store.mutate(input.sessionId, s => {
         exam.sweep(s);
         let result;try{result=exam.join(s,input);}catch(e){return {joinError:e.message};}
-        exam.student(s, result.studentId).connectionId = socket.id;
+        exam.connectStudent(s,result.studentId,socket.id);
         return result;
       });
       if(result.joinError){await broadcast(session);throw new Error(result.joinError);}
       // A socket can only speak for its most recently authenticated enrollment.
       for (const room of socket.rooms) if (room.startsWith('student:')) socket.leave(room);
       socket.data.student = { sessionId: session.id, studentId: result.studentId };
+      // The connection can close while the enrollment transaction is awaiting IO,
+      // before disconnect has an authenticated identity to record.
+      if(!socket.connected) {
+        const {session:disconnected}=await store.mutate(session.id,s=>exam.disconnectStudent(s,result.studentId,socket.id));
+        await broadcast(disconnected);
+        return {...result,view:studentWireView(disconnected,exam.student(disconnected,result.studentId))};
+      }
       socket.join(`student:${session.id}:${result.studentId}`);
       await broadcast(session);
       return { ...result, view: studentWireView(session, exam.student(session, result.studentId)) };
@@ -359,7 +384,7 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, admin
         exam.sweep(s,now);
         if(s.phase==='ended')return {closed:true};
         if(exam.student(s,identity.studentId).submission?.professorFinalized)return {blocked:true};
-        if(!allowLocked && exam.isFailed(exam.student(s,identity.studentId))) return {blocked:true};
+        if(!allowLocked && (exam.isFailed(exam.student(s,identity.studentId))||exam.recoveryLocked(s,exam.student(s,identity.studentId)))) return {blocked:true};
         return fn(s, identity.studentId,now);
       });
       await broadcast(session);queueGrading(session);
@@ -381,8 +406,18 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, admin
     on('student:next-question',({questionId})=>studentMutation((s,id)=>exam.nextQuestion(s,id,questionId)));
     on('student:complete-calculator',()=>studentMutation((s,id,now)=>exam.completeCalculator(s,id,now)));
     on('student:submit', ({ answers }) => studentMutation((s, id, now) => exam.submit(s, id, answers,now)));
-    // Connection loss alone is not student activity and does not change monitoring status.
-
+    // Disconnection never ends an exam or constitutes confirmed hidden time.
+    // Sustained loss may require professor-approved re-entry, without changing grades.
+    socket.on('disconnect', async () => {
+      const identity = socket.data.student;
+      if (!identity) return;
+      try {
+        const { session } = await store.mutate(identity.sessionId, s => {
+          exam.disconnectStudent(s,identity.studentId,socket.id);
+        });
+        await broadcast(session);
+      } catch (error) { console.error('Unable to record disconnection:', error.message); }
+    });
   });
   let sweeping = false;
   async function tick() {

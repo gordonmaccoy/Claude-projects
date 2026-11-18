@@ -71,7 +71,7 @@ test('HTTP/socket exam flow enforces ownership, recovers after restart, sanitize
     const updated = once(publicSocket, 'display:update');
     await request(`/api/sessions/${sid}/start`, 'POST', {});
     const [pub] = await updated;
-    assert.deepEqual(Object.keys(pub.students[0]).sort(), ['fullscreen', 'name', 'status', 'submitted']);
+    assert.deepEqual(Object.keys(pub.students[0]).sort(), ['fullscreen', 'name', 'recoveryState', 'status', 'submitted']);
     assert.equal(pub.students[0].fullscreen,false,'public display reports no fullscreen until a student voluntarily enters it');
     assert.equal(JSON.stringify(pub).includes('0010'), false);
     const resumedView = (await emit(a, 'student:join', { sessionId: sid, resumeToken: joined.resumeToken })).view;

@@ -1,4 +1,11 @@
 window.examioKorean = {
+ "5-second FAIL":"5초 이탈 시 FAIL",
+ "Existing FAIL results stay unchanged.":"기존 FAIL 결과는 변경되지 않습니다.",
+ "Monitoring is off. Existing FAIL results stay unchanged.":"모니터링이 꺼져 있습니다. 기존 FAIL 결과는 변경되지 않습니다.",
+ "Monitoring is disabled for this session":"이 세션의 모니터링이 꺼져 있습니다",
+ "FAIL setting must be a boolean":"FAIL 설정은 켜기 또는 끄기로 지정해야 합니다",
+ "Only test sessions have this control":"이 기능은 시험 세션에서만 사용할 수 있습니다",
+ "Session has ended":"세션이 종료되었습니다",
  "Student activity displayed in real time":"학생 활동을 실시간으로 표시",
  "Student results recorded in real time":"학생 결과를 실시간으로 기록",
  "Leave off for a silly random name.":"끄면 재미있는 이름이 무작위로 생성됩니다.",
@@ -110,6 +117,7 @@ window.examioKorean = {
   "Connected": "연결됨",
   "Disconnected": "연결 끊김",
   "missing": "없음",
+  "Resuming your saved attempt…":"저장된 응시를 다시 연결하는 중…",
   "Still reconnecting…": "다시 연결하는 중…",
   "Reconnecting… Keep this page open.": "다시 연결하는 중입니다. 이 페이지를 열어 두세요.",
   "The connection timed out. Please try again.": "연결 시간이 초과되었습니다. 다시 시도해 주세요.",
@@ -623,3 +631,11 @@ Object.assign(window.examioKorean,{"Test settings":"시험 설정","Test type":"
 Object.assign(window.examioKorean,{"General settings":"일반 설정","Feedback":"피드백","Monitoring":"모니터링","Test time":"시험 시간","Elapsed test time":"총 경과 시간","Enabled":"사용","Disabled":"사용 안 함","Time from start to completion, including pauses.":"일시 정지 시간을 포함한 시작부터 완료까지의 시간입니다.","h":"시간","min":"분","sec":"초"});
 
 Object.assign(window.examioKorean,{"Launch":"시작","Library":"퀴즈","Results":"결과","Games":"게임"});
+
+Object.assign(window.examioKorean,{
+ "Logged out":"연결 끊김",
+ "Waiting for unlock":"잠금 해제 대기 중",
+ "Unlock reconnect":"재연결 잠금 해제",
+ "Ask your professor to unlock":"교수자에게 잠금 해제를 요청하세요",
+ "You reconnected after losing your connection. Your answers are kept. Stay on this page and ask your professor to let you continue.":"연결이 끊겼다가 다시 연결되었습니다. 입력한 답안은 보존됩니다. 이 페이지를 닫지 말고 교수자에게 계속 응시할 수 있도록 잠금 해제를 요청하세요."
+});

@@ -44,8 +44,26 @@ function render(view) {
   $('title').textContent=view.calculator?t('Classroom calculator'):view.title;
   $('phase').textContent=view.phase==='paused'?t('Test paused'):view.phase==='waiting'?t('Scan to join · Waiting for your professor to start'):view.phase==='ended'?t('Session ended'):t('Session in progress');
   const submitted=s=>s.submitted===true||['submitted','completed'].includes(s.status);
-  $('count').textContent=liveActivity?t('{joined} joined · {active} active · {completed} completed',{joined:view.students.length,active:view.students.filter(s=>s.status==='green').length,completed:view.students.filter(s=>s.status==='completed').length}):t('{joined} joined · {connected} connected · {submitted} submitted',{joined:view.students.length,connected:view.students.filter(s=>!submitted(s)).length,submitted:view.students.filter(submitted).length});
-  $('students').replaceChildren(...view.students.map(s=> {const state=liveActivity?s.status:submitted(s)?'submitted':'connected';const tile=document.createElement('div');tile.className=`student ${['submitted','completed'].includes(state)?'submitted':state==='failed'?'red failed':state==='red'?'red':''}`;const dot=document.createElement('span');dot.className='dot';const name=document.createElement('span');name.textContent=s.name;tile.append(dot,name);if(liveActivity&&state==='green'&&s.fullscreen===true){const badge=document.createElement('small');badge.className='student-fullscreen';badge.textContent=t('Full Screen');tile.append(badge);}if(!liveActivity||['failed','submitted','completed'].includes(state)){const status=document.createElement('small');status.textContent=!liveActivity?t(state==='submitted'?'Submitted':'Connected'):state==='failed'?t('FAIL'):state==='completed'?t('Completed and closed'):t('Test Submitted');tile.append(status);}return tile;}));
+  $('count').textContent=liveActivity?t('{joined} joined · {active} active · {completed} completed',{joined:view.students.length,active:view.students.filter(s=>s.status==='green'&&(view.calculator||!s.recoveryState)).length,completed:view.students.filter(s=>s.status==='completed').length}):t('{joined} joined · {connected} connected · {submitted} submitted',{joined:view.students.length,connected:view.students.filter(s=>!submitted(s)).length,submitted:view.students.filter(submitted).length});
+  $('students').replaceChildren(...view.students.map(s=>{
+    const state=liveActivity?s.status:submitted(s)?'submitted':'connected';
+    const recovery=liveActivity&&!view.calculator&&['running','paused'].includes(view.phase)&&!submitted(s)&&['offline','awaiting-unlock'].includes(s.recoveryState)?s.recoveryState:null;
+    const tile=document.createElement('div');
+    tile.className=`student ${state==='failed'?'red failed':recovery?'reconnect':['submitted','completed'].includes(state)?'submitted':state==='red'?'red':''}`;
+    const dot=document.createElement('span');dot.className='dot';
+    const name=document.createElement('span');name.textContent=s.name;tile.append(dot,name);
+    if(recovery){
+      const badge=document.createElement('small');badge.className='student-reconnect-label';
+      badge.textContent=t(recovery==='offline'?'Logged out':'Waiting for unlock');tile.append(badge);
+    }else if(liveActivity&&state==='green'&&s.fullscreen===true){
+      const badge=document.createElement('small');badge.className='student-fullscreen';badge.textContent=t('Full Screen');tile.append(badge);
+    }
+    if(!liveActivity||['failed','submitted','completed'].includes(state)){
+      const status=document.createElement('small');
+      status.textContent=!liveActivity?t(state==='submitted'?'Submitted':'Connected'):state==='failed'?t('FAIL'):state==='completed'?t('Completed and closed'):t('Test Submitted');tile.append(status);
+    }
+    return tile;
+  }));
 }
 socket.on('connect',()=> {
   if(!sessionId||!token) return $('connection').textContent=t('Launch a session from the professor workspace to open this display.');
