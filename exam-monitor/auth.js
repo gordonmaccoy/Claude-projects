@@ -14,7 +14,7 @@ function createVerifier(config) {
     if (typeof token !== 'string' || token.length > 12000) return null;
     const { data, error } = await client.auth.getUser(token);
     if (error || !data.user || data.user.is_anonymous || !data.user.email_confirmed_at) return null;
-    return { id: data.user.id, email: data.user.email };
+    return { id: data.user.id, email: data.user.email, emailVerified:!!data.user.email_confirmed_at, createdAt:data.user.created_at||null, providers:[...new Set((data.user.identities||[]).map(identity=>identity.provider).filter(provider=>['email','google'].includes(provider)))] };
   };
 }
 module.exports = { authConfig, createVerifier };

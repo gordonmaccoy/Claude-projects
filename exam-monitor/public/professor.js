@@ -51,7 +51,7 @@ async function api(route, method = 'GET', body) {
   return data;
 }
 const tour=window.createOnScreenTour(api);
-const settings=window.createOnScreenSettings({api,notify:notice,onClose:()=>tab(lastWorkspaceTab),onTakeTour:()=>$('take-tour').click(),onDeleted:async result=>{
+const settings=window.createOnScreenSettings({api,onResetPassword:async()=>{const {error}=await auth.auth.resetPasswordForEmail(account.email,{redirectTo:location.origin+'/professor.html'});if(error)throw error;},notify:notice,onClose:()=>tab(lastWorkspaceTab),onTakeTour:()=>$('take-tour').click(),onDeleted:async result=>{
   await auth.auth.signOut({scope:'local'});clearPrivateWorkspace();account=null;$('workspace').hidden=true;$('login').hidden=false;$('signout').hidden=true;
   $('auth-message').textContent=result.state==='deleted'?'Your account and Examio data have been deleted.':'Account deletion has started. You are signed out while it completes.';
 }});

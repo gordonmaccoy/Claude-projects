@@ -24,6 +24,11 @@ function createAccountStore(rawPool){
  }
  function contact(row){return row?{...row.data,id:row.id,status:row.status,createdAt:row.created_at}:null;}
  const methods={
+  async accountUsage(ownerId){return (await pool.query(`SELECT
+   (SELECT COUNT(*)::int FROM onscreen_v2_tests WHERE owner_id=$1 AND data->>'deletedAt' IS NULL) AS quizzes,
+   (SELECT COUNT(*)::int FROM onscreen_v2_games WHERE owner_id=$1 AND data->>'deletedAt' IS NULL) AS games,
+   (SELECT COUNT(*)::int FROM onscreen_v2_sessions WHERE owner_id=$1 AND data->>'phase'='ended' AND data->>'mode' IS DISTINCT FROM 'calculator' AND data->>'deletedAt' IS NULL) AS completed_quizzes,
+   (SELECT COUNT(*)::int FROM onscreen_v2_game_reports WHERE owner_id=$1) AS completed_games`,[ownerId])).rows[0];},
   async getAccount(ownerId){return withOwner(ownerId,account=>({...account}),{allowInactive:true});},
   async accountState(ownerId){return (await pool.query('SELECT state FROM onscreen_v2_accounts WHERE owner_id=$1',[ownerId])).rows[0]?.state||'active';},
   async saveProfile(ownerId,profile){return withOwner(ownerId,async account=>{const merged={...account.profile,...profile};if(account.profile.termsAcceptedAt){merged.termsAcceptedAt=account.profile.termsAcceptedAt;merged.termsVersion=account.profile.termsVersion;}await pool.query('UPDATE onscreen_v2_accounts SET profile=$2 WHERE owner_id=$1',[ownerId,JSON.stringify(merged)]);return merged;});},

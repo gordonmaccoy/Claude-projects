@@ -24,3 +24,14 @@ test('deletion blocks active sessions, freezes writes, survives provider failure
 });
 
 test('contact email reuses the configured Examio export sender',async()=>{const {createMailTransport}=require('../settings-service');let body;const send=createMailTransport({RESEND_API_KEY:'test',EXPORT_FROM:'Examio <support@examio.io>'},async(url,options)=>{body=JSON.parse(options.body);return {ok:true};});assert.equal(typeof send,'function');await send({id:'test',email:'professor@example.com',category:'question',subject:'Help',message:'Example'});assert.deepEqual(body.to,['support@examio.io']);assert.equal(body.from,'Examio <support@examio.io>');assert.match(body.subject,/^Examio/);});
+
+test('account usage excludes trash and calculator sessions and is owner scoped',async()=>{
+ const {db,pool,store}=await fixture();try{
+ for(const owner of ['a','b']){await store.saveProfile(owner,{firstName:owner});await store.saveTest(owner,{id:owner+'quiz',title:'Quiz',questions:[]});await store.createSession({id:owner+'complete',ownerId:owner,phase:'ended',mode:'test',students:[]});}
+ await store.saveTest('a',{id:'trashquiz',title:'Deleted',questions:[],deletedAt:Date.now()});
+ await store.createSession({id:'calc',ownerId:'a',phase:'ended',mode:'calculator',students:[]});await store.createSession({id:'running',ownerId:'a',phase:'running',mode:'test',students:[]});
+ await pool.query('INSERT INTO onscreen_v2_games(id,owner_id,data) VALUES($1,$2,$3)',['game-a','a',JSON.stringify({title:'Game'})]);
+ await pool.query('INSERT INTO onscreen_v2_game_reports(id,owner_id,data,completed_at) VALUES($1,$2,$3,$4)',['report-a','a',JSON.stringify({title:'Report'}),Date.now()]);
+ assert.deepEqual(await store.accountUsage('a'),{quizzes:1,games:1,completed_quizzes:1,completed_games:1});assert.deepEqual(await store.accountUsage('b'),{quizzes:1,games:0,completed_quizzes:1,completed_games:0});
+ }finally{await db.close();}
+});
