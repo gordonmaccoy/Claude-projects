@@ -39,7 +39,7 @@ test('picker uses a six-column visible-page grid, small arrows, and defers initi
  const css=fs.readFileSync(require.resolve('../public/game-picker.css'),'utf8');
  assert.match(html,/id="avatar-prev"/);assert.match(html,/id="avatar-next"/);assert.match(html,/id="avatar-pages"[^>]*hidden/);
  assert.match(js,/GameAvatars\.ids\.slice\(start,end\)/);assert.match(css,/repeat\(6,minmax\(0,1fr\)\)/);
- assert.match(js,/GameAvatars\.thumbnail/);assert.match(js,/await join\(\);poll\(\);/);
+ assert.match(js,/GameAvatars\.setSprite\(img,avatar,\{small:true\}\)/);assert.match(js,/await join\(\);poll\(\);/);
 });
 test('valid game room name and simultaneous claims coexist with graded route',async t=>{
  const db=new PGlite();let q=Promise.resolve();
@@ -91,11 +91,11 @@ async function simulatePhone({record={},largeClass=true,requireNames=true,takenA
    addEventListener(k,fn){this[k]=fn;},showModal(){this.open=true;},close(){this.open=false;this.closeEvent?.();}};
  }
  const $=id=>{if(!elements.has(id)){const node=el();node.value='';if(id==='avatar-preview'){node.addEventListener=(k,fn)=>{node.closeEvent=fn;};}elements.set(id,node);}return elements.get(id);};
- const ids=Array.from({length:50},(_,i)=>avatarId(i+1));const src=fs.readFileSync(require.resolve('../public/game-player.js'),'utf8');
+ const src=fs.readFileSync(require.resolve('../public/game-player.js'),'utf8');
  await vm.runInNewContext(src,{URLSearchParams,location:{search:'?session=room'},history:{replaceState(){}},document:{createElement:el,body:el()},localStorage:{setItem(){}},
   setTimeout(fn){timers.set(++sequence,fn);return sequence;},clearTimeout(id){timers.delete(id);},
   GameTeamPlayer:{updateLobby(){},selection(){return {};},show(){}},
-  GameAvatars:{ids,names:ids.map(x=>'Name '+x),thumbnail:x=>'thumb-'+x,feature:x=>'feature-'+x},
+  GameAvatars:require('../public/game-avatars.js'),
   GameClient:{$,status(){},resumeRecord:()=>({resumeToken:token(10),...record}),forgetExpiredSession:()=>false,isOlderView:()=>false,nextPollDelay:()=>1000,render(){},
    async json(path,body){calls.push([path,body]);if(path.endsWith('/lobby'))return lobby;if(path.endsWith('/join'))return onJoin?onJoin(body):{playerId:'p',view:{avatarId:body.avatarId}};if(path.endsWith('/recovery'))return onRecovery?onRecovery(body):{code:'SYNTHETIC'};return {avatarId:record.avatarId};}}
  });
@@ -107,7 +107,7 @@ test('phone pages lazily load 30 then 20 thumbnails and a mid-preview claim cann
  assert.equal($('avatar-pages').hidden,false);assert.equal($('avatar-prev').disabled,true);assert.equal($('avatar-range').textContent,'Characters 1–30 of 50');assert.equal($('avatar-page-label').textContent,'Page 1 of 2');
  $('avatar-next').onclick();assert.equal($('avatar-picker').children.length,20);assert.equal(images.length,50);assert.equal($('avatar-range').textContent,'Characters 31–50 of 50');assert.equal($('avatar-page-label').textContent,'Page 2 of 2');
  const first=$('avatar-picker').children[0];assert.equal(first.dataset.avatar,avatarId(31));
- first.onclick();assert.equal($('avatar-preview-image').src,'feature-'+avatarId(31));assert.equal($('avatar-preview-confirm').disabled,false);
+ first.onclick();assert.equal($('avatar-preview-image').src,'/game-avatars/'+avatarId(31)+'-celebrate.webp');assert.equal($('avatar-preview-confirm').disabled,false);
  phone.setLobby({largeClass:true,takenAvatarIds:[avatarId(31)],phase:'lobby'});await phone.poll();
  assert.equal($('avatar-preview-confirm').disabled,true);assert.equal(first.disabled,true);assert.equal(first.classList.contains('is-taken'),true);
  assert.match(first.getAttribute('aria-label'),/taken/);

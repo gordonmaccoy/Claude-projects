@@ -8,7 +8,7 @@ function fixture({reduced=false}={}){
   constructor(tag,text=''){
    this.tagName=tag;this._text=text;this.children=[];this.className='';this.dataset={};this.attributes={};this.styleValues={};
    this.style={setProperty:(key,value)=>{this.styleValues[key]=String(value);}};
-   this.classList={add:cls=>{this.className+=' '+cls;}};
+   this.classList={add:cls=>{this.className+=' '+cls;},remove:cls=>{this.className=this.className.split(' ').filter(x=>x!==cls).join(' ');}};
   }
   get textContent(){return this._text+this.children.map(n=>n.textContent).join('');}
   set textContent(text){this._text=String(text);this.children=[];}
@@ -35,8 +35,9 @@ function fixture({reduced=false}={}){
  stage.root=phase.root=score.root=true;
  const document={getElementById:id=>({stage,phase,score})[id],createElement:tag=>new Node(tag),createElementNS:(_,tag)=>new Node(tag)};
  const ctx={document,clearInterval(){},performance:{now:()=>tick},matchMedia:()=>({matches:reduced}),
-  requestAnimationFrame:fn=>pending.push(fn),GameAvatars:{image:()=>'/compact.gif',feature:()=>'/sharp.webp'}};
+  requestAnimationFrame:fn=>pending.push(fn)};
  ctx.window=ctx;
+ vm.runInNewContext(fs.readFileSync(require.resolve('../public/game-avatars'),'utf8'),ctx);
  vm.runInNewContext(fs.readFileSync(process.env.GAME_CLIENT_SOURCE||require.resolve('../public/game-client'),'utf8'),ctx);
  const at=now=>{tick=now;for(const fn of pending.splice(0))fn(tick);};
  return {stage,score,render:ctx.GameClient.render,at};
@@ -45,10 +46,10 @@ function fixture({reduced=false}={}){
 const common={id:'demo',phase:'leaderboard',questionCount:1,questionIndex:0,scoreStartsAt:2000,scoreEndsAt:3020};
 test('phone result and classroom total use the same animation timeline between poll arrivals',()=>{
  const phone=fixture(),projector=fixture(),answer=()=>{};
- phone.render({...common,phase:'reveal',serverNow:1500,score:0,answer:{correct:true,points:1000}},{answer});
+ phone.render({...common,phase:'reveal',serverNow:1500,score:0,avatarId:'avatar-02',answer:{correct:true,points:1000}},{answer});
  assert.match(phone.stage.textContent,/Correct!/);
  assert.doesNotMatch(phone.stage.textContent,/1,000|\+\d+ pts/);
- assert.equal(phone.stage.querySelector('.feature-avatar').src,'/sharp.webp');
+ assert.equal(phone.stage.querySelector('.feature-avatar').src,'/game-avatars/avatar-02-celebrate.webp');
  phone.at(3000);
  phone.render({...common,serverNow:2100,score:1000,rank:1,previousScore:0,answer:{correct:true,points:1000}},{answer});
  projector.at(3120);
@@ -92,7 +93,7 @@ test('podium participants reveal by tier and first place alone triggers confetti
  assert.equal(x.stage.querySelectorAll('.podium-person').length,2);
  x.render({...c,serverNow:9510,leaderboard:[row(1),row(2),row(3)]});
  assert.equal(x.stage.querySelectorAll('.podium-person').length,3);
- assert.equal(x.stage.querySelector('.podium-person').querySelector('img').src,'/sharp.webp');
+ assert.equal(x.stage.querySelector('.podium-person').querySelector('img').src,'/game-avatars/avatar-03-cutout.webp');
  assert.ok(x.stage.querySelector('.podium-confetti'));assert.ok(x.stage.querySelector('.winner-spotlight'));
  assert.equal(x.stage.querySelector('.rankings'),null);
  phone.render({...c,serverNow:9300,score:999},{answer});

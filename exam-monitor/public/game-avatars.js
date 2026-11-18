@@ -11,5 +11,21 @@
  function feature(id,{reducedMotion=prefersReducedMotion()}={}){
   const src=still(id);return reducedMotion?src:src.replace(/\.webp$/,'-feature.webp');
  }
- const api={ids,names,image,still,thumbnail,feature};if(typeof module!=='undefined'&&module.exports)module.exports=api;root.GameAvatars=api;
+ function celebration(id,{reducedMotion=prefersReducedMotion()}={}){
+  return !reducedMotion&&ids.includes(id)?still(id).replace(/\.webp$/,'-celebrate.webp'):null;
+ }
+ // Keep the legacy artwork packaged, but use only transparent sprites in live game views.
+ function setSprite(img,id,{celebrate=false,small=false}={}){
+  const fallback=still(id).replace(/\.webp$/,'-cutout.webp');
+  const src=(celebrate&&celebration(id))||(small?fallback.replace(/\.webp$/,'-thumb.webp'):fallback);
+  img.classList.remove('avatar-sprite-missing');
+  img.onerror=()=>{
+   if(img.getAttribute('src')!==fallback){img.src=fallback;return;}
+   img.onerror=null;
+   img.classList.add('avatar-sprite-missing');
+   img.removeAttribute('src');
+  };
+  img.src=src;
+ }
+ const api={ids,names,image,still,thumbnail,feature,celebration,setSprite};if(typeof module!=='undefined'&&module.exports)module.exports=api;root.GameAvatars=api;
 })(typeof window==='undefined'?globalThis:window);

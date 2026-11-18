@@ -107,9 +107,10 @@
   }
   function button(text,fn,cls=''){const b=el('button',text,cls);b.type='button';b.onclick=async()=>{b.disabled=true;try{await fn();}catch(e){status(e.message,true);}finally{b.disabled=false;}};return b;}
   function picture(src,alt='Question image'){if(typeof src!=='string'||!/^data:image\/(png|jpeg|webp);base64,/.test(src))return null;const img=el('img');img.src=src;img.alt=alt;img.className='question-image';return img;}
-  function avatar(id, cls='player-avatar') {
-    const img=el('img');img.src=cls.includes('feature-avatar')&&GameAvatars.feature ? GameAvatars.feature(id) : GameAvatars.image(id);img.alt='';img.className=cls;
-    img.decoding='async';return img;
+  function avatar(id, cls='player-avatar', celebrate=false) {
+    const img=el('img');img.alt='';img.className=cls;img.decoding='async';
+    GameAvatars.setSprite(img,id,{celebrate,small:!cls.includes('feature-avatar')});
+    return img;
   }
   function teamAvatar(row,cls='player-avatar'){
    if(!row.members)return avatar(row.avatarId,cls);
@@ -314,7 +315,7 @@
     const badge=el('span',undefined,'result-badge');badge.setAttribute('aria-hidden','true');
     const ns='http://www.w3.org/2000/svg',mark=document.createElementNS(ns,'svg'),stroke=document.createElementNS(ns,'path');
     mark.setAttribute('viewBox','0 0 24 24');stroke.setAttribute('d',icon);mark.append(stroke);badge.append(mark);
-    card.append(el('h2',caption),badge,avatar(view.avatarId,'player-avatar feature-avatar'));
+    card.append(el('h2',caption),badge,avatar(view.avatarId,'player-avatar feature-avatar',phase==='reveal'&&kind==='correct'));
     if(phase==='leaderboard'&&(view.scoreStartsAt==null||view.serverNow>=view.scoreStartsAt)){
       if(kind==='correct'&&Number.isFinite(view.answer?.points)){
         const earned=el('strong','+'+view.answer.points.toLocaleString()+' pts','result-detail round-earned');

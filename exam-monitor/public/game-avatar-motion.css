@@ -1,8 +1,8 @@
 /* Alive, not distracting: rigid-body motion preserves the character art and its
-   existing GIF/WebP expression frames. No extra images, timers, or layout work.
+   existing artwork. Do not add rigid motion on top of character celebrations.
    Load after the other Games stylesheets. */
 @media (prefers-reduced-motion: no-preference) {
-  :is(.player-avatar,.avatar-picker img,:where(#avatar-preview-image))[src*="/game-avatars/avatar-"] {
+  :is(.player-avatar,.avatar-picker img,:where(#avatar-preview-image))[src*="/game-avatars/avatar-"]:not([src$="-celebrate.webp"]) {
     --avatar-step: 1px;
     --avatar-lift: -2px;
     --avatar-tilt: 1.2deg;
