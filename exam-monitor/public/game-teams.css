@@ -9,3 +9,15 @@
 
 .game-player #play-area:has(>#player-team:not([hidden])){grid-template-rows:auto auto minmax(0,1fr)}
 .player-team:not([data-phase=lobby]){display:flex;align-items:center;justify-content:center;gap:6px 12px;flex-wrap:wrap;padding:6px 10px;margin:0;border-radius:10px;min-height:0}.player-team:not([data-phase=lobby]) h2{font-size:15px;margin:0}.player-team:not([data-phase=lobby])>.team-avatar{width:38px;height:38px;min-width:38px;padding:2px;gap:1px}.player-team:not([data-phase=lobby])>p{font-size:12px;margin:0}.player-team:not([data-phase=lobby])>p:first-of-type{display:none}
+/* Match the quiz delivery cards: native radios, generous targets, clear selection. */
+#launch-dialog .team-setup{border:0;padding:0;margin:24px 0}
+#launch-dialog .team-setup legend{font-size:20px;margin-bottom:14px}
+.game-mode-cards{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+#launch-dialog .game-mode-card{display:flex;flex-direction:row;align-items:flex-start;gap:10px;margin:0;padding:18px;border:2px solid var(--prof-line,#d4dfe9);border-radius:16px;cursor:pointer;background:var(--prof-surface,#fff);color:var(--prof-text,#102b42)}
+#launch-dialog .game-mode-card:has(input:checked){border-color:#0879ed;background:#edf6ff;color:#102b42}
+#launch-dialog .game-mode-card:focus-within{outline:3px solid #91c6ff;outline-offset:3px}
+#launch-dialog .game-mode-card input{width:21px;height:21px;flex:0 0 21px;margin:2px 0 0;accent-color:#0879ed;color-scheme:light}
+#launch-dialog .game-mode-card strong{display:block;font-size:18px;margin-bottom:9px}
+#launch-dialog .game-mode-card small{display:block;font-size:13px;font-weight:400;line-height:1.55;color:inherit;opacity:.85}
+#launch-team-options{margin-top:18px}
+@media(max-width:540px){.game-mode-cards{grid-template-columns:1fr}#launch-dialog .game-mode-card{padding:16px}}

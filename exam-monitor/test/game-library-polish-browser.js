@@ -90,6 +90,10 @@ const assert=require('node:assert/strict'),express=require('express'),{once}=req
   const large=page.locator('#launch-dialog #launch-large-class');
   assert.equal(await page.locator('#game-host-toolbar #launch-large-class').count(),0);
   await page.locator('.game-card .primary').first().click();
+  assert.equal(await page.locator('input[name=launch-game-mode][value=classic]').isChecked(),true);
+  await page.setViewportSize({width:390,height:844});await page.locator('#launch-dialog').screenshot({path:'output/game-launch-mode-cards.png'});assert.ok(await page.locator('#launch-dialog').evaluate(n=>n.scrollWidth<=n.clientWidth));await page.setViewportSize({width:1280,height:900});
+  await page.locator('input[name=launch-game-mode][value=team]').check();assert.equal(await page.locator('#launch-team-options').isVisible(),true);
+  await page.locator('input[name=launch-game-mode][value=classic]').check();assert.equal(await page.locator('#launch-team-options').isVisible(),false);
   assert.equal(await large.isChecked(),false);await large.check();
   assert.equal(await page.locator('#launch-require-names').isChecked(),true);
   assert.equal(await page.locator('#launch-dialog #launch-large-class').count(),1);
