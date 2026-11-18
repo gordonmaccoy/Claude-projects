@@ -5,6 +5,8 @@ const {t}=window.examioLanguage;
 const $ = id => document.getElementById(id);
 const gameWorkspace=window.ExamioGameWorkspace.create($('game-workspace-frame'));
 const openGameTab=new URLSearchParams(location.search).get('tab')==='games';
+let openBetaFeedback=new URLSearchParams(location.search).get('feedback')==='beta';
+try{if(openBetaFeedback)sessionStorage.setItem('examio-beta-feedback','1');else openBetaFeedback=sessionStorage.getItem('examio-beta-feedback')==='1';}catch{}
 const els = { tbTitle: $('tb-title'), tbQuestions: $('tb-questions'), tbError: $('tb-error') };
 const socket = io();
 let resultViewVersion=0;
@@ -597,6 +599,7 @@ async function loadSignedInWorkspace() {
     try {
       const onboarding=await api('/onboarding','POST',{language:window.examioLanguage.current});
       await refresh(); await watch();
+      if(generation===accountGeneration&&openBetaFeedback){openBetaFeedback=false;try{sessionStorage.removeItem('examio-beta-feedback');}catch{}const clean=new URL(location.href);clean.searchParams.delete('feedback');history.replaceState(null,'',clean);await settings.open('beta');return;}
       if(generation===accountGeneration){let pending=null;try{pending=JSON.parse(sessionStorage.getItem('examio-drive-return')||'null');sessionStorage.removeItem('examio-drive-return');}catch{}if(pending&&pending.owner===account.id){historySession=await api('/sessions/'+encodeURIComponent(pending.session));tab('results');showResultSummary();renderResults();exportsController.open();notice(t('Google Drive connected. Choose Save to Drive to create your Google Sheet.'));}else tour.offer(onboarding);}
     } catch(e) { if(generation===accountGeneration)notice(e.message); }
   }catch(e){if(generation!==accountGeneration)return;settings.reset();account=null;$('login').hidden=false;$('workspace').hidden=true;$('signout').hidden=true;$('auth-message').textContent=e.message;}
