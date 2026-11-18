@@ -16,7 +16,7 @@ let accountGeneration = 0,creationVersion=0,professorTimerSnapshot=null;
 let lastWorkspaceTab = 'launch';
 let popupSessionId = null, openingDisplay = false, launching = false;
 function clearPrivateWorkspace() {
-  gameWorkspace.reset();if(shortGradeDialog.open)shortGradeDialog.close();shortGradeDialog.querySelector('form').reset();for(const el of shortGradeDialog.querySelectorAll('p'))el.textContent='';
+  gameWorkspace.reset();$('admin-link').hidden=true;if(shortGradeDialog.open)shortGradeDialog.close();shortGradeDialog.querySelector('form').reset();for(const el of shortGradeDialog.querySelectorAll('p'))el.textContent='';
   tab('launch');
   quizSharing.reset();
   closeCreation();exportsController.close();
@@ -591,7 +591,7 @@ async function loadSignedInWorkspace() {
     if(recoveringPassword)return;
     const authSession=(await auth.auth.getSession()).data.session;if(generation!==accountGeneration||sessionPreferences?.blocked||!authSession)return;
     if(registration&&await registration.resume(authSession))return;
-    settings.setAccount(verified);$('account-name').textContent=account.email;$('login').hidden=true;$('workspace').hidden=false;$('workspace-tabs').hidden=false;$('signout').hidden=false;
+    document.getElementById("admin-link").hidden=!verified.adminAllowed;settings.setAccount(verified);$('account-name').textContent=account.email;$('login').hidden=true;$('workspace').hidden=false;$('workspace-tabs').hidden=false;$('signout').hidden=false;
     if(openGameTab&&workspaceTab==='launch')tab('games');
     socket.connect();
     try {

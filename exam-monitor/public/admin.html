@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Examio · Administration</title><script src="/session-lifecycle.js"></script><link rel="stylesheet" href="/admin.css"></head>
+<body>
+<header><a class="brand" href="/"><img src="/landing/examio-mark.svg" width="36" height="36" alt=""><strong>Examio</strong><span>Admin</span></a><div class="header-actions"><a href="/professor.html">Workspace</a><button id="theme" aria-label="Switch color theme">◐</button><button id="signout" hidden>Sign out</button></div></header>
+<main>
+<section id="login" class="login panel"><p class="eyebrow">OWNER ACCESS</p><h1>Welcome back.</h1><p>Sign in with your Examio owner account.</p><form id="login-form"><label>Email<input id="email" type="email" autocomplete="username" required></label><label>Password<input id="password" type="password" autocomplete="current-password" required></label><button class="primary" id="login-submit">Sign in</button></form><p id="login-message" role="status"></p><p class="muted">New owner account or forgotten password? <a href="/professor.html">Create or recover your Examio login</a>, then return here.</p></section>
+<section id="dashboard" hidden>
+<div class="heading"><div><p class="eyebrow">EXAMIO ADMINISTRATION</p><h1>Your testing community.</h1><p class="muted">Free beta · payments are not enabled</p></div><button id="refresh">Refresh</button></div>
+<nav aria-label="Admin sections"><button data-view="overview" aria-current="page">Overview</button><button data-view="accounts">Accounts</button><button data-view="support">Support inbox</button><button data-view="plans">Plans</button><button data-view="audit">Activity</button></nav>
+<p id="message" role="status" aria-live="polite"></p>
+<div id="filters" class="filters" hidden><form id="search-form"><label for="search">Find an account</label><div class="search-row"><input id="search" type="search" maxlength="120" placeholder="Name, email or institution"><button>Search</button></div></form><label id="support-filter" hidden>Status<select id="request-state"><option value="">All requests</option><option value="open">Open</option><option value="in_progress">In progress</option><option value="resolved">Resolved</option></select></label></div>
+<div id="content" aria-live="polite"></div>
+<div id="pagination" class="pagination" hidden><button id="previous">← Previous</button><span id="page-label"></span><button id="next">Next →</button></div>
+</section>
+</main><script src="/auth-client.js"></script><script src="/session-preferences.js"></script><script src="/admin.js"></script></body></html>

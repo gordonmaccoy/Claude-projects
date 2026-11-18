@@ -4,7 +4,7 @@ const fs=require('node:fs');
 const read=name=>fs.readFileSync(require.resolve('../public/'+name),'utf8');
 test('professor Game Library is a dashboard tab, not a navigation link',()=>{
  const html=read('professor.html');
- assert.match(html,/<button[^>]*data-tab="games"[^>]*>Game Library<\/button>/);
+ assert.match(html,/<button[^>]*data-tab="games"[^>]*aria-label="Game Library"/);
  assert.match(html,/<section id="games" class="tab" hidden[^>]*>\s*<iframe id="game-workspace-frame" title="Game Library"/);
  assert.doesNotMatch(html,/<a[^>]*href="\/game-library\.html"[^>]*>Game Library<\/a>/);
  const js=read('professor.js');

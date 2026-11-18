@@ -15,8 +15,9 @@ const {extractDocument,parseTest,MAX_BYTES,MAX_TEXT}=require('./documents');
 const {createGenerator}=require('./generation');
 const {createAIImporter,createAnswerCompleter}=require('./answer-key');
 
-function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweepInterval = 1000, generate=createGenerator(), completeAnswers=createAnswerCompleter(),importWithAI=createAIImporter(), aiConfigured=Boolean(process.env.OPENAI_API_KEY && process.env.OPENAI_MODEL), exportEmailOptions={}, gradeShortAnswer=require('./short-answer-ai').createShortAnswerGrader() }) {
-  const settingsController=require('./settings-routes').createSettingsController({store,config,...settingsOptions});
+function createApp({ store, verifyUser, config = {}, settingsOptions = {}, adminOptions = {}, sweepInterval = 1000, generate=createGenerator(), completeAnswers=createAnswerCompleter(),importWithAI=createAIImporter(), aiConfigured=Boolean(process.env.OPENAI_API_KEY && process.env.OPENAI_MODEL), exportEmailOptions={}, gradeShortAnswer=require('./short-answer-ai').createShortAnswerGrader() }) {
+  const adminController=require('./admin-routes').createAdminController({store,...adminOptions});
+  const settingsController=require('./settings-routes').createSettingsController({store,config,adminAllowed:adminController.allowed,...settingsOptions});
   const exportMailer=createExportMailer(exportEmailOptions);
   const app = express();
   const server = http.createServer(app);
@@ -54,6 +55,7 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
     const state=await store.accountState(req.user.id);
     if(state!=='active'&&!((req.method==='GET'&&req.path==='/settings')||(req.method==='DELETE'&&req.path==='/account')))return res.status(423).json({error:'Account deletion is in progress or complete.'});
     if(state==='active' && store.registerShareIdentity)await store.registerShareIdentity(req.user);
+    if(state==='active' && store.recordAccountActivity)await store.recordAccountActivity(req.user);
     // Continue only after remote identity validation, never from client claims.
     req.authenticated = true;
     next();
@@ -87,7 +89,8 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, sweep
   const queueGrading=s=>{if(s.gradingPending)void grader.process(s.id).catch(()=>console.error('Short-answer grading retry delayed'));};
   api.post('/sessions/:id/grade-override',wrap(async(req,res)=>{await owned(req.params.id,req.user);const {session}=await store.mutate(req.params.id,s=>require('./grading').override(s,req.body.studentId,req.body.questionId,req.user.id,req.body.points,req.body.reason));await broadcast(session);res.json(await decorate(session,req));}));
   api.use(settingsController.router);
-  api.get('/me', (req, res) => res.json(req.user));
+  api.use('/admin',adminController.router);
+  api.get('/me', wrap(async(req, res) => res.json({...req.user,adminAllowed:await adminController.allowed(req.user)})));
   const shareWrap=fn=>wrap(async(req,res)=>{try{return await fn(req,res);}catch(error){if([400,404,409,410,423,429].includes(error.status))return res.status(error.status).json({error:error.message});throw error;}});
   api.get('/shares',shareWrap(async(req,res)=>res.json(await store.listShares(req.user))));
   api.get('/sharing-contacts',shareWrap(async(req,res)=>res.json(await store.listSharingContacts(req.user.id))));
