@@ -68,7 +68,8 @@
 }
 .result-detail{color:#dceeff;font-size:clamp(1rem,4.6vw,1.55rem);overflow-wrap:anywhere;max-width:100%}
 .avatar-preview{text-align:center;width:min(420px,92vw);border:1px solid #70aada;max-height:calc(100dvh - 24px);overflow:auto}
-.avatar-preview img{display:block;width:min(100%,50dvh,270px);margin:auto;aspect-ratio:1;object-fit:contain;border-radius:18px;background:#4d89b133}
+.avatar-sprite-missing{visibility:hidden}
+.avatar-preview img{display:block;width:min(100%,50dvh,270px);margin:auto;aspect-ratio:1;object-fit:contain;border-radius:18px;background:transparent}
 .avatar-preview h2{margin:12px 0 20px}
 .avatar-preview-actions{display:flex;gap:10px}.avatar-preview-actions button{flex:1}
 .vote-panel{

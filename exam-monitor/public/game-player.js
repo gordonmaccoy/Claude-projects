@@ -8,7 +8,7 @@
  function previewAvatar(avatar,origin){
   if(taken.has(avatar))return;
   pendingAvatar=avatar;previewOrigin=origin;
-  previewImage.src=GameAvatars.feature?.(avatar)||GameAvatars.image(avatar);
+  GameAvatars.setSprite(previewImage,avatar,{celebrate:true});
   $('avatar-preview-name').textContent=assetName(avatar);
   $('avatar-preview-confirm').disabled=false;preview.showModal();$('avatar-preview-confirm').focus();
  }
@@ -21,7 +21,7 @@
   if(signature!==pickerRendered){
    const buttons=GameAvatars.ids.slice(start,end).map(avatar=>{
     const b=document.createElement('button');b.type='button';b.dataset.avatar=avatar;b.setAttribute('aria-haspopup','dialog');
-    const img=document.createElement('img');img.src=GameAvatars.thumbnail?.(avatar)||GameAvatars.still(avatar);img.alt='';img.decoding='async';
+    const img=document.createElement('img');img.alt='';img.decoding='async';GameAvatars.setSprite(img,avatar,{small:true});
     b.append(img);b.onclick=()=>previewAvatar(avatar,b);return b;
    });
    picker.replaceChildren(...buttons);pickerRendered=signature;
@@ -56,10 +56,9 @@
   pickerPage=n;drawPicker();(n===0?$('avatar-next'):$('avatar-prev')).focus();
  }
  $('avatar-prev').onclick=()=>page(0);$('avatar-next').onclick=()=>page(1);
- previewImage.onerror=()=>{const still=pendingAvatar&&GameAvatars.still?.(pendingAvatar);if(still&&previewImage.getAttribute('src')!==still)previewImage.src=still;};
  $('avatar-preview-back').onclick=()=>preview.close();
  $('avatar-preview-confirm').onclick=()=>{if(pendingAvatar&&!taken.has(pendingAvatar)&&lobby?.phase==='lobby'){avatarId=pendingAvatar;drawPicker();}preview.close();};
- preview.addEventListener('close',()=>{pendingAvatar=null;previewImage.removeAttribute('src');if(previewOrigin&&!previewOrigin.disabled)previewOrigin.focus();else picker.querySelector('button:not(:disabled)')?.focus();previewOrigin=null;});
+ preview.addEventListener('close',()=>{pendingAvatar=null;previewImage.onerror=null;previewImage.removeAttribute('src');if(previewOrigin&&!previewOrigin.disabled)previewOrigin.focus();else picker.querySelector('button:not(:disabled)')?.focus();previewOrigin=null;});
  async function loadLobby(){
   clearTimeout(lobbyTimer);if(joined||recovering||lobbyBusy||!id)return;
   lobbyBusy=true;let delay=2600;
