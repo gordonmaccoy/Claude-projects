@@ -1,0 +1,60 @@
+[
+ {"id":"launch","title":"Launch a quiz","subtitle":"From your library to their results.","scenes":[
+  ["launch-library","Choose a quiz from your library.",5],
+  ["launch-types","Choose how your class will answer.",6],
+  ["launch-settings","Set your room, timing and monitoring options.",6],
+  ["launch-save","Save your preferences for next time.",5],
+  ["launch-quick","Quick Launch uses your saved preferences.",5],
+  ["launch-qr","Project the QR code. Students join in their browser.",5],
+  ["student-login","Enter your details. No app to install.",5],
+  ["launch-start","Everyone joined? Start the quiz.",5],
+  ["monitor-active","Show student activity on the class screen—or hide it.",5],
+  ["student-submit","Submit when you are ready.",4],
+  ["student-score","See your final score immediately.",4],
+  ["student-corrections","Review the correct answers.",5],
+  ["results-summary","End the session. Results are saved.",4]
+ ],"short":[0,4,5,7,8,10,11]},
+ {"id":"monitoring","title":"Monitor student activity","subtitle":"Stay informed. Keep the final say.","scenes":[
+  ["monitor-options","Choose your monitoring options before launch.",7],
+  ["monitor-active","See student activity as the quiz unfolds.",6],
+  ["monitor-options","Optional: fail an attempt hidden for over five seconds.",7],
+  ["monitor-fail","The attempt locks for professor review.",6],
+  ["monitor-log","Review the activity log privately.",6],
+  ["monitor-unlock","Unlock the attempt when appropriate.",6],
+  ["monitor-pause","Pause the quiz without running down the timer.",6],
+  ["monitor-hidden","Hide public activity. Private monitoring continues.",7]
+ ],"short":[0,2,3,4,5,7]},
+ {"id":"create","title":"Create a quiz","subtitle":"Start with what you already have.","scenes":[
+  ["create-methods","Write a quiz, upload a file, generate, or paste.",8],
+  ["create-methods","Bring existing questions into your library.",6],
+  ["create-edit","Review the question and answer choices.",7],
+  ["create-edit","Select the correct answer. Adjust points and question type.",7],
+  ["create-save","Save your quiz when it is ready.",6],
+  ["create-library","Keep quizzes organized in class folders.",7],
+  ["launch-library","Your saved quiz is ready to launch again.",6]
+ ],"short":[0,2,3,4,5]},
+ {"id":"results","title":"Review results","subtitle":"See the whole picture, as it happens.","scenes":[
+  ["results-live","Check responses in real time as students answer.",8],
+  ["results-live","Follow question-by-question progress during the quiz.",7],
+  ["results-summary","After submission, review scores and completion.",7],
+  ["results-detailed","Open Detailed Results to inspect each answer.",7],
+  ["student-corrections","Students can review their score and corrections.",6],
+  ["results-export","Choose summary or detailed results.",7],
+  ["results-export","Download PDF or Excel for your records.",7]
+ ],"short":[0,2,3,5,6]},
+ {"id":"games","title":"Run an Examio game","subtitle":"Everyone answers. Every point counts.","scenes":[
+  ["game-library","Choose a game and select Launch Game.",5],
+  ["game-classic","Classic Solo: compete for your own place.",5],
+  ["game-team","Team Race: everyone answers for their team.",5],
+  ["game-team","Let players choose teams, or assign them randomly.",5],
+  ["game-lobby","Project the QR code to bring everyone in.",5],
+  ["game-join","Join a team—or create and name one.",5],
+  ["game-avatar","Choose your own avatar.",4],
+  ["game-question","Start the game. Read the question together.",5],
+  ["game-phone","Everyone answers on their own phone.",5],
+  ["game-reveal","Reveal the answer and learn together.",5],
+  ["game-rankings","Team scores average members’ points.",6],
+  ["game-podium","Celebrate the winners on the team podium.",5],
+  ["game-reports","Your completed game report is saved.",5]
+ ],"short":[1,2,4,6,8,10,11]}
+]

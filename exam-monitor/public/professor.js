@@ -62,7 +62,7 @@ function tab(name) {
   if(name!=='settings')lastWorkspaceTab=name;
   document.querySelectorAll('.tab').forEach(el => el.hidden = el.id !== name);
   document.querySelectorAll('[data-tab]').forEach(el => el.classList.toggle('selected', el.dataset.tab === name));
-  $('take-tour').hidden=name==='games';
+  $('take-tour').hidden=name==='settings'||name==='trash';$('take-tour').dataset.tour=({launch:'launch',library:'create',results:'results',games:'games'})[name]||'launch';
   gameWorkspace.setActive(name==='games');
 }
 document.querySelectorAll('[data-tab]').forEach(el => el.onclick = () => { tab(el.dataset.tab); if (el.dataset.tab === 'results') refresh().catch(e => notice(e.message)); if(el.dataset.tab==='trash') refreshTrash().catch(e=>notice(e.message)); });
