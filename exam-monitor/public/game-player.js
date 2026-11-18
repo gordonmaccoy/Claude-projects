@@ -21,7 +21,7 @@
   if(signature!==pickerRendered){
    const buttons=GameAvatars.ids.slice(start,end).map(avatar=>{
     const b=document.createElement('button');b.type='button';b.dataset.avatar=avatar;b.setAttribute('aria-haspopup','dialog');
-    const img=document.createElement('img');img.alt='';img.decoding='async';GameAvatars.setSprite(img,avatar,{small:true});
+    const img=document.createElement('img');img.alt='';img.decoding='async';img.src=GameAvatars.still(avatar);img.loading='lazy';
     b.append(img);b.onclick=()=>previewAvatar(avatar,b);return b;
    });
    picker.replaceChildren(...buttons);pickerRendered=signature;

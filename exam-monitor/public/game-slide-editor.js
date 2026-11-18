@@ -105,9 +105,18 @@
   }
   function add(){if(questions().length>=100){status('A game can contain up to 100 questions.',true);return;}questions().push(newQuestion());select(questions().length-1);}
   function preview(){
-   const snapshot=structuredClone(questions());if(!snapshot.length)return;let index=selected,reveal=false;const dialog=$('game-preview'),stage=$('preview-stage');
-   function draw(){stage.replaceChildren();const q=snapshot[index];$('preview-position').textContent='Question '+(index+1)+' of '+snapshot.length+' · '+(q.durationSeconds??20)+' seconds';stage.append(GamePresentation.create({question:q,theme:getDraft().theme,mode:reveal?'reveal':'question'}));if(reveal&&q.answerExplanation)stage.append(make('p',q.answerExplanation));$('preview-back').disabled=index===0;$('preview-next').disabled=index===snapshot.length-1;$('preview-reveal').textContent=reveal?'Hide answer':'Show answer';}
-   $('preview-back').onclick=()=>{index--;reveal=false;draw();};$('preview-next').onclick=()=>{index++;reveal=false;draw();};$('preview-reveal').onclick=()=>{reveal=!reveal;draw();};$('preview-close').onclick=()=>dialog.close();draw();dialog.showModal();
+   const snapshot=structuredClone(questions()),theme=getDraft().theme;if(!snapshot.length)return;let index=selected,reveal=false,chosen=null;const dialog=$('game-preview'),stage=$('preview-stage');
+   function draw(){
+    stage.replaceChildren();const q=snapshot[index];$('preview-position').textContent='Question '+(index+1)+' of '+snapshot.length+' · '+(q.durationSeconds??20)+' seconds · Preview only';
+    const host=make('section',undefined,'preview-host'),phone=make('section',undefined,'preview-participant');host.append(make('h3','Host view'));phone.append(make('h3','Participant view'));
+    host.append(GamePresentation.create({question:q,theme,mode:reveal?'reveal':'question'}));if(reveal&&q.answerExplanation)host.append(make('p',q.answerExplanation));
+    const screen=make('div',undefined,'preview-phone-screen'),controller=make('div',undefined,'preview-controller');screen.append(make('p','Question '+(index+1)),controller);phone.append(screen);
+    GameClient.choices(controller,{question:{slotCount:q.options.length},questionIndex:index,serverNow:0,deadlineAt:Infinity,answered:chosen!==null||reveal,answer:chosen===null?null:{slot:chosen}},async(_,slot)=>{chosen=slot;draw();});
+    if(reveal)screen.append(make('p',chosen===null?'Correct answer shown on the host screen.':q.options[chosen].id===q.correctOptionId?'Correct!':'Not quite. Check the host screen.','preview-phone-feedback'));
+    else if(chosen!==null)screen.append(make('p','Answer received','preview-phone-feedback'));
+    stage.append(host,phone);$('preview-back').disabled=index===0;$('preview-next').disabled=index===snapshot.length-1;$('preview-reveal').textContent=reveal?'Hide answer':'Show answer';
+   }
+   $('preview-back').onclick=()=>{index--;reveal=false;chosen=null;draw();};$('preview-next').onclick=()=>{index++;reveal=false;chosen=null;draw();};$('preview-reveal').onclick=()=>{reveal=!reveal;draw();};$('preview-close').onclick=()=>dialog.close();draw();dialog.showModal();
   }
   function fitCanvas(){const rect=$('questions').getBoundingClientRect(),surface=$('questions').querySelector('.game-slide-surface');if(surface&&rect.width&&rect.height)surface.style.width=Math.max(1,Math.min(rect.width,rect.height*16/9))+'px';}
   const observer=new ResizeObserver(fitCanvas);observer.observe($('questions'));

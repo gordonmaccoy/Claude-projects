@@ -488,5 +488,5 @@
     }
     runRoundClock(view,stage);
   }
-  Object.assign(api,{$,el,status,json,professor,button,picture,render,leaderboard,teamAvatar});root.GameClient=api;
+  Object.assign(api,{$,el,status,json,professor,button,picture,render,leaderboard,teamAvatar,choices});root.GameClient=api;
 })(typeof window==='undefined'?globalThis:window);

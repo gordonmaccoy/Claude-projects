@@ -55,7 +55,11 @@ const assert=require('node:assert/strict'),express=require('express'),{once}=req
   assert.equal(await page.locator('.slide-thumb').nth(2).getAttribute('aria-current'),'true');
   page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'Delete question',exact:true}).click();
   const sessionCount=requests.filter(([p,m])=>p==='/api/game-sessions'&&m==='POST').length;
-  await page.locator('#preview-game').click();await page.locator('#preview-reveal').click();
+  await page.locator('#preview-game').click();
+  assert.equal(await page.locator('.preview-host h3').textContent(),'Host view');assert.equal(await page.locator('.preview-participant h3').textContent(),'Participant view');
+  await page.locator('.preview-controller button').first().click();assert.equal(await page.locator('.preview-phone-feedback').textContent(),'Answer received');
+  assert.equal(await page.locator('.preview-controller button:not(:disabled)').count(),0);
+  assert.ok(await page.locator('#preview-reveal').evaluate(n=>n.getBoundingClientRect().bottom<=innerHeight),'Preview controls remain visible');await page.screenshot({path:'output/game-two-view-preview.png'});await page.locator('#preview-reveal').click();
   assert.equal(await page.locator('#preview-stage .is-correct').count(),1);assert.equal(await page.locator('#preview-stage .preview-answer img').count(),1);
   await page.locator('#preview-close').click();
   assert.equal(requests.filter(([p,m])=>p==='/api/game-sessions'&&m==='POST').length,sessionCount);

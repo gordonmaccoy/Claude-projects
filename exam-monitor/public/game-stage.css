@@ -310,3 +310,6 @@
 .player-rank-tile[data-place="3"]{border-color:#eda272}
 @media(prefers-reduced-motion:reduce){.standings-list{scroll-behavior:auto}}
 [data-theme=light] .game-host-panel #stage .podium-names .podium-total{color:#e2efff}
+/* Use original artwork at high pixel density in selection tiles. */
+.avatar-picker img{border-radius:8px;background:#f8f8fc}
+.avatar-preview img{width:min(100%,42dvh,192px)}

@@ -50,7 +50,7 @@ test('picker only loads a celebration on opening the selected avatar preview',as
  const image=get('avatar-preview-image'),picker=get('avatar-picker');
  assert.equal(image.src,null);
  assert.equal(picker.children.length,30);
- assert.ok(picker.children.every(button=>button.children[0].src.endsWith('-cutout-thumb.webp')));
+ assert.ok(picker.children.every(button=>/^\/game-avatars\/avatar-\d{2}\.webp$/.test(button.children[0].src)));
  picker.children[4].onclick();assert.equal(image.src,'/game-avatars/avatar-05-celebrate.webp');
  image.onerror();assert.equal(image.src,'/game-avatars/avatar-05-cutout.webp');
  get('avatar-preview-back').onclick();assert.equal(image.src,null);assert.equal(image.onerror,null);
@@ -68,4 +68,11 @@ test('shared roster, team and podium avatars remain light static transparent spr
  assert.deepEqual(team.children.map(x=>x.src),['/game-avatars/avatar-03-cutout-thumb.webp','/game-avatars/avatar-05-cutout-thumb.webp']);
  solo.onerror();assert.equal(solo.src,'/game-avatars/avatar-03-cutout.webp');
  solo.onerror();assert.equal(solo.src,null);
+});
+test('celebrations loop continuously, return to their starting frame and pause',()=>{
+ for(const id of require('../public/game-avatars').ids){
+  const bytes=fs.readFileSync(require('node:path').join(__dirname,'../public/game-avatars',id+'-celebrate.webp')),frames=[];let loops;
+  for(let i=12;i<bytes.length;){const size=bytes.readUInt32LE(i+4),tag=bytes.toString('ascii',i,i+4);if(tag==='ANIM')loops=bytes.readUInt16LE(i+12);if(tag==='ANMF')frames.push(bytes.subarray(i+8,i+8+size));i+=8+size+(size%2);}
+  assert.equal(loops,0);assert.ok(frames.length>=30);assert.equal(frames.at(-1).readUIntLE(12,3),1200);assert.deepEqual(frames[0].subarray(16),frames.at(-1).subarray(16));
+ }
 });

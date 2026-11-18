@@ -128,3 +128,19 @@ html.game-editor-open #editor{position:fixed;inset:0;z-index:1000;padding:10px 1
 
 @media(max-width:1100px) and (min-width:721px){#editor .slide-title-fields{grid-template-columns:minmax(150px,1fr) 130px;max-width:360px}}
 @media(max-width:720px){#editor .slide-title-fields{grid-template-columns:minmax(100px,1fr) 135px}#editor .slide-title-fields #game-folder{font-size:11px}}
+#game-preview{width:min(1400px,96vw);max-height:94dvh;overflow:auto}
+#preview-stage{display:grid;grid-template-columns:minmax(0,1fr) minmax(180px,25%);gap:22px;align-items:start}
+#preview-stage h3{font-size:14px;margin:0 0 10px}
+#preview-stage .game-slide-surface{width:100%;max-height:none}
+.preview-phone-screen{aspect-ratio:9/16;padding:12px;border:5px solid #27466a;border-radius:24px;display:flex;flex-direction:column;background:#102b46;color:#fff;gap:10px}
+.preview-phone-screen>p{margin:0;text-align:center;font-size:13px}
+.preview-controller{flex:1;min-height:0;display:flex;flex-direction:column}
+.preview-controller .choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:1fr;gap:6px;flex:1;margin:0}
+.preview-controller .choice{display:grid;place-items:center;min-width:0;min-height:0;padding:0;border:2px solid #ffffff50;border-radius:10px;color:white}
+.preview-controller .choice-0{background:#a92348}.preview-controller .choice-1{background:#1261b5}.preview-controller .choice-2{background:#ffdb4f;color:#132743}.preview-controller .choice-3{background:#087553}.preview-controller .choice-4{background:#6241a4}
+.preview-controller .choice-symbol{font-size:clamp(25px,4vw,65px)}
+.preview-controller .choices:is([data-slots="3"],[data-slots="5"]) .choice:last-child{grid-column:1/-1}
+.preview-controller .choice.chosen{outline:3px solid #fff;outline-offset:-5px;opacity:1}.preview-controller .choice:disabled:not(.chosen){opacity:.55}
+.preview-controller .controller-confirmed{display:none}
+@media(max-width:650px){#preview-stage{grid-template-columns:1fr}.preview-participant{width:min(260px,100%);margin:auto}.preview-phone-screen{max-height:420px}}
+@media(min-width:651px){#preview-stage{width:min(100%,calc((100dvh - 230px)*2.15));margin:auto;grid-template-columns:minmax(0,1fr) minmax(0,25%)}#game-preview{padding:18px}#game-preview .toolbar{margin-top:12px}}

@@ -11,3 +11,5 @@ Implementation:
 - Tests cover persistence/normalization, public answer secrecy, live/editor renderer parity, drag/resize/font, themes, iframe fullscreen restore, no page scrolling and existing creation/import flows.
 
 Verification: npm run check; all 379 node tests passed with localhost access; game-presentation-browser, game-library-polish-browser and full game-browser passed. Fresh code review found no remaining blockers. All 21 generated backgrounds verified readable at 1672x941.
+
+Follow-up: merged concurrent transparent-avatar release; added interactive host/participant draft preview; restored512px picker artwork; repackaged all50 existing celebration animations without raster re-encoding for forward/reverse infinite loops and1200ms rest. Combined384 tests, editor browser suite and complete multiplayer browser flow passed. All50 animations decoded; fresh review found no blockers.

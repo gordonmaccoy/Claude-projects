@@ -39,7 +39,7 @@ test('picker uses a six-column visible-page grid, small arrows, and defers initi
  const css=fs.readFileSync(require.resolve('../public/game-picker.css'),'utf8');
  assert.match(html,/id="avatar-prev"/);assert.match(html,/id="avatar-next"/);assert.match(html,/id="avatar-pages"[^>]*hidden/);
  assert.match(js,/GameAvatars\.ids\.slice\(start,end\)/);assert.match(css,/repeat\(6,minmax\(0,1fr\)\)/);
- assert.match(js,/GameAvatars\.setSprite\(img,avatar,\{small:true\}\)/);assert.match(js,/await join\(\);poll\(\);/);
+ assert.match(js,/img\.src=GameAvatars\.still\(avatar\)/);assert.match(js,/await join\(\);poll\(\);/);
 });
 test('valid game room name and simultaneous claims coexist with graded route',async t=>{
  const db=new PGlite();let q=Promise.resolve();
