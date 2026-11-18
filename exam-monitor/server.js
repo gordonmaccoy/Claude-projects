@@ -52,6 +52,7 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, admin
     const token = /^Bearer (.+)$/.exec(req.headers.authorization || '')?.[1];
     req.user = await verifyUser(token);
     if (!req.user) return res.status(401).json({ error: 'Please sign in with a verified professor account.' });
+    if(store.isAccountBanned&&await store.isAccountBanned(req.user))return res.status(403).json({error:'This email address is banned from Examio. Contact support.'});
     const state=await store.accountState(req.user.id);
     if(state!=='active'&&!((req.method==='GET'&&req.path==='/settings')||(req.method==='DELETE'&&req.path==='/account')))return res.status(423).json({error:'Account deletion is in progress or complete.'});
     if(state==='active' && store.registerShareIdentity)await store.registerShareIdentity(req.user);
@@ -90,7 +91,7 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, admin
   api.post('/sessions/:id/grade-override',wrap(async(req,res)=>{await owned(req.params.id,req.user);const {session}=await store.mutate(req.params.id,s=>require('./grading').override(s,req.body.studentId,req.body.questionId,req.user.id,req.body.points,req.body.reason));await broadcast(session);res.json(await decorate(session,req));}));
   api.use(settingsController.router);
   api.use('/admin',adminController.router);
-  api.get('/me', wrap(async(req, res) => res.json({...req.user,adminAllowed:await adminController.allowed(req.user)})));
+  api.get('/me', wrap(async(req, res) => res.json({...req.user,plan:store.accountPlan?await store.accountPlan(req.user.id):'beta',adminAllowed:await adminController.allowed(req.user)})));
   const shareWrap=fn=>wrap(async(req,res)=>{try{return await fn(req,res);}catch(error){if([400,404,409,410,423,429].includes(error.status))return res.status(error.status).json({error:error.message});throw error;}});
   api.get('/shares',shareWrap(async(req,res)=>res.json(await store.listShares(req.user))));
   api.get('/sharing-contacts',shareWrap(async(req,res)=>res.json(await store.listSharingContacts(req.user.id))));
@@ -320,10 +321,10 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, admin
     }
     on('professor:watch', async ({ sessionId, token }) => {
       const user = await verifyUser(token);
-      if (!user) throw new Error('Invalid authentication');
+      if (!user || await store.accountState(user.id)!=='active' || (store.isAccountBanned&&await store.isAccountBanned(user))) throw new Error('Invalid authentication');
       const s = await owned(sessionId, user);
       for (const room of socket.rooms) if (room.startsWith('professor:')) socket.leave(room);
-      socket.data.professor = { token, sessionId, verifiedAt: Date.now() };
+      socket.data.professor = { token, sessionId, user, verifiedAt: Date.now() };
       socket.join(`professor:${sessionId}`);
       return { view: {...exam.privateView(s),serverNow:Date.now()} };
     });
@@ -391,9 +392,10 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, admin
     try {
       for (const socket of io.sockets.sockets.values()) {
         const p = socket.data.professor;
+        if(p?.user&&(await store.accountState(p.user.id)!=='active'||(store.isAccountBanned&&await store.isAccountBanned(p.user)))){socket.leave(`professor:${p.sessionId}`);delete socket.data.professor;socket.emit('auth:expired');continue;}
         if (p && Date.now() - p.verifiedAt > 60000) {
           const user = await verifyUser(p.token);
-          if (!user) { socket.leave(`professor:${p.sessionId}`); delete socket.data.professor; socket.emit('auth:expired'); }
+          if (!user || await store.accountState(user.id)!=='active' || (store.isAccountBanned&&await store.isAccountBanned(user))) { socket.leave(`professor:${p.sessionId}`); delete socket.data.professor; socket.emit('auth:expired'); }
           else p.verifiedAt = Date.now();
         }
       }

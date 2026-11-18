@@ -3,12 +3,13 @@
 window.createExamioRegistration=function({auth,api,onComplete,onBeginSignIn=()=>{}}){
  const $=id=>document.getElementById(id),t=text=>window.examioLanguage?.t(text)||text;
  const root=$('registration'),signup=new URLSearchParams(location.search).has('signup');
+ window.ExamioCountries.populate($('reg-country'));
  let step=1,session=null,busy=false,pendingEmail='',saving=null;
  const message=text=>{$('reg-message').textContent=t(text||'');};
  function show(){root.hidden=false;$('login').hidden=true;$('workspace').hidden=true;}
  function page(number){step=number;show();$('registration-wizard').hidden=false;$('registration-verify').hidden=true;root.querySelectorAll('[data-registration-step]').forEach(el=>el.hidden=Number(el.dataset.registrationStep)!==step);root.querySelectorAll('[data-registration-indicator]').forEach(el=>{el.setAttribute('aria-current',Number(el.dataset.registrationIndicator)===step?'step':'false');el.classList.toggle('complete',Number(el.dataset.registrationIndicator)<step);});$('reg-previous').hidden=step===1;$('reg-next').hidden=step===3;$('reg-finish').hidden=step!==3;message('');$('registration-title').focus();}
  function input(id){return $(id).value.trim();}
- function profile(){return {firstName:input('reg-first-name'),lastName:input('reg-last-name'),institution:input('reg-institution'),organizationType:input('reg-organization'),role:input('reg-role'),phone:input('reg-phone'),termsAccepted:$('reg-terms').checked};}
+ function profile(){return {firstName:input('reg-first-name'),lastName:input('reg-last-name'),institution:input('reg-institution'),country:input('reg-country'),organizationType:input('reg-organization'),role:input('reg-role'),phone:input('reg-phone'),termsAccepted:$('reg-terms').checked};}
  function validStep(){
   for(const el of root.querySelector(`[data-registration-step="${step}"]`).querySelectorAll('input,select')){if(!el.disabled&&!el.checkValidity()){el.reportValidity();return false;}}
   if(step===1&&!session){if(input('reg-email').toLowerCase()!==input('reg-email-confirm').toLowerCase()){message('Email addresses must match.');$('reg-email-confirm').focus();return false;}if($('reg-password').value!==$('reg-password-confirm').value){message('Passwords must match.');$('reg-password-confirm').focus();return false;}}
@@ -23,7 +24,7 @@ window.createExamioRegistration=function({auth,api,onComplete,onBeginSignIn=()=>
   const settings=await api('/settings'),existing=settings.profile||{};
   if(existing.registrationComplete||existing.firstName||settings.registrationRequired===false){root.hidden=true;return false;}
   const registration=session.user?.user_metadata?.examio_registration;
-  if(registration?.termsAccepted===true){await save(registration);return true;}
+  if(registration?.termsAccepted===true&&window.ExamioCountries.valid(registration.country)){await save(registration);return true;}
   const meta=session.user?.user_metadata||{};
   $('reg-first-name').value=meta.given_name||meta.full_name?.split(' ')[0]||'';$('reg-last-name').value=meta.family_name||'';
   $('reg-email').value=session.user?.email||'';$('reg-credentials').hidden=true;$('reg-google').hidden=true;

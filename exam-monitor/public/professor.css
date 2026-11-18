@@ -268,3 +268,6 @@ select,textarea{font:inherit;background:#fff;color:#223c31;border:1px solid #c5c
 #test-builder textarea:focus{outline:2px solid #619980;outline-offset:3px}
 #test-builder .answer-key-correct .tb-opt-text{background:#dff3e4;color:#174d2b;border-color:#a7d4b1}
 #test-builder .answer-key-incorrect .tb-opt-text{background:#fce2e2;color:#791e24;border-color:#e9b6ba}
+
+#workspace-tabs .workspace-shortcut{font:600 13px 'DM Sans',system-ui;text-decoration:none;border:1px solid var(--line);border-radius:8px;padding:11px 17px;background:#fff;color:#102b42;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center}
+@media(max-width:720px){#workspace-tabs{overflow-x:auto;justify-content:flex-start}#workspace-tabs button,#workspace-tabs .workspace-shortcut{flex:0 0 auto;padding:9px 12px;font-size:12px}#workspace-tabs [data-tab=trash]{flex:0 0 auto}}

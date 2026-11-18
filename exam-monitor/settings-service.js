@@ -4,10 +4,12 @@ function validateProfile(body){
  const profile={firstName:field(body?.firstName,1,80,'first name'),lastName:field(body?.lastName||'',0,80,'last name'),institution:field(body?.institution||'',0,160,'school/institution')};
  if(body?.role!==undefined){if(!['teacher','professor','admin','it'].includes(body.role))throw problem('Choose your role.',400);profile.role=body.role;}
  if(body?.organizationType!==undefined){if(!['school','university','corporate','other',''].includes(body.organizationType))throw problem('Choose an organization type.',400);profile.organizationType=body.organizationType;}
+ if(body?.country!==undefined){if(!require('./public/countries').valid(body.country))throw problem('Choose your country / region.',400);profile.country=body.country;}
  if(body?.phone!==undefined)profile.phone=field(body.phone,0,40,'phone number');
  return profile;
 }
 function validateRegistration(body){
+ if(!require('./public/countries').valid(body?.country))throw problem('Choose your country / region.',400);
  if(!['teacher','professor','admin','it'].includes(body?.role))throw problem('Choose your role.',400);
  if(body?.termsAccepted!==true)throw problem('Please agree to the terms and privacy policy.',400);
  return {...validateProfile(body),lastName:field(body?.lastName,1,80,'last name'),registrationComplete:true,termsAcceptedAt:new Date().toISOString(),termsVersion:'2026-11-12'};

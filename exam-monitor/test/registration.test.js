@@ -1,7 +1,7 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const {validateRegistration,validateProfile}=require('../settings-service');
-const profile={firstName:'Alex',lastName:'Kim',institution:'My University',organizationType:'university',role:'professor',phone:'',termsAccepted:true};
+const profile={country:'KR',firstName:'Alex',lastName:'Kim',institution:'My University',organizationType:'university',role:'professor',phone:'',termsAccepted:true};
 test('registration requires a known descriptive role and explicit consent, validates optional fields',()=>{
  for(const role of ['teacher','professor','admin','it'])assert.equal(validateRegistration({...profile,role}).role,role);
  for(const role of ['',undefined,'owner'])assert.throws(()=>validateRegistration({...profile,role}),/role/i);
@@ -27,3 +27,5 @@ test('registration endpoint saves only the signed-in profile and preserves conse
  const denied=await request('support/requests',undefined,'b','GET');assert.equal(denied.status,403);
  }finally{await runtime.close();await db.close();}
 });
+
+test('country is required only for new registration and uses a recognized code',()=>{for(const country of ['',undefined,'XX','Korea'])assert.throws(()=>validateRegistration({...profile,country}),/country/i);assert.equal(validateRegistration(profile).country,'KR');assert.equal(validateProfile({firstName:'Legacy'}).country,undefined);});

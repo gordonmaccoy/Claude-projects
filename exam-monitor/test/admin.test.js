@@ -48,3 +48,38 @@ test('admin routes deny teachers; account labels and ticket workflow persist wit
   assert.equal((await req('admin/support')).data.total,0);
  }finally{await runtime.close();await db.close();}
 });
+
+test('owner moderation protects owner, blocks existing tokens and returning email, and preserves bans when account data is removed',async()=>{
+ const {db,pool,store}=await fixture();let failRemoval=true;const removed=[];let socket;
+ const identities={owner:{id:'owner',email:'admin@examio.io'},teacher:{id:'teacher',email:'mike@example.com'},replacement:{id:'replacement',email:'mike@example.com'},future:{id:'future',email:'future@example.com'}};
+ const runtime=createApp({store,sweepInterval:0,adminOptions:{ownerEmail:'admin@examio.io'},verifyUser:async token=>identities[token]||null,settingsOptions:{sendMail:null,removeAccount:async id=>{if(failRemoval)throw Error('temporary');removed.push(id);}}});
+ runtime.server.listen(0,'127.0.0.1');await once(runtime.server,'listening');
+ const req=async(path,method='GET',body,token='owner')=>{const r=await fetch(`http://127.0.0.1:${runtime.server.address().port}/api/${path}`,{method,headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});return {status:r.status,data:await r.json()};};
+ try{
+  await req('me');await req('me','GET',undefined,'teacher');await store.saveProfile('teacher',{firstName:'Mike',country:'KR'});
+  assert.equal((await req('me','GET',undefined,'teacher')).data.plan,'beta');
+  assert.equal((await req('admin/accounts')).data.items.find(x=>x.id==='teacher').country,'KR');
+  assert.equal((await req('admin/bans','POST',{email:'mike@example.com'},'teacher')).status,403);
+  assert.equal((await req('admin/bans','POST',{email:'ADMIN@examio.io'})).status,400);
+  assert.equal((await req('admin/bans','POST',{email:'bad'})).status,400);
+  const session=(await req('sessions','POST',{mode:'calculator'},'teacher')).data;
+  socket=require('socket.io-client').io(`http://127.0.0.1:${runtime.server.address().port}`,{transports:['websocket']});await once(socket,'connect');
+  const watch=()=>new Promise((resolve,reject)=>socket.timeout(3000).emit('professor:watch',{sessionId:session.id,token:'teacher'},(error,value)=>error?reject(error):resolve(value)));
+  assert.equal((await watch()).ok,true);
+  assert.equal((await req('admin/bans','POST',{email:' MIKE@example.com ',reason:'Test'})).status,200);
+  const expired=once(socket,'auth:expired');await runtime.tick();await expired;assert.equal((await watch()).ok,false);
+
+  assert.equal((await req('me','GET',undefined,'teacher')).status,403);
+  assert.equal((await req('me','GET',undefined,'replacement')).status,403);
+  identities.teacher.email='changed@example.com';assert.equal((await req('me','GET',undefined,'teacher')).status,403);identities.teacher.email='mike@example.com';
+  assert.equal((await req('admin/bans')).data.items.length,1);
+  assert.equal((await req('admin/accounts')).data.items.find(x=>x.id==='teacher').banned,true);
+  await req('admin/bans/mike%40example.com','DELETE');assert.equal((await req('me','GET',undefined,'teacher')).status,200);await req('sessions/'+session.id+'/end','POST',{},'teacher');
+  await req('admin/bans','POST',{email:'future@example.com'});assert.equal((await req('me','GET',undefined,'future')).status,403);
+  assert.equal((await store.accountState('teacher')),'active');
+  await req('admin/bans','POST',{email:'mike@example.com'});
+  await store.beginDeletion('teacher');failRemoval=false;await pool.query("UPDATE onscreen_v2_accounts SET retry_at=NOW() WHERE owner_id='teacher'");await runtime.runSettingsJobs();assert.deepEqual(removed,['teacher']);assert.equal(await store.accountState('teacher'),'deleted');
+  assert.equal((await req('me','GET',undefined,'replacement')).status,403);assert.equal((await req('admin/accounts')).data.items.some(x=>x.id==='teacher'),false);
+  await req('admin/bans/mike%40example.com','DELETE');assert.equal((await req('me','GET',undefined,'teacher')).status,423);
+ }finally{socket?.disconnect();await runtime.close();await db.close();}
+});

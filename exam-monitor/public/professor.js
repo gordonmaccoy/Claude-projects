@@ -18,7 +18,7 @@ let accountGeneration = 0,creationVersion=0,professorTimerSnapshot=null;
 let lastWorkspaceTab = 'launch';
 let popupSessionId = null, openingDisplay = false, launching = false;
 function clearPrivateWorkspace() {
-  gameWorkspace.reset();$('admin-link').hidden=true;if(shortGradeDialog.open)shortGradeDialog.close();shortGradeDialog.querySelector('form').reset();for(const el of shortGradeDialog.querySelectorAll('p'))el.textContent='';
+  gameWorkspace.reset();$('admin-link').hidden=true;$('beta-feedback-tab').hidden=true;if(shortGradeDialog.open)shortGradeDialog.close();shortGradeDialog.querySelector('form').reset();for(const el of shortGradeDialog.querySelectorAll('p'))el.textContent='';
   tab('launch');
   quizSharing.reset();
   closeCreation();exportsController.close();
@@ -55,6 +55,7 @@ const settings=window.createOnScreenSettings({api,notify:notice,onClose:()=>tab(
   await auth.auth.signOut({scope:'local'});clearPrivateWorkspace();account=null;$('workspace').hidden=true;$('login').hidden=false;$('signout').hidden=true;
   $('auth-message').textContent=result.state==='deleted'?'Your account and Examio data have been deleted.':'Account deletion has started. You are signed out while it completes.';
 }});
+$('beta-feedback-tab').onclick=()=>settings.open('beta');
 function action(fn) { return async event => { const version=tabVersion; try { notice(''); await fn(event); } catch (e) { if(version===tabVersion)notice(e.message); } }; }
 function tab(name) {
   if(name!==workspaceTab){workspaceTab=name;tabVersion++;notice('');}
@@ -594,7 +595,7 @@ async function loadSignedInWorkspace() {
     if(recoveringPassword)return;
     const authSession=(await auth.auth.getSession()).data.session;if(generation!==accountGeneration||sessionPreferences?.blocked||!authSession)return;
     if(registration&&await registration.resume(authSession))return;
-    document.getElementById("admin-link").hidden=!verified.adminAllowed;settings.setAccount(verified);$('account-name').textContent=account.email;$('login').hidden=true;$('workspace').hidden=false;$('workspace-tabs').hidden=false;$('signout').hidden=false;
+    document.getElementById("admin-link").hidden=!verified.adminAllowed;$('beta-feedback-tab').hidden=verified.plan!=='beta';settings.setAccount(verified);$('account-name').textContent=account.email;$('login').hidden=true;$('workspace').hidden=false;$('workspace-tabs').hidden=false;$('signout').hidden=false;
     if(openGameTab&&workspaceTab==='launch')tab('games');
     socket.connect();
     try {
@@ -639,7 +640,7 @@ async function initAuth() {
   $('new-password-form').onsubmit=async e=> { e.preventDefault(); const {error}=await auth.auth.updateUser({password:$('new-password').value}); $('auth-message').textContent=error?.message || t('Password updated.'); if(!error) { recoveringPassword=false; $('new-password-form').hidden=true; $('login-form').hidden=false; $('google').hidden=false; await signedIn(); } };
   if ((await auth.auth.getSession()).data.session) await signedIn();
 }
-initAuth().catch(e=>$('auth-message').textContent=e.message);
+initAuth().catch(e=>$('auth-message').textContent=e.message).finally(()=>document.documentElement.classList.remove('auth-pending'));
 
 function renderFolderOptions(selected=$('tb-folder').value) {
  for(const id of ['tb-folder','new-folder-choice']){const value=id==='tb-folder'?selected:$(id).value;$(id).replaceChildren(...[{id:'',name:t('Uncategorized Test')},...folders].map(f=>{const o=document.createElement('option');o.value=f.id;o.textContent=f.name;return o;}));$(id).value=value;}

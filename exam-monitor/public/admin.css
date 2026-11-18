@@ -4,3 +4,5 @@
 @media(max-width:700px){header{padding:12px 16px;gap:8px}.brand{gap:7px}.brand strong{font-size:21px}.brand img{width:30px;height:30px}.brand span{display:none}.header-actions{gap:6px}.header-actions button{padding:8px 10px}main{padding:24px 16px 45px}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.panel,.metric{padding:18px}.edit-grid{grid-template-columns:1fr;gap:12px}.plans{grid-template-columns:1fr}.audit-row{grid-template-columns:1fr;gap:3px}.login{margin:25px auto}nav{margin-right:-4px}nav button{padding:9px 12px}.heading{align-items:flex-start}#page-label{font-size:11px}}
 
 #content>.panel+.panel{margin-top:16px}#support-filter{margin-top:12px;max-width:220px}
+
+.moderation{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}.moderation-dialog{width:min(520px,92vw);max-height:90dvh;overflow:auto;border:1px solid var(--line);border-radius:16px;padding:24px;background:var(--panel);color:var(--ink)}.moderation-dialog::backdrop{background:#102b4677}.moderation-dialog input{width:100%;margin:8px 0 16px}.danger{color:#b42318}
