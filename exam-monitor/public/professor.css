@@ -213,3 +213,31 @@ select,textarea{font:inherit;background:#fff;color:#223c31;border:1px solid #c5c
 #result-settings-content{position:absolute;left:var(--settings-left,12px);right:auto;top:var(--settings-top,100px);max-height:var(--settings-height,65vh);box-sizing:border-box}
 
 .result-settings-section{font-size:14px;font-weight:750;margin:16px 0 7px;color:#123959}.result-settings-section:first-child{margin-top:0}.result-setting-row>span:first-child{font-weight:400;text-align:left}.result-setting-state{font-size:15px;font-weight:650}.result-setting-state.enabled{color:#237543}.result-setting-state.disabled{color:#8294a3}
+
+/* Keep workspace controls in two compact rows, including on phones. */
+#professor-navigation .topbar{gap:16px;padding-top:14px;padding-bottom:14px;min-width:0}
+#professor-navigation .account{min-width:0;gap:12px;flex:0 1 auto}
+#professor-navigation #account-name{min-width:0;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#professor-navigation [data-language-switch]{display:block;flex:none;width:auto;max-width:110px;margin:0;padding:10px 9px;font-size:13px;min-height:40px;color-scheme:light;background:white;color:#102b42}
+#professor-navigation .theme-toggle,#settings-menu{flex:none}
+#workspace-tabs .tab-label-compact{display:none}
+@media(max-width:1000px){#professor-navigation #account-name{display:none}#professor-navigation .account{gap:8px}#professor-navigation .topbar{padding:10px 20px}#workspace-tabs{padding-bottom:8px;gap:8px}#workspace-tabs button{padding:10px 15px;font-size:13px}}
+@media(max-width:600px){
+ #professor-navigation .topbar{padding:8px 12px;gap:8px;min-height:60px}
+ #professor-navigation .examio-brand{gap:6px;min-width:0}
+ #professor-navigation .examio-brand .brand-mark{width:30px;height:30px}
+ #professor-navigation .examio-brand strong{font-size:23px}
+ #professor-navigation .examio-brand small{font-size:5.7px;letter-spacing:.06em}
+ #professor-navigation .account{gap:5px;margin-left:auto}
+ #professor-navigation .theme-toggle{width:32px;height:36px;font-size:20px;padding:3px}
+ #professor-navigation [data-language-switch]{font-size:12px;padding:8px 5px;min-height:36px;max-width:86px}
+ #professor-navigation #settings-menu>summary{font-size:12px;padding:9px 7px;white-space:nowrap;min-height:36px}
+ #workspace-tabs{display:flex;flex-wrap:nowrap;gap:5px;padding:4px 12px 8px;width:100%;margin:0}
+ #workspace-tabs button{flex:1 1 0;min-width:0;min-height:40px;padding:8px 4px;font-size:12px;border-radius:7px;white-space:nowrap}
+ #workspace-tabs [data-tab="trash"]{margin-inline-start:0;flex:1 1 0}
+ #workspace-tabs .tab-label-full{display:none}#workspace-tabs .tab-label-compact{display:inline}
+ main{padding:16px 12px}#take-tour{margin:0 0 10px;padding:8px 12px;font-size:12px}#library>.section-heading{gap:14px;margin-bottom:18px}#library>.section-heading>.actions{gap:7px}#library>.section-heading>.actions button{padding:10px 12px;font-size:12px;min-height:40px}
+}
+@media(max-width:380px){#professor-navigation .examio-brand strong{font-size:20px}#professor-navigation .examio-brand .brand-mark{width:26px;height:26px}#professor-navigation .examio-brand small{font-size:5px}#professor-navigation .topbar{padding-inline:10px;gap:5px}#professor-navigation .account{gap:4px}#professor-navigation [data-language-switch]{max-width:80px}#workspace-tabs{padding-inline:10px;gap:4px}#workspace-tabs button{font-size:11px}}
+
+@media(max-width:600px){#library>.section-heading>.actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%}#library #shares-open{grid-column:1/-1;justify-self:start}}
