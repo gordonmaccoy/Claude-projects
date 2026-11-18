@@ -446,7 +446,7 @@
     lastView=view;
     if(fingerprint===lastRender)return;
     lastRender=fingerprint;clearInterval(clock);
-    const stage=$('stage');stage.replaceChildren();stage.dataset.phase=view.phase;delete stage.dataset.winner;
+    const stage=$('stage');stage.replaceChildren();stage.classList.remove('presentation-stage');if(!isPlayer&&root.GamePresentation)root.GamePresentation.themeStyle(document.body,view.theme);stage.dataset.phase=view.phase;delete stage.dataset.winner;
     if(changedPhase) stage.dataset.transition=animate?'quick':'';
     else stage.dataset.transition='';
     if($('game-title'))$('game-title').textContent=view.title||'Live quiz';
@@ -456,14 +456,14 @@
     if(view.phase==='lobby')lobby(stage,view,isPlayer);
     if(view.phase==='media')mediaStage(stage,view,isPlayer);
     if(sceneCopy(view))renderScene(stage,view);
-    if(view.phase==='countdown'){
-      if(isPlayer)stage.append(el('h2','Look at the classroom screen','ready-message'));
-      else appendPrompt(stage,q);
-    }
-    if(view.phase==='question'){if(!isPlayer)appendPrompt(stage,q);choices(stage,view,answer);}
-    if(view.phase==='reveal'&&!isPlayer&&q){
-      appendPrompt(stage,q);stage.append(voteChart(q,animate));
-      if(q.answerExplanation)stage.append(el('p',q.answerExplanation,'explanation'));
+    if(!isPlayer&&root.GamePresentation&&q&&['countdown','question','reveal'].includes(view.phase)){
+      stage.classList.add('presentation-stage');stage.append(root.GamePresentation.create({question:q,theme:view.theme,mode:view.phase}));
+      if(!stage.presentationObserver&&document.body.classList.contains('game-display')){stage.presentationObserver=new ResizeObserver(()=>{const r=stage.getBoundingClientRect();stage.style.setProperty('--presentation-fit',Math.min(r.width,r.height*16/9)+'px');});stage.presentationObserver.observe(stage);}
+      if(view.phase==='reveal'&&q.answerExplanation)stage.append(el('p',q.answerExplanation,'explanation'));
+    }else{
+      if(view.phase==='countdown'){if(isPlayer)stage.append(el('h2','Look at the classroom screen','ready-message'));else appendPrompt(stage,q);}
+      if(view.phase==='question'){if(!isPlayer)appendPrompt(stage,q);choices(stage,view,answer);}
+      if(view.phase==='reveal'&&!isPlayer&&q){appendPrompt(stage,q);stage.append(voteChart(q,animate));if(q.answerExplanation)stage.append(el('p',q.answerExplanation,'explanation'));}
     }
     if(isPlayer&&['reveal','leaderboard','podium'].includes(view.phase)){
       const result=playerResult(view);stage.append(result);

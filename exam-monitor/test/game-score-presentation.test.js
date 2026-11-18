@@ -8,7 +8,7 @@ function fixture({reduced=false}={}){
   constructor(tag,text=''){
    this.tagName=tag;this._text=text;this.children=[];this.className='';this.dataset={};this.attributes={};this.styleValues={};
    this.style={setProperty:(key,value)=>{this.styleValues[key]=String(value);}};
-   this.classList={add:cls=>{this.className+=' '+cls;}};
+   this.classList={add:cls=>{this.className+=' '+cls;},remove:cls=>{this.className=this.className.split(' ').filter(value=>value!==cls).join(' ');}};
   }
   get textContent(){return this._text+this.children.map(n=>n.textContent).join('');}
   set textContent(text){this._text=String(text);this.children=[];}

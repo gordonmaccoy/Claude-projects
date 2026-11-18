@@ -2,7 +2,7 @@
  'use strict';
  function duplicate(question){
   const copy=structuredClone(question),correct=copy.options.findIndex(o=>o.id===copy.correctOptionId);
-  copy.id=crypto.randomUUID();copy.options.forEach(o=>o.id=crypto.randomUUID());
+  copy.id=crypto.randomUUID();copy.options.forEach(o=>{const old=o.id;o.id=crypto.randomUUID();if(copy.presentation?.boxes?.['answer:'+old]){copy.presentation.boxes['answer:'+o.id]=copy.presentation.boxes['answer:'+old];delete copy.presentation.boxes['answer:'+old];}});
   copy.correctOptionId=copy.options[correct]?.id||'';return copy;
  }
  function mediaError(media){
@@ -32,7 +32,7 @@
   const $=id=>document.getElementById(id),make=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
   const btn=(text,fn,cls)=>{const b=make('button',text,cls);b.type='button';b.onclick=fn;return b;};
   const label=(text,input)=>{const l=make('label',text);l.append(input);return l;};
-  let selected=0,dragged=null;const pendingImages=new Map();
+  let selected=0,dragged=null,selectedBox='prompt';const pendingImages=new Map();
   const questions=()=>getDraft()?.questions||[];
   function rail(){
    $('slide-list').replaceChildren();questions().forEach((q,i)=>{
@@ -41,11 +41,11 @@
     const mini=make('span',undefined,'slide-mini-answers');q.options.forEach(o=>mini.append(make('i',o.id===q.correctOptionId?'✓':'',o.id===q.correctOptionId?'is-correct':'')));b.append(mini,make('small',(q.durationSeconds||20)+' sec'+(!q.correctOptionId?' · Answer needed':'')));
     b.ondragstart=e=>{dragged=i;e.dataTransfer.setData('text/plain',String(i));e.dataTransfer.effectAllowed='move';};
     b.ondragover=e=>{if(dragged!==null)e.preventDefault();};b.ondrop=e=>{e.preventDefault();if(dragged!==null)move(dragged,i);dragged=null;};b.ondragend=()=>dragged=null;
-    $('slide-list').append(b);
+    if(q.image){const thumb=GameClient.picture(q.image,'');if(thumb){thumb.className='slide-thumb-image';b.insertBefore(thumb,mini);}}$('slide-list').append(b);
    });$('slide-count').textContent=questions().length+' questions';
   }
   function move(from,to){const list=questions();if(to<0||to>=list.length||from===to)return;const [q]=list.splice(from,1);list.splice(to,0,q);selected=to;render();}
-  function select(index){selected=Math.max(0,Math.min(index,questions().length-1));render();}
+  function select(index){selectedBox='prompt';selected=Math.max(0,Math.min(index,questions().length-1));render();$('slide-properties').scrollTop=0;}
   function render(){
    $('editor-error').textContent='';const list=questions();if(!list.length)return;selected=Math.min(selected,list.length-1);rail();
    const q=list[selected],card=make('section',undefined,'question-card slide-canvas'),props=$('slide-properties');props.replaceChildren();$('questions').replaceChildren(card);
@@ -80,16 +80,40 @@
    const tools=make('div',undefined,'slide-question-tools');const up=btn('↑ Move up',()=>move(selected,selected-1)),down=btn('↓ Move down',()=>move(selected,selected+1));up.disabled=selected===0;down.disabled=selected===list.length-1;
    const copy=btn('Duplicate question',()=>{if(list.length>=100){status('A game can contain up to 100 questions.',true);return;}list.splice(selected+1,0,duplicate(q));select(selected+1);});
    const remove=btn('Delete question',()=>{if(!confirm('Delete this question?'))return;pendingImages.delete(q);list.splice(selected,1);select(Math.min(selected,list.length-1));},'danger');remove.disabled=list.length===1;tools.append(up,down,copy,remove);props.append(tools);
+   // The canvas and projector use the same renderer and proportional boxes.
+   const answerWarning=card.querySelector('.answer-review-warning');if(answerWarning)props.prepend(answerWarning);card.className='slide-canvas-wrap';card.replaceChildren();
+   const controls=make('section',undefined,'layout-controls');props.insertBefore(controls,props.children[1]);
+   function showBoxControls(){
+    controls.replaceChildren();const layout=GamePresentation.normalize(q.presentation,q);if(!layout.boxes[selectedBox])selectedBox='prompt';
+    controls.append(make('strong',selectedBox==='prompt'?'Question text':selectedBox==='image'?'Question image':'Answer box'));
+    const fields=make('div',undefined,'layout-fields');
+    for(const [key,title,min,max] of [['fontSize','Font size',12,96],['x','Left %',0,100],['y','Top %',0,100],['w','Width %',8,100],['h','Height %',5,100]]){
+     if(selectedBox==='image'&&key==='fontSize')continue;
+     const input=make('input');input.type='number';input.min=min;input.max=max;input.step=1;input.value=Math.round(layout.boxes[selectedBox][key]);input.setAttribute('aria-label',title);
+     input.oninput=()=>{if(input.value==='')return;const next=GamePresentation.normalize(q.presentation,q);next.boxes[selectedBox][key]=Number(input.value);const normalized=GamePresentation.normalize(next,q);q.presentation={boxes:{...(q.presentation?.boxes||{}),[selectedBox]:normalized.boxes[selectedBox]}};const target=Array.from(card.querySelectorAll('[data-box]')).find(n=>n.dataset.box===selectedBox);if(target)GamePresentation.applyBox(target,q.presentation.boxes[selectedBox]);};fields.append(label(title,input));
+    }
+    controls.append(fields,btn('Reset slide layout',()=>{delete q.presentation;render();}));
+   }
+   const surface=GamePresentation.create({question:q,theme:getDraft().theme,mode:'edit',onText:(id,value)=>{if(id==='prompt'){q.text=value;rail();}else q.options.find(o=>'answer:'+o.id===id).text=value;},onCorrect:id=>{q.correctOptionId=id;q.answerKeyConflict=false;answerWarning?.remove();rail();},onSelect:key=>{selectedBox=key;showBoxControls();},onLayout:layout=>{q.presentation={boxes:{...(q.presentation?.boxes||{}),[selectedBox]:layout.boxes[selectedBox]}};showBoxControls();}});
+   card.append(surface);showBoxControls();
+   const images=make('details');images.append(make('summary','Question image'));images.append(mediaArea);props.insertBefore(images,tools);
+   const answerTools=make('details');answerTools.append(make('summary','Answer choices'));
+   q.options.forEach((o,i)=>{const row=make('div',undefined,'answer-tool-row');row.append(make('span','Answer '+String.fromCharCode(65+i)));const remove=btn('Remove',()=>{q.options.splice(i,1);if(q.correctOptionId===o.id)q.correctOptionId='';render();});remove.disabled=q.options.length<=2;remove.setAttribute('aria-label','Remove answer '+String.fromCharCode(65+i));row.append(remove);answerTools.append(row);});
+   if(q.options.length<5)answerTools.append(btn('+ Add choice',()=>{q.options.push({id:crypto.randomUUID(),text:''});render();}));props.insertBefore(answerTools,tools);
+   fitCanvas();
+
   }
   function add(){if(questions().length>=100){status('A game can contain up to 100 questions.',true);return;}questions().push(newQuestion());select(questions().length-1);}
   function preview(){
    const snapshot=structuredClone(questions());if(!snapshot.length)return;let index=selected,reveal=false;const dialog=$('game-preview'),stage=$('preview-stage');
-   function draw(){stage.replaceChildren();const q=snapshot[index];$('preview-position').textContent='Question '+(index+1)+' of '+snapshot.length;stage.append(make('small',(q.durationSeconds??20)+' seconds'),make('h2',q.text||'Untitled question'));const img=GameClient.picture(q.image);if(img)stage.append(img);
-    if(q.media)stage.append(make('p','Includes '+q.media.type+' before this question.','preview-media-note'));
-    const answers=make('div',undefined,'slide-answers');q.options.forEach((o,i)=>{const a=make('div',String.fromCharCode(65+i)+'. '+(o.text||'Empty answer'),'slide-answer preview-answer');a.dataset.choice=i;if(reveal&&o.id===q.correctOptionId){a.classList.add('is-correct');a.prepend(make('strong','✓ '));}const optionImage=GameClient.picture(o.image,'Answer '+String.fromCharCode(65+i)+' image');if(optionImage)a.append(optionImage);answers.append(a);});stage.append(answers);if(reveal&&q.answerExplanation)stage.append(make('p',q.answerExplanation));$('preview-back').disabled=index===0;$('preview-next').disabled=index===snapshot.length-1;$('preview-reveal').textContent=reveal?'Hide answer':'Show answer';
-   }
+   function draw(){stage.replaceChildren();const q=snapshot[index];$('preview-position').textContent='Question '+(index+1)+' of '+snapshot.length+' · '+(q.durationSeconds??20)+' seconds';stage.append(GamePresentation.create({question:q,theme:getDraft().theme,mode:reveal?'reveal':'question'}));if(reveal&&q.answerExplanation)stage.append(make('p',q.answerExplanation));$('preview-back').disabled=index===0;$('preview-next').disabled=index===snapshot.length-1;$('preview-reveal').textContent=reveal?'Hide answer':'Show answer';}
    $('preview-back').onclick=()=>{index--;reveal=false;draw();};$('preview-next').onclick=()=>{index++;reveal=false;draw();};$('preview-reveal').onclick=()=>{reveal=!reveal;draw();};$('preview-close').onclick=()=>dialog.close();draw();dialog.showModal();
   }
+  function fitCanvas(){const rect=$('questions').getBoundingClientRect(),surface=$('questions').querySelector('.game-slide-surface');if(surface&&rect.width&&rect.height)surface.style.width=Math.max(1,Math.min(rect.width,rect.height*16/9))+'px';}
+  const observer=new ResizeObserver(fitCanvas);observer.observe($('questions'));
+  $('edit-themes').onclick=()=>{const dialog=$('game-theme-picker'),grid=$('game-theme-grid');grid.replaceChildren();for(const id of GamePresentation.themes){const name=id==='default'?'Examio Classic':id.split('-').map(w=>w[0].toUpperCase()+w.slice(1)).join(' ');const choice=btn('',()=>{getDraft().theme=id;render();grid.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.theme===id)));},'game-theme-choice');choice.dataset.theme=id;choice.setAttribute('aria-pressed',String(GamePresentation.theme(getDraft().theme)===id));const img=make('img');img.src=id==='default'?'/game-classroom-backdrop.svg':'/game-themes/'+id+'.png';img.alt='';img.loading='lazy';choice.append(img,make('span',name));grid.append(choice);}dialog.showModal();};
+  $('game-theme-close').onclick=()=>$('game-theme-picker').close();
+  for(const [id,cls] of [['editor-show-questions','show-editor-questions'],['editor-show-settings','show-editor-settings']])$(id).onclick=()=>{$('editor').classList.toggle(cls);};
   return {render,select,add,preview,isLoading:()=>pendingImages.size>0,reset(){selected=0;pendingImages.clear();}};
  }
  const api={duplicate,validate,mount};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.GameSlideEditor=api;

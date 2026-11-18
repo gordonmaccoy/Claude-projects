@@ -1,5 +1,6 @@
 (async () => {
   const {$, status, json, render, nextPollDelay} = GameClient;
+  const isMirror=new URLSearchParams(location.search).get('mirror')==='1';
   const [id, displayToken, controlParam] = location.hash.slice(1).split('/').map(decodeURIComponent);
   if (!id || !displayToken) {
     status('Open the classroom display from Games in progress.', true);
@@ -10,13 +11,13 @@
   // its separate, per-game control key only until this browser tab is closed.
   const keyStorage = 'examio-classroom-control:'+id;
   let controlKey = controlParam;
-  if (controlParam) {
+  if (!isMirror&&controlParam) {
     history.replaceState(null,'',location.pathname+location.search+'#'+encodeURIComponent(id)+'/'+encodeURIComponent(displayToken));
     try { sessionStorage.setItem(keyStorage,controlParam); } catch {}
-  } else {
+  } else if(!isMirror) {
     try { controlKey = sessionStorage.getItem(keyStorage); } catch {}
   }
-  const controls = GameClassroomControl.openChannel(id,controlKey);
+  const controls = isMirror ? null : GameClassroomControl.openChannel(id,controlKey);
   const client = controls ? crypto.randomUUID() : null;
   const advance = $('classroom-advance');
   let authorizedUntil = 0, request, requestTimer, view, version = 0;
@@ -30,7 +31,7 @@
     controls?.close();
     authorizedUntil = 0;
     clearTimeout(requestTimer);
-    try { sessionStorage.removeItem(keyStorage); } catch {}
+    if(!isMirror)try { sessionStorage.removeItem(keyStorage); } catch {}
     updateControl();
   }
 
@@ -40,7 +41,7 @@
     qrButton: $('join-qr-button'), qrImage: $('qr'), qrDialog: $('join-qr-dialog'),
     enlargedQr: $('join-qr-enlarged'), closeQr: $('join-qr-close'),
     speaker: $('sound-speaker'), soundPanel: $('sound-panel'), audioToggle: $('game-audio-toggle'),
-    autoEnable: () => audio.canAutoEnable?.() === true, document,
+    autoEnable: () => !isMirror&&audio.canAutoEnable?.() === true, document,
   });
   const celebration = $('celebration');
   let celebrationTimer, leaderTimer, pollTimer, receivedAt, polling = false, stopped = false;
@@ -75,7 +76,7 @@
     const hasPreviousView = view?.id === next.id;
     view = next;
     receivedAt = Date.now();
-    $('game-audio-controls').hidden = view.phase === 'closed';
+    $('game-audio-controls').hidden = isMirror||view.phase === 'closed';
     if (view.phase === 'closed') lobbyControls.closeSound();
     updateJoinDetails(view.phase === 'lobby' ? view : null);
     render(view);
@@ -90,7 +91,7 @@
         if (view.phase === 'leaderboard' && view.questionIndex === round) showLeader(event.player);
       }, wait);
     }
-    audio.update(view, hasPreviousView ? event?.cue : undefined);
+    if(!isMirror)audio.update(view, hasPreviousView ? event?.cue : undefined);
   }
   if (controls) {
     controls.onmessage = ({data}) => {

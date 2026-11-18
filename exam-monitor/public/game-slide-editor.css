@@ -78,3 +78,53 @@ html[data-theme=dark] #editor .slide-thumb[aria-current=true]{border-color:#60b5
 #editor .slide-answer-content{flex:1;min-width:0}
 #editor .slide-answer-content img,.preview-answer img{max-height:110px;max-width:100%;object-fit:contain}
 .preview-answer{flex-wrap:wrap}
+/* Immersive workspace: only the question rail and properties can scroll. */
+html.game-editor-open,html.game-editor-open body{height:100%;overflow:hidden!important}
+html.game-editor-open body>header{display:none!important}
+html.game-editor-open #editor{position:fixed;inset:0;z-index:1000;padding:10px 14px;background:var(--editor-back);overflow:hidden}
+#editor #game-form{height:100%;display:flex;flex-direction:column;min-height:0}
+#editor .slide-topbar{flex:0 0 auto;padding:0 0 10px;gap:12px}
+#editor .slide-title-fields{grid-template-columns:minmax(160px,1fr) minmax(120px,180px);max-width:500px;gap:4px 10px}
+#editor #editor-heading{font-size:10px;letter-spacing:.08em}
+#editor .slide-title-fields label{font-size:10px;gap:3px}
+#editor #title{font-size:14px}
+#editor .slide-title-fields input,#editor .slide-title-fields select{padding:7px 9px}
+#editor .slide-top-actions{gap:6px;flex-wrap:nowrap}
+#editor .slide-top-actions button{padding:9px 10px;white-space:nowrap;font-size:12px}
+#editor #draft-review{flex:0 0 auto;max-height:65px;overflow:auto;margin:0 0 8px;font-size:12px}
+#editor #editor-error{flex:0 0 auto;margin:0 0 8px;padding:8px;font-size:12px}
+#editor .slide-workspace{flex:1;min-height:0;grid-template-columns:160px minmax(0,1fr) 235px;align-items:stretch;gap:12px;overflow:hidden}
+#editor .slide-rail{display:flex;flex-direction:column;min-height:0;padding:10px}
+#editor #slide-list{flex:1;min-height:0;max-height:none;overflow-y:auto;overflow-x:hidden}
+#editor .slide-rail-heading{flex:0 0 auto}#editor #add-question{flex:0 0 auto}
+#editor #questions{height:100%;min-height:0;min-width:0;display:grid;place-items:center;overflow:hidden}
+#editor .slide-canvas-wrap{width:100%;height:100%;display:grid;place-items:center;min-height:0}
+#editor #slide-properties{display:flex;flex-direction:column;gap:14px;overflow-y:auto;grid-column:auto;padding:12px;min-height:0}
+#editor #slide-properties>h2{font-size:14px}
+#editor .layout-controls{display:grid;gap:10px;border-bottom:1px solid var(--editor-line);padding-bottom:14px;font-size:12px}
+#editor .layout-fields{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+#editor .layout-fields label:first-child{grid-column:1/-1}
+#editor #slide-properties input,#editor #slide-properties textarea,#editor #slide-properties select{font-size:12px;padding:7px}
+#editor .slide-question-tools{flex-shrink:0}
+#editor .slide-image-area{min-height:0;padding:8px;margin:10px 0;gap:6px}
+#editor .slide-image-area .slide-image-icon,#editor .slide-image-area>strong,#editor .slide-image-area>small{display:none}
+#editor .slide-image-area img{max-height:90px}
+#editor .slide-image-area label{max-width:100%;overflow:hidden}
+#editor .answer-tool-row{display:flex;align-items:center;justify-content:space-between;font-size:12px;margin:8px 0}
+#editor .slide-thumb-image{grid-column:1/-1;max-width:100%;height:42px;object-fit:contain}
+#editor-show-questions,#editor-show-settings{display:none}
+#game-theme-picker{width:min(1000px,95vw);max-height:90dvh;overflow:auto}
+#game-theme-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.game-theme-choice{padding:4px;overflow:hidden;text-align:left;border:3px solid transparent}
+.game-theme-choice[aria-pressed=true]{border-color:#148bff}
+.game-theme-choice img{display:block;width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:7px}
+.game-theme-choice span{display:block;font-size:12px;padding:8px}
+#game-preview{width:min(1200px,96vw);max-height:96dvh;padding:16px;overflow:auto}
+#preview-stage>.game-slide-surface{margin:auto;max-width:calc(65dvh * 16 / 9)}
+#game-preview .section-heading{gap:10px}#game-preview h2{font-size:18px;margin:0}#game-preview .eyebrow{margin:0;font-size:10px}#game-preview #preview-position{font-size:12px;margin:8px 0}
+#game-preview .toolbar{margin:10px 0 0}
+@media(max-width:1100px){#editor .slide-workspace{grid-template-columns:130px minmax(0,1fr) 210px}#editor .slide-topbar{flex-wrap:nowrap}#editor .slide-title-fields{grid-template-columns:1fr;max-width:260px}#editor .slide-title-fields label:has(#game-folder){display:grid}#editor #review-game-ai{font-size:0}#editor #review-game-ai:after{content:'AI check';font-size:12px}}
+@media(max-width:720px){html.game-editor-open #editor{padding:8px}#editor .slide-topbar{flex-wrap:wrap;gap:6px}#editor .slide-title-fields{max-width:none;width:100%;grid-template-columns:1fr}#editor #editor-heading,#editor .slide-title-fields label{font-size:0}#editor .slide-title-fields #title{font-size:14px}#editor #editor-heading{display:none}#editor .slide-top-actions{flex-wrap:wrap;gap:4px}#editor .slide-top-actions button{font-size:11px;padding:7px}#editor-show-questions,#editor-show-settings{display:inline-block}#editor .slide-workspace{grid-template-columns:1fr;position:relative}#editor .slide-rail,#editor #slide-properties{display:none}#editor #questions{grid-column:1;grid-row:1}#editor.show-editor-questions .slide-rail{display:flex;position:absolute;inset:0 auto 0 0;width:180px;z-index:20;box-shadow:5px 0 20px #0005}#editor.show-editor-settings #slide-properties{display:flex;position:absolute;inset:0 0 0 auto;width:240px;z-index:20;box-shadow:-5px 0 20px #0005}#editor #slide-list{flex-direction:column}#editor .slide-thumb{width:100%}#editor #add-question{width:100%}#game-theme-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+@media(max-width:1100px) and (min-width:721px){#editor .slide-title-fields{grid-template-columns:minmax(150px,1fr) 130px;max-width:360px}}
+@media(max-width:720px){#editor .slide-title-fields{grid-template-columns:minmax(100px,1fr) 135px}#editor .slide-title-fields #game-folder{font-size:11px}}

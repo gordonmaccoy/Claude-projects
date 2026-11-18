@@ -1,4 +1,5 @@
 const teams=require('./game-teams');
+const presentation=require('./public/game-presentation');
 const {randomUUID,randomBytes,randomInt,createHash,timingSafeEqual}=require('node:crypto');
 const {validateTest}=require('./exam');
 const {generateRoomName}=require('./rooms');
@@ -25,9 +26,9 @@ function validateGame(input){
  if(input.questions.some(q=>['__proto__','prototype','constructor'].includes(q.id)))fail('Reserved question identifier.');
  const candidate={title:input.title,questions:input.questions.map(q=>({...q,id:q.id||randomUUID(),type:'mc',points:1}))};
  const clean=validateTest(candidate);if(!clean)fail('Check the title, questions, choices, images and correct answers.');
- clean.questions=clean.questions.map((q,i)=>{const durationSeconds=input.questions[i].durationSeconds??20;if(!Number.isInteger(durationSeconds)||durationSeconds<5||durationSeconds>240)fail('Each question timer must be 5–240 seconds.');const {points,evidence,answerKeyConflict,...rest}=q;const media=validateMedia(input.questions[i].media);return {...rest,durationSeconds,...(media?{media}:{})};});
+ clean.questions=clean.questions.map((q,i)=>{const durationSeconds=input.questions[i].durationSeconds??20;if(!Number.isInteger(durationSeconds)||durationSeconds<5||durationSeconds>240)fail('Each question timer must be 5–240 seconds.');const {points,evidence,answerKeyConflict,...rest}=q;const media=validateMedia(input.questions[i].media);return {...rest,durationSeconds,presentation:presentation.sanitize(input.questions[i].presentation,q),...(media?{media}:{})};});
  const imageBytes=clean.questions.reduce((sum,q)=>sum+(q.image?.length||0)+q.options.reduce((n,o)=>n+(o.image?.length||0),0)+(q.media?.url.startsWith('data:')?q.media.url.length:0),0);if(imageBytes>600000)fail('Total game media images are too large.');
- return {...clean,largeClass:input.largeClass===true};
+ return {...clean,theme:presentation.theme(input.theme),largeClass:input.largeClass===true};
 }
 function fromTest(test,{compatibleOnly=false}={}){
  if(!test||!Array.isArray(test.questions))fail('Test not found.');
@@ -212,7 +213,8 @@ function publicView(s,now=Date.now()){
  const q=s.game.questions[s.questionIndex],revealing=['reveal','leaderboard'].includes(s.phase);
  let question=null;
  if(q&&['countdown','question','reveal','leaderboard'].includes(s.phase)){
-  question={id:q.id,text:q.text,...(q.image?{image:q.image}:{})};
+  question={id:q.id,text:q.text,presentation:presentation.normalize(q.presentation,q),...(q.image?{image:q.image}:{})};
+  if(s.phase==='countdown')question.presentation={boxes:Object.fromEntries(Object.entries(question.presentation.boxes).filter(([key])=>key==='prompt'||key==='image'))};
   if(s.phase!=='countdown')Object.assign(question,{options:q.options.map(o=>({...o})),durationSeconds:q.durationSeconds});
   if(revealing)Object.assign(question,{
    correctOptionId:q.correctOptionId,answerExplanation:q.answerExplanation||'',
@@ -222,7 +224,7 @@ function publicView(s,now=Date.now()){
  const podium=s.phase==='podium',schedule=s.podiumSchedule||[];
  const showingAll=!podium||now>=podiumRevealAt(s,4);
  const visible=showingAll?leaderboard:leaderboard.filter(p=>p.rank<=3&&now>=podiumRevealAt(s,p.rank));
- return {...roundView(s,now),...(teams.enabled(s)?{gameMode:'team',teamAssignment:s.teamAssignment,teamSize:s.teamSize,teams:teams.list(s),playerCount:s.players.length}:{}),...(podium?{podiumSchedule:schedule,podiumCompleteAt:podiumRevealAt(s,4)}:{}),pin:s.pin,roomName:s.roomName??null,title:s.game.title,
+ return {...roundView(s,now),...(teams.enabled(s)?{gameMode:'team',teamAssignment:s.teamAssignment,teamSize:s.teamSize,teams:teams.list(s),playerCount:s.players.length}:{}),...(podium?{podiumSchedule:schedule,podiumCompleteAt:podiumRevealAt(s,4)}:{}),pin:s.pin,roomName:s.roomName??null,title:s.game.title,theme:presentation.theme(s.game.theme),
   players:finalPoll(s)?rows.map(({score,...p})=>p):showingAll?rows:visible,leaderboard:finalPoll(s)?[]:visible,question,media:s.phase==='media'&&q?.media?{...q.media}:null};
 }
 function playerView(s,playerId,now=Date.now()){

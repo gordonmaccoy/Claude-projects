@@ -1,0 +1,45 @@
+/* One proportional question surface for authoring, preview and projection. */
+.game-slide-surface{position:relative;container-type:inline-size;width:100%;aspect-ratio:16/9;overflow:hidden;border-radius:10px;background:linear-gradient(#071b3340,#071b3360),var(--game-theme-image) center/cover no-repeat,#102f50;color:#fff;isolation:isolate}
+.game-slide-surface *{box-sizing:border-box}
+.game-slide-surface .game-slide-box{position:absolute;min-width:0;min-height:0;margin:0;overflow:hidden;line-height:1.18;display:flex;align-items:center;justify-content:center;gap:.4em;padding:.4em;border-radius:.4em}
+.game-slide-surface .presentation-prompt{background:#0a274bd9;color:white;text-align:center}
+.game-slide-surface .question-text{font:inherit!important;color:inherit!important;margin:0!important;max-width:100%;white-space:pre-wrap;overflow-wrap:anywhere}
+.game-slide-surface .presentation-image{padding:0;background:transparent}
+.game-slide-surface img{width:auto;height:auto;max-width:100%;max-height:100%;object-fit:contain;border-radius:.2em}
+.game-slide-surface .presentation-answer{justify-content:flex-start;border:2px solid #ffffff35;color:#fff;background:#aa2349;text-align:left;box-shadow:0 5px 12px #0002}
+.game-slide-surface .choice-1{background:#1261b5}.game-slide-surface .choice-2{background:#ffdb4f;color:#132743}.game-slide-surface .choice-3{background:#087553}.game-slide-surface .choice-4{background:#6241a4}
+.game-slide-surface .choice-symbol{font:inherit!important;display:grid;place-items:center;background:#ffffff20;padding:.15em;flex:0 0 1.3em;border-radius:.2em}
+.game-slide-surface .presentation-answer-text{flex:1;overflow-wrap:anywhere;white-space:pre-wrap}
+.game-slide-surface .presentation-answer img{max-width:30%;max-height:90%}
+.game-slide-surface .presentation-answer.is-correct{border:3px solid #97fcb3;box-shadow:0 0 0 2px #1b6539}
+.game-slide-surface .presentation-correct{margin-left:auto}
+.game-slide-surface .presentation-votes{position:absolute;right:5px;bottom:3px;font-size:.5em;background:#081b33d9;color:white;border-radius:4px;padding:2px 5px}
+.game-slide-surface[data-mode=edit] .game-slide-box{overflow:visible;outline:1px dashed #ffffff70}
+.game-slide-surface[data-mode=edit] .game-slide-box.selected{outline:3px solid #59c5ff;z-index:3}
+#editor .game-slide-surface textarea{font:inherit!important;color:inherit!important;-webkit-text-fill-color:currentColor!important;width:100%;height:100%;min-height:0;resize:none;border:0;padding:0;background:transparent;box-shadow:none;text-align:inherit;outline-offset:0}
+#editor .game-slide-surface textarea::placeholder{color:inherit!important;-webkit-text-fill-color:currentColor!important;opacity:.65}
+#editor .game-slide-surface .presentation-answer textarea{flex:1;min-width:0}
+#editor .game-slide-surface input[type=radio]{position:absolute;right:7px;top:7px;width:18px;height:18px;margin:0;accent-color:#0a9b57;z-index:4}
+#editor .game-slide-surface .slide-box-drag,#editor .game-slide-surface .slide-box-resize{position:absolute;border:0;border-radius:4px;background:#0e65bc;color:#fff;font:16px/1 system-ui;padding:4px;min-width:24px;min-height:24px;z-index:5;touch-action:none;opacity:0}
+#editor .game-slide-surface .slide-box-drag{left:0;top:-12px;cursor:move}#editor .game-slide-surface .slide-box-resize{right:-8px;bottom:-8px;cursor:nwse-resize}
+#editor .game-slide-box:hover>.slide-box-drag,#editor .game-slide-box:hover>.slide-box-resize,#editor .game-slide-box.selected>button,#editor .game-slide-box:focus-within>button{opacity:1}
+.game-display[data-game-theme]{background:linear-gradient(#071b3340,#071b3370),var(--game-theme-image) center/cover fixed no-repeat,#102f50}
+#stage.presentation-stage{padding:0!important;background:transparent!important;border:0;box-shadow:none;min-height:0!important;display:block!important}
+#stage.presentation-stage .game-slide-surface .choice{min-height:0;padding:.4em;font-weight:700;font-size:inherit}
+#stage.presentation-stage .game-slide-surface .choice.correct:after{display:none}
+.game-display:has(.presentation-stage){height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+.game-display:has(.presentation-stage)>header{flex:0 0 auto;padding:8px 3vw}
+.game-display:has(.presentation-stage) main{flex:1;min-height:0;max-width:none;width:100%;display:flex;flex-direction:column;padding:8px 3vw}
+.game-display:has(.presentation-stage) .live-heading{flex:0 0 auto}
+.game-display:has(.presentation-stage) .live-heading h1{font-size:20px;margin:2px 0 8px}
+.game-display:has(.presentation-stage) #stage{flex:1;min-height:0;position:relative;display:grid!important;place-items:center;overflow:hidden}
+.game-display:has(.presentation-stage) #stage>.game-slide-surface{position:absolute;width:var(--presentation-fit,100%);left:50%;top:50%;transform:translate(-50%,-50%)}
+.game-display:has(.presentation-stage) #stage>.explanation{position:absolute;bottom:0;left:10%;right:10%;z-index:5;max-height:20%;overflow:auto;font-size:14px;background:#0b2549ef;color:#fff}
+.game-display:has(.presentation-stage) footer{flex:0 0 auto}
+#host-display-mirror{display:block;width:100%;aspect-ratio:16/9;border:0;border-radius:12px;background:#102f50}
+#game-host-panel.has-display-mirror>.live-heading,#game-host-panel.has-display-mirror>#stage{display:none}
+/* Keep author text aligned like the projected text, without textarea page geometry. */
+.game-slide-surface .presentation-answer{flex-wrap:nowrap}
+.game-slide-surface .presentation-prompt{font-weight:750}
+#editor .game-slide-surface textarea{height:auto;field-sizing:content;min-height:1.2em;max-height:100%}
+#editor .game-slide-surface .presentation-answer textarea{height:auto;field-sizing:content}

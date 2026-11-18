@@ -33,6 +33,15 @@ const assert=require('node:assert/strict'),express=require('express'),{once}=req
   await toggle.click();page.once('dialog',d=>d.dismiss());await panel.getByRole('button',{name:'Copy to Tests'}).click();assert.equal(requests.filter(([p])=>p.endsWith('/to-test')).length,0);
   await toggle.focus();await page.keyboard.press('ArrowDown');await page.keyboard.press('Enter');await page.locator('#editor:not([hidden])').waitFor();assert.equal(await page.locator('#title').inputValue(),'Economics review');// The slide editor changes only the selected draft question and previews without a session.
   assert.equal(await page.locator('.slide-thumb').count(),1);
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollHeight<=innerHeight));
+  await page.getByRole('spinbutton',{name:'Font size',exact:true}).fill('48');
+  await page.getByRole('spinbutton',{name:'Width %',exact:true}).fill('80');await page.getByRole('spinbutton',{name:'Left %',exact:true}).fill('8');
+  const promptBox=page.locator('[data-box=prompt]');await promptBox.hover();const drag=await promptBox.locator('.slide-box-drag').boundingBox();
+  await page.mouse.move(drag.x+10,drag.y+10);await page.mouse.down();await page.mouse.move(drag.x+35,drag.y+22,{steps:5});await page.mouse.up();
+  assert.ok(Number.parseFloat(await promptBox.evaluate(n=>n.style.left))>8);
+  await page.locator('#edit-themes').click();await page.locator('.game-theme-choice[data-theme=summer]').click();await page.locator('#game-theme-close').click();
+  assert.equal(await page.locator('#questions .game-slide-surface').getAttribute('data-game-theme'),'summer');
+
   await page.getByRole('button',{name:'Duplicate question',exact:true}).click();
   assert.equal(await page.locator('.slide-thumb').count(),2);
   await page.getByRole('textbox',{name:'Question',exact:true}).fill('Second question');
@@ -52,22 +61,23 @@ const assert=require('node:assert/strict'),express=require('express'),{once}=req
   assert.equal(requests.filter(([p,m])=>p==='/api/game-sessions'&&m==='POST').length,sessionCount);
   for(const width of [320,390,900,1440]){await page.setViewportSize({width,height:950});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Editor overflow at '+width);}
   await page.screenshot({path:'output/game-slide-editor-white.png',fullPage:true});
-  await page.locator('#game-theme-toggle').click();await page.screenshot({path:'output/game-slide-editor-blue.png',fullPage:true});
+  await page.locator('#game-theme-toggle').evaluate(n=>n.click());await page.screenshot({path:'output/game-slide-editor-blue.png',fullPage:true});
   await page.setViewportSize({width:390,height:844});await page.screenshot({path:'output/game-slide-editor-mobile.png',fullPage:true});
-  await page.locator('#game-theme-toggle').click();await page.setViewportSize({width:1280,height:900});
+  await page.locator('#game-theme-toggle').evaluate(n=>n.click());await page.setViewportSize({width:1280,height:900});
+  await page.locator('#slide-properties details').filter({has:page.getByText('Question image',{exact:true})}).evaluate(n=>n.open=true);
   await page.evaluate(()=>{const NativeReader=window.FileReader;window.FileReader=class extends NativeReader{readAsDataURL(file){setTimeout(()=>super.readAsDataURL(file),800);}};});
   const delayedReview=async route=>{const body=route.request().postDataJSON();await new Promise(resolve=>setTimeout(resolve,250));await route.fulfill({contentType:'application/json',body:JSON.stringify({test:body.test})});};
   await page.route('**/api/answer-key',delayedReview);
   page.once('dialog',d=>d.accept());await page.locator('#review-game-ai').click();
   await page.locator('.slide-file').setInputFiles({name:'ai-race.png',mimeType:'image/png',buffer:Buffer.from(imageFixture.split(',')[1],'base64')});
   await page.locator('#editor-error').filter({hasText:/Questions changed while AI/}).waitFor();
-  await page.locator('.slide-image-area img').waitFor();await page.unroute('**/api/answer-key',delayedReview);
+  await page.locator('.presentation-image img').waitFor();await page.unroute('**/api/answer-key',delayedReview);
   await page.locator('.slide-file').setInputFiles({name:'picture.png',mimeType:'image/png',buffer:Buffer.from(imageFixture.split(',')[1],'base64')});
   await page.locator('#save-game').click();await page.locator('#editor-error').filter({hasText:/finish loading/}).waitFor();
-  await page.locator('#editor-error').filter({hasText:/finish loading/}).waitFor({state:'hidden'});await page.locator('.slide-image-area img').waitFor();
+  await page.locator('#editor-error').filter({hasText:/finish loading/}).waitFor({state:'hidden'});await page.locator('.presentation-image img').waitFor();
   await page.locator('#save-game').click();await page.locator('#library:not([hidden])').waitFor();
   const savedSlides=JSON.parse(requests.filter(([p,m])=>p==='/api/games/one'&&m==='PUT').at(-1)[3]).questions;
-  assert.deepEqual(savedSlides.map(q=>q.text),['Second question','Question']);assert.equal(savedSlides[1].image,imageFixture);assert.equal(savedSlides[0].options[0].image,imageFixture);assert.equal(savedSlides[0].media.url,imageFixture);
+  assert.deepEqual(savedSlides.map(q=>q.text),['Second question','Question']);assert.equal(savedSlides[1].image,imageFixture);assert.equal(savedSlides[0].options[0].image,imageFixture);assert.equal(savedSlides[0].media.url,imageFixture);assert.equal(savedSlides[0].presentation.boxes.prompt.fontSize,48);assert.ok(savedSlides[0].presentation.boxes.prompt.x>8);
   assert.notEqual(savedSlides[0].id,savedSlides[1].id);
   assert.notEqual(savedSlides[0].options[0].id,savedSlides[1].options[0].id);
   for(const q of savedSlides)assert.equal(q.correctOptionId,q.options[0].id);
@@ -111,6 +121,11 @@ const assert=require('node:assert/strict'),express=require('express'),{once}=req
   await page.getByText(/Use Open classroom display to show/).waitFor();
   assert.equal(JSON.parse(requests.filter(([p,m])=>p==='/api/game-sessions'&&m==='POST').at(-1)[3]).largeClass,false);
   assert.match(await page.locator('#display-link:not([hidden])').getAttribute('href'),/game-display.html#new\/viewer\/controller/);
-  await page.route('**/professor.html',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><html data-theme="dark"><head><style>body{margin:0;background:#082d5b}iframe{width:100%;border:0;height:1600px;background:transparent}</style></head><body><iframe src="/game-library.html?embedded=1"></iframe></body></html>'}));await page.evaluate(()=>localStorage.setItem('exam-monitor-theme','dark'));await page.goto(base+'/professor.html');const embedded=page.frameLocator('iframe');await embedded.locator('.game-card').first().waitFor();assert.equal(await embedded.locator('html').getAttribute('data-embedded-game'),'');assert.equal(await embedded.locator('html').evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(8, 45, 91)');assert.equal(await embedded.locator('body').evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(8, 45, 91)');await page.setViewportSize({width:1440,height:1000});await page.screenshot({path:'output/game-library-blue-grid.png',fullPage:true});await embedded.locator('[data-game-layout=list]').click();await page.screenshot({path:'output/game-library-blue-list.png',fullPage:true});await page.setViewportSize({width:390,height:844});assert.ok(await embedded.locator('body').evaluate(el=>el.scrollWidth<=innerWidth));await page.screenshot({path:'output/game-library-blue-mobile.png',fullPage:true});assert.deepEqual(errors,[]);console.log('Library disclosure tests passed: keyboard, dismissal, cancel actions, editor, mobile bounds, resume and classroom-control launch.');
+  await page.route('**/professor.html',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><html data-theme="dark"><head><style>body{margin:0;background:#082d5b}iframe{width:100%;border:0;height:1600px;background:transparent}</style></head><body><iframe></iframe><script src="/game-workspace-tab.js"></script><script>window.workspace=ExamioGameWorkspace.create(document.querySelector("iframe"));workspace.setActive(true);</script></body></html>'}));await page.evaluate(()=>localStorage.setItem('exam-monitor-theme','dark'));await page.goto(base+'/professor.html');const embedded=page.frameLocator('iframe');await embedded.locator('.game-card').first().waitFor();assert.equal(await embedded.locator('html').getAttribute('data-embedded-game'),'');assert.equal(await embedded.locator('html').evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(8, 45, 91)');assert.equal(await embedded.locator('body').evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(8, 45, 91)');await page.setViewportSize({width:1440,height:1000});await page.screenshot({path:'output/game-library-blue-grid.png',fullPage:true});await embedded.locator('[data-game-layout=list]').click();await page.screenshot({path:'output/game-library-blue-list.png',fullPage:true});await page.setViewportSize({width:390,height:844});assert.ok(await embedded.locator('body').evaluate(el=>el.scrollWidth<=innerWidth));await page.screenshot({path:'output/game-library-blue-mobile.png',fullPage:true});await page.setViewportSize({width:1440,height:900});await embedded.locator('.game-folder[data-folder-id="folder-1"]').evaluate(n=>n.open=true);await embedded.getByRole('button',{name:'More actions for Economics review'}).click();await embedded.locator('.game-actions-panel:visible').getByRole('button',{name:'Edit',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector('iframe').style.position==='fixed');
+  const full=await page.locator('iframe').boundingBox();assert.equal(full.x,0);assert.equal(full.y,0);assert.equal(full.width,1440);assert.equal(full.height,900);
+  for(let i=0;i<12;i++)await embedded.locator('#add-question').click();assert.ok(await embedded.locator('#slide-list').evaluate(n=>n.scrollHeight>n.clientHeight));assert.ok(await embedded.locator('html').evaluate(n=>n.scrollHeight<=n.ownerDocument.defaultView.innerHeight));
+  await page.screenshot({path:'output/game-immersive-editor.png'});page.once('dialog',d=>d.accept());await embedded.locator('#cancel-edit').click();await page.waitForFunction(()=>document.querySelector('iframe').style.position==='');
+  assert.deepEqual(errors,[]);console.log('Library disclosure tests passed: keyboard, dismissal, cancel actions, editor, mobile bounds, resume and classroom-control launch.');
  }finally{await browser?.close();await new Promise(r=>server.close(r));}
 })().catch(e=>{console.error(e);process.exitCode=1;});

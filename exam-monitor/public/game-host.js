@@ -104,7 +104,12 @@
   }
   const controller=createController({
    api,onView(view,busy){
-    render(view);
+    if(!view.displayToken)render(view);
+    if(view.displayToken){
+     let mirror=$('host-display-mirror');if(!mirror){mirror=document.createElement('iframe');mirror.id='host-display-mirror';mirror.title='Live classroom display';mirror.setAttribute('allow','fullscreen');$('stage').after(mirror);}
+     const source='/game-display.html?mirror=1#'+encodeURIComponent(view.id)+'/'+encodeURIComponent(view.displayToken);
+     if(mirror.getAttribute('src')!==source)mirror.setAttribute('src',source);panel.classList.add('has-display-mirror');
+    }
     const url=displayHref(view);display.hidden=!url;
     if(url)display.href=url;
     const next=control.actionLabel(view);
@@ -139,9 +144,10 @@
      onUnavailable(id,error);
     }else showStatus(error.message,true);
    },
-   onClose(id){visibleId=null;panel.hidden=true;onEnded(id);},
+   onClose(id){visibleId=null;resetControls();panel.hidden=true;onEnded(id);},
   });
   function resetControls(){
+   $('host-display-mirror')?.remove();panel.classList.remove('has-display-mirror');
    display.hidden=true;display.removeAttribute('href');advance.disabled=end.disabled=true;
    advance.textContent='Connecting…';
    recoveryFingerprint=null;recovery.replaceChildren();recovery.closest('.recovery-panel').hidden=true;
