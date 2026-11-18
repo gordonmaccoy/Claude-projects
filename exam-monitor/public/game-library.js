@@ -7,7 +7,7 @@
  let sessions=[],launching=false,sessionRevision=0;
  const sessionParam=()=>new URLSearchParams(location.search).get('session');
  function closeEditor(){editorVersion++;reviewController?.abort();reviewController=null;$('game-form').inert=false;$('save-game').disabled=false;$('cancel-edit').disabled=false;draft=null;$('editor').hidden=true;$('library').hidden=false;$('editor-error').textContent='';}
- function edit(game){editorVersion++;reviewController?.abort();$('review-game-ai').disabled=!api?.config?.aiConfigured;$('review-game-ai').title=api?.config?.aiConfigured?'':'AI checking is not configured.';$('draft-review').hidden=true;$('draft-review').textContent='';draft=game?structuredClone(game):{title:'',folderId:null,questions:[newQuestion()]};$('title').value=draft.title;renderFolderOptions();$('editor-heading').textContent=draft.id?'Edit game':'Create a game';$('library').hidden=true;$('editor').hidden=false;renderQuestions();$('title').focus();}
+ function edit(game){editorVersion++;reviewController?.abort();$('review-game-ai').disabled=!api?.config?.aiConfigured;$('review-game-ai').title=api?.config?.aiConfigured?'':'AI checking is not configured.';$('draft-review').hidden=true;$('draft-review').textContent='';slideEditor.reset();draft=game?structuredClone(game):{title:'',folderId:null,questions:[newQuestion()]};if(!draft.questions.length)draft.questions.push(newQuestion());$('title').value=draft.title;renderFolderOptions();$('editor-heading').textContent=draft.id?'Edit game':'Create a game';$('library').hidden=true;$('editor').hidden=false;renderQuestions();$('title').focus();}
  function renderFolderOptions(){
   const select=$('game-folder');select.replaceChildren();const uncategorized=el('option','Uncategorized Games');uncategorized.value='';select.append(uncategorized);
   for(const folder of folders){const option=el('option',folder.name);option.value=folder.id;select.append(option);}
@@ -27,10 +27,9 @@
   }
  }
  function label(text,input){const l=el('label',text);l.append(input);return l;}
- function renderQuestions(){const list=$('questions');list.replaceChildren();draft.questions.forEach((q,index)=>{const card=el('section',undefined,'question-card');const header=el('div',undefined,'question-header');header.append(el('h2','Question '+(index+1)),button('Remove',()=>{if(draft.questions.length===1)throw new Error('Keep at least one question.');draft.questions.splice(index,1);renderQuestions();},'danger'));card.append(header);if(q.answerKeyConflict)card.append(el('p','Answer needs review: the supplied key and AI review disagree. Check the question and choose the correct answer.','answer-review-warning'));else if(!q.correctOptionId)card.append(el('p','Choose a correct answer before saving.','answer-review-warning'));const text=el('textarea');text.required=true;text.maxLength=1000;text.value=q.text;text.oninput=()=>q.text=text.value;card.append(label('Question',text));const duration=el('input');duration.type='number';duration.min=5;duration.max=240;duration.step=1;duration.required=true;duration.value=q.durationSeconds||20;duration.oninput=()=>q.durationSeconds=Number(duration.value);card.append(label('Seconds to answer',duration));
-  const mediaBox=el('details');mediaBox.open=Boolean(q.media);mediaBox.append(el('summary','Optional media before this question'));const mediaType=el('select');for(const [value,name] of [['','None'],['image','Image'],['audio','Audio'],['video','Video'],['youtube','YouTube video']]){const opt=el('option',name);opt.value=value;mediaType.append(opt);}mediaType.value=q.media?.type||'';const mediaUrl=el('input');mediaUrl.type='url';mediaUrl.placeholder='https://…';mediaUrl.value=q.media?.url||'';mediaUrl.disabled=!mediaType.value;const updateMedia=()=>{if(!mediaType.value){delete q.media;mediaUrl.disabled=true;}else{mediaUrl.disabled=false;q.media={type:mediaType.value,url:mediaUrl.value.trim()};}};mediaType.onchange=updateMedia;mediaUrl.oninput=updateMedia;mediaBox.append(label('Media type',mediaType),label('Public HTTPS media URL',mediaUrl),el('p','Media plays on the host/classroom screen before the timer starts. Use a direct playable image/audio/video URL or a YouTube link. The teacher controls playback; students wait. External providers receive playback requests.'));card.append(mediaBox);
-
-  const image=picture(q.image);if(image){card.append(image,button('Remove image',()=>{delete q.image;renderQuestions();}));}const upload=el('input');upload.type='file';upload.accept='image/png,image/jpeg,image/webp';upload.onchange=async()=>{const file=upload.files?.[0];if(!file)return;if(file.size>130000||!['image/png','image/jpeg','image/webp'].includes(file.type)){status('Use a PNG, JPEG or WebP image up to 130 KB.',true);return;}const reader=new FileReader();reader.onload=()=>{q.image=String(reader.result);renderQuestions();};reader.onerror=()=>status('Unable to load image.',true);reader.readAsDataURL(file);};card.append(label('Question image (optional, up to 130 KB)',upload));card.append(el('p','Select the correct answer.'));q.options.forEach((o,i)=>{const row=el('div',undefined,'option-edit');const correct=el('input');correct.type='radio';correct.name='correct-'+q.id;correct.checked=o.id===q.correctOptionId;correct.setAttribute('aria-label','Correct answer '+String.fromCharCode(65+i));correct.onchange=()=>{q.correctOptionId=o.id;q.answerKeyConflict=false;const warning=card.querySelector('.answer-review-warning');if(warning)warning.remove();};correct.onclick=correct.onchange;const input=el('input');input.required=true;input.maxLength=500;input.value=o.text;input.setAttribute('aria-label','Answer '+String.fromCharCode(65+i));input.oninput=()=>o.text=input.value;row.append(correct,input,button('Remove',()=>{if(q.options.length<=2)throw new Error('Each question needs at least two choices.');q.options.splice(i,1);if(q.correctOptionId===o.id)q.correctOptionId='';renderQuestions();}));card.append(row);});if(q.options.length<5)card.append(button('+ Add choice',()=>{q.options.push({id:crypto.randomUUID(),text:''});renderQuestions();}));const explanation=el('textarea');explanation.maxLength=1000;explanation.value=q.answerExplanation||'';explanation.oninput=()=>q.answerExplanation=explanation.value;card.append(label('Explanation after reveal (optional)',explanation));list.append(card);});}
+ const slideEditor=GameSlideEditor.mount({getDraft:()=>draft,newQuestion,status});
+ function renderQuestions(){slideEditor.render();}
+ $('preview-game').onclick=()=>slideEditor.preview();
  // A disclosure of ordinary buttons: native Tab/Enter/Space behavior, not an ARIA menu.
  let openActions=null, actionSequence=0;
  function closeActions(restoreFocus=false){
@@ -159,20 +158,18 @@
   catch(error){if($('folder-dialog').open)$('folder-error').textContent=error.message;else status('Folder created, but the library could not refresh. Use Refresh to reload it.',true);}
   finally{savingFolder=false;$('save-folder').disabled=false;$('folder-cancel').disabled=false;}
  };
- $('new-game').onclick=openCreation;$('cancel-edit').onclick=()=>{if(confirm('Discard unsaved changes?'))closeEditor();};$('add-question').onclick=()=>{if(draft.questions.length>=100){status('A game can contain up to 100 questions.',true);return;}draft.questions.push(newQuestion());renderQuestions();$('questions').lastElementChild.scrollIntoView({block:'start',behavior:'smooth'});};$('refresh').onclick=()=>refresh().catch(e=>status(e.message,true));
+ $('new-game').onclick=openCreation;$('cancel-edit').onclick=()=>{if(confirm('Discard unsaved changes?'))closeEditor();};$('add-question').onclick=()=>slideEditor.add();$('refresh').onclick=()=>refresh().catch(e=>status(e.message,true));
  $('game-form').onsubmit=async event=>{
   event.preventDefault();
   if(!draft||$('save-game').disabled)return;
+  if(slideEditor.isLoading()){$('editor-error').textContent='Please wait for the image to finish loading, then save again.';return;}
   const version=editorVersion;
   const formDraft={...structuredClone(draft),title:$('title').value.trim(),folderId:$('game-folder').value||null};
   delete formDraft.largeClass; // Historical library settings no longer control a launched room.
-  const missing=formDraft.questions.findIndex(q=>!q.correctOptionId||q.answerKeyConflict);
-  if(missing>=0){
-   $('questions').children[missing].scrollIntoView({block:'center',behavior:'smooth'});
-   $('editor-error').textContent='Choose a correct answer for question '+(missing+1)+'.';
-   return;
-  }
-  $('save-game').disabled=true;$('cancel-edit').disabled=true;$('review-game-ai').disabled=true;$('game-form').inert=true;$('editor-error').textContent='';
+  if(!formDraft.title||formDraft.title.length>80){$('editor-error').textContent='Enter a game title (up to 80 characters).';$('title').focus();return;}
+ const issue=GameSlideEditor.validate(formDraft.questions);
+ if(issue){slideEditor.select(issue.index);$('editor-error').textContent=issue.message+' — question '+(issue.index+1)+'.';$('editor-error').scrollIntoView({block:'nearest'});return;}
+ $('save-game').disabled=true;$('cancel-edit').disabled=true;$('review-game-ai').disabled=true;$('game-form').inert=true;$('editor-error').textContent='';
   try{
    await api('/games'+(formDraft.id?'/'+encodeURIComponent(formDraft.id):''),formDraft.id?'PUT':'POST',formDraft);
    if(version!==editorVersion)return;
@@ -220,12 +217,13 @@
  };
  $('review-game-ai').onclick=async()=>{
   if(!draft||$('save-game').disabled||!api.config?.aiConfigured)return;
+  if(slideEditor.isLoading()){$('editor-error').textContent='Please wait for the image to finish loading before checking answers.';return;}
   if(!confirm('Send this content to OpenAI to prepare questions and answers. API usage charges apply.'))return;
   const version=editorVersion;const snapshot=JSON.stringify(draft.questions);const title=$('title').value.trim()||'Untitled game';
   reviewController?.abort();reviewController=new AbortController();$('review-game-ai').disabled=true;$('save-game').disabled=true;$('editor-error').textContent='';
   try{const result=await api('/answer-key','POST',{test:{title,questions:draft.questions},reviewSupplied:true,consent:true},{signal:reviewController.signal});
    if(version!==editorVersion||!draft)return;
-   if(snapshot!==JSON.stringify(draft.questions)){throw new Error('Questions changed while AI was checking. Review was not applied; check again when ready.');}
+   if(slideEditor.isLoading()||snapshot!==JSON.stringify(draft.questions)){throw new Error('Questions changed while AI was checking. Review was not applied; check again when ready.');}
    const reviewed=GameDraft.applyAnswerReview(draft,result.test);draft=reviewed.draft||reviewed;renderQuestions();
    $('draft-review').textContent=['AI answer review is ready. Review all suggestions before saving.',(reviewed.conflicts||0)+' question(s) have an answer conflict to confirm.',...(Array.isArray(result.warnings)?result.warnings:[]),draft.questions.filter(q=>!q.correctOptionId).length+' question(s) still need a correct answer selected.'].join(' ');$('draft-review').hidden=false;
   }catch(error){if(version===editorVersion&&draft)$('editor-error').textContent=error.message;}

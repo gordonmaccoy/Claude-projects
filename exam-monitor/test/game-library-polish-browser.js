@@ -7,6 +7,7 @@ const assert=require('node:assert/strict'),express=require('express'),{once}=req
   const base='http://127.0.0.1:'+server.address().port;
   await page.route('**/auth-client.js',r=>r.fulfill({contentType:'text/javascript',body:"window.createOnScreenAuth=()=>({auth:{async getSession(){return {data:{session:{access_token:'local-test',user:{id:'test-owner'}}}}}}})"}));
   const games=[{id:'one',playCount:24,title:'Economics review',questions:[{id:'q',text:'Question',options:[{id:'a',text:'One'},{id:'b',text:'Two'}],correctOptionId:'a'}]},{id:'two',title:'Another game',questions:[]}];
+  const imageFixture='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l1sAAAAASUVORK5CYII=';games[0].questions[0].options[0].image=imageFixture;games[0].questions[0].media={type:'image',url:imageFixture};
   const imported={id:'source-test',title:'Imported source',questions:[{id:'src-q',type:'mc',text:'Imported question',options:[{id:'src-a',text:'A'},{id:'src-b',text:'B'}],correctOptionId:''},{id:'blank',type:'blank',text:'Unsupported',acceptedAnswers:['x']}]};
   const folders=[{id:'folder-1',name:'Intro to Economics'}];let rejectFolder=false;
   const mockSession=id=>({id,title:id==='active'?'Active game':'New game',phase:'lobby',questionIndex:-1,questionCount:2,players:[],recoveryRequests:[],displayUrl:base+'/game-display.html#'+id+'/viewer',classroomControlUrl:base+'/game-display.html#'+id+'/viewer/controller'});
@@ -23,14 +24,57 @@ const assert=require('node:assert/strict'),express=require('express'),{once}=req
   await page.locator('#game-theme-toggle').click();assert.equal(await page.locator('html').getAttribute('data-theme'),'light');
   await page.locator('#active-games a').click();await page.locator('#game-host-panel:not([hidden])').waitFor();assert.match(page.url(),/game-library.html\?session=active/);
   await page.reload();await page.locator('#game-host-panel:not([hidden]) #game-title').filter({hasText:'Active game'}).waitFor();
-  const toggle=page.getByRole('button',{name:'More actions for Economics review'}),panel=page.locator('#game-actions-1');
+  let toggle=page.getByRole('button',{name:'More actions for Economics review'}),panel=page.locator('#game-actions-1');
   await toggle.focus();await page.keyboard.press('Enter');assert.equal(await toggle.getAttribute('aria-expanded'),'true');
   await page.keyboard.press('Tab');assert.equal(await page.locator(':focus').textContent(),'Edit');await page.keyboard.press('Escape');assert.equal(await toggle.getAttribute('aria-expanded'),'false');assert.equal(await toggle.evaluate(n=>n===document.activeElement),true);
   await toggle.click();await page.getByRole('heading',{name:'Game Library',exact:true}).click();assert.equal(await panel.isVisible(),false);
   await toggle.click();await page.getByRole('button',{name:'More actions for Another game'}).click();assert.equal(await panel.isVisible(),false);
   await toggle.click();page.once('dialog',d=>d.dismiss());await panel.getByRole('button',{name:'Delete',exact:true}).click();assert.equal(requests.filter(([,m])=>m==='DELETE').length,0);
   await toggle.click();page.once('dialog',d=>d.dismiss());await panel.getByRole('button',{name:'Copy to Tests'}).click();assert.equal(requests.filter(([p])=>p.endsWith('/to-test')).length,0);
-  await toggle.focus();await page.keyboard.press('ArrowDown');await page.keyboard.press('Enter');await page.locator('#editor:not([hidden])').waitFor();assert.equal(await page.locator('#title').inputValue(),'Economics review');page.once('dialog',d=>d.accept());await page.locator('#cancel-edit').click();
+  await toggle.focus();await page.keyboard.press('ArrowDown');await page.keyboard.press('Enter');await page.locator('#editor:not([hidden])').waitFor();assert.equal(await page.locator('#title').inputValue(),'Economics review');// The slide editor changes only the selected draft question and previews without a session.
+  assert.equal(await page.locator('.slide-thumb').count(),1);
+  await page.getByRole('button',{name:'Duplicate question',exact:true}).click();
+  assert.equal(await page.locator('.slide-thumb').count(),2);
+  await page.getByRole('textbox',{name:'Question',exact:true}).fill('Second question');
+  await page.getByRole('button',{name:'↑ Move up',exact:true}).click();
+  assert.match(await page.locator('.slide-thumb').first().textContent(),/Second question/);
+  await page.locator('.slide-thumb').nth(1).click();
+  assert.equal(await page.getByRole('textbox',{name:'Question',exact:true}).inputValue(),'Question');
+  await page.locator('#add-question').click();
+  await page.locator('.slide-thumb').first().click();await page.locator('#save-game').click();
+  assert.match(await page.locator('#editor-error').textContent(),/question 3/);
+  assert.equal(await page.locator('.slide-thumb').nth(2).getAttribute('aria-current'),'true');
+  page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'Delete question',exact:true}).click();
+  const sessionCount=requests.filter(([p,m])=>p==='/api/game-sessions'&&m==='POST').length;
+  await page.locator('#preview-game').click();await page.locator('#preview-reveal').click();
+  assert.equal(await page.locator('#preview-stage .is-correct').count(),1);assert.equal(await page.locator('#preview-stage .preview-answer img').count(),1);
+  await page.locator('#preview-close').click();
+  assert.equal(requests.filter(([p,m])=>p==='/api/game-sessions'&&m==='POST').length,sessionCount);
+  for(const width of [320,390,900,1440]){await page.setViewportSize({width,height:950});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Editor overflow at '+width);}
+  await page.screenshot({path:'output/game-slide-editor-white.png',fullPage:true});
+  await page.locator('#game-theme-toggle').click();await page.screenshot({path:'output/game-slide-editor-blue.png',fullPage:true});
+  await page.setViewportSize({width:390,height:844});await page.screenshot({path:'output/game-slide-editor-mobile.png',fullPage:true});
+  await page.locator('#game-theme-toggle').click();await page.setViewportSize({width:1280,height:900});
+  await page.evaluate(()=>{const NativeReader=window.FileReader;window.FileReader=class extends NativeReader{readAsDataURL(file){setTimeout(()=>super.readAsDataURL(file),800);}};});
+  const delayedReview=async route=>{const body=route.request().postDataJSON();await new Promise(resolve=>setTimeout(resolve,250));await route.fulfill({contentType:'application/json',body:JSON.stringify({test:body.test})});};
+  await page.route('**/api/answer-key',delayedReview);
+  page.once('dialog',d=>d.accept());await page.locator('#review-game-ai').click();
+  await page.locator('.slide-file').setInputFiles({name:'ai-race.png',mimeType:'image/png',buffer:Buffer.from(imageFixture.split(',')[1],'base64')});
+  await page.locator('#editor-error').filter({hasText:/Questions changed while AI/}).waitFor();
+  await page.locator('.slide-image-area img').waitFor();await page.unroute('**/api/answer-key',delayedReview);
+  await page.locator('.slide-file').setInputFiles({name:'picture.png',mimeType:'image/png',buffer:Buffer.from(imageFixture.split(',')[1],'base64')});
+  await page.locator('#save-game').click();await page.locator('#editor-error').filter({hasText:/finish loading/}).waitFor();
+  await page.locator('#editor-error').filter({hasText:/finish loading/}).waitFor({state:'hidden'});await page.locator('.slide-image-area img').waitFor();
+  await page.locator('#save-game').click();await page.locator('#library:not([hidden])').waitFor();
+  const savedSlides=JSON.parse(requests.filter(([p,m])=>p==='/api/games/one'&&m==='PUT').at(-1)[3]).questions;
+  assert.deepEqual(savedSlides.map(q=>q.text),['Second question','Question']);assert.equal(savedSlides[1].image,imageFixture);assert.equal(savedSlides[0].options[0].image,imageFixture);assert.equal(savedSlides[0].media.url,imageFixture);
+  assert.notEqual(savedSlides[0].id,savedSlides[1].id);
+  assert.notEqual(savedSlides[0].options[0].id,savedSlides[1].options[0].id);
+  for(const q of savedSlides)assert.equal(q.correctOptionId,q.options[0].id);
+  panel=page.locator('#'+await toggle.getAttribute('aria-controls'));
+  await toggle.click();await page.locator('.game-actions-panel:visible').getByRole('button',{name:'Edit',exact:true}).click();
+
+  page.once('dialog',d=>d.accept());await page.locator('#cancel-edit').click();
   for(const viewport of [{width:360,height:640},{width:320,height:480},{width:1280,height:900}]){await page.setViewportSize(viewport);await toggle.click();const box=await panel.boundingBox();assert.ok(box.x>=0&&box.y>=0&&box.x+box.width<=viewport.width&&box.y+box.height<=viewport.height);await page.keyboard.press('Escape');}
   await page.locator('#new-folder').click();await page.locator('#folder-name').fill('Canceled folder');await page.locator('#folder-cancel').click();assert.equal(requests.filter(([p,m])=>p==='/api/game-folders'&&m==='POST').length,0);
   rejectFolder=true;await page.locator('#new-folder').click();await page.locator('#folder-name').fill('Duplicate');await page.locator('#save-folder').click();await page.getByText('A folder with that name already exists.').waitFor();assert.equal(await page.locator('#folder-dialog').evaluate(n=>n.open),true);await page.keyboard.press('Escape');rejectFolder=false;
