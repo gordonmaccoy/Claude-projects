@@ -235,3 +235,51 @@ Object.assign(window.examioKorean,{
  "No grade record":"성적에 반영되지 않음",
  "Game Mode does not create grades or alter your saved tests.":"게임 모드는 성적을 생성하거나 저장된 시험을 변경하지 않습니다."
 });
+
+Object.assign(window.examioKorean,{
+  "Multiple choice, true/false, fill-in-the-blank or short answer. Add images and set points.": "객관식, 참/거짓, 빈칸 채우기, 단답형 문제를 만들고 이미지와 배점을 추가하세요.",
+  "Organize folders, preview answers, edit, download or share with other teachers.": "폴더로 정리하고 정답을 미리 보세요. 수정, 다운로드, 다른 교사와 공유도 가능합니다.",
+  "Scores, completion, class average and monitoring events.": "점수, 완료율, 반 평균과 모니터링 기록을 확인하세요.",
+  "Follow answers live. Review AI short-answer partial credit and override scores.": "답안을 실시간으로 확인하세요. AI 단답형 부분 점수를 검토하고 수정할 수 있습니다.",
+  "Your results. Your workflow.": "원하는 방식으로 결과를 활용하세요.",
+  "Download summary or detailed results as Excel or PDF. Email Excel files, or save to Drive as Google Sheets.": "요약 또는 상세 결과를 Excel이나 PDF로 다운로드하세요. Excel 파일을 이메일로 보내거나 Google 스프레드시트로 Drive에 저장할 수 있습니다.",
+  "Enter your name. Student numbers are optional.": "이름을 입력하세요. 학번 입력은 선택 설정입니다.",
+  "See your final score and enabled corrections.": "최종 점수와 설정된 정답 및 해설을 확인하세요.",
+  "Show live activity or hide it. Private monitoring continues.": "실시간 활동을 공개하거나 숨기세요. 비공개 모니터링은 계속됩니다.",
+  "Choose deterrents. Full Screen indicates fullscreen use; exiting alone does not fail a student.": "억제 기능을 선택하세요. Full Screen은 전체 화면 사용 표시이며, 전체 화면 종료만으로 낙제 처리되지 않습니다.",
+  "77 seconds · On-screen instructions and music": "77초 · 화면 안내와 배경 음악",
+  "Choose a saved quiz. Use Quick Launch with your saved preferences.": "저장된 퀴즈를 선택하고 저장된 설정으로 간편 실행하세요.",
+  "Project the QR code. Students join in their browser. Start together and follow their progress live.": "QR 코드를 보여 주세요. 학생은 브라우저로 참여합니다. 함께 시작하고 진행 상황을 실시간으로 확인하세요.",
+  "Review answers and scores. Download Excel or PDF, email results, or save to Google Drive.": "답안과 점수를 검토하세요. Excel이나 PDF 다운로드, 이메일 전송, Google Drive 저장이 가능합니다.",
+  "Turn class content into friendly competition.": "수업 자료를 즐거운 경쟁으로 바꾸세요.",
+  "Classic Solo or Team Race. Everyone answers. No apps to install.": "개인전 또는 팀 레이스. 모두가 답합니다. 앱 설치는 필요 없습니다.",
+  "Watch Game Zone in action": "게임 존 둘러보기",
+  "Two ways to play. Everyone takes part.": "두 가지 방식으로 모두 함께 플레이하세요.",
+  "Every player competes for their own place. Faster correct answers earn more points.": "각자 순위를 겨룹니다. 정답을 빨리 맞힐수록 더 높은 점수를 얻습니다.",
+  "Everyone answers on their own device. Teams earn the average of their members’ points, so larger teams have no automatic advantage.": "모두 자신의 기기로 답합니다. 팀 점수는 구성원 점수의 평균이므로 인원이 많다고 유리하지 않습니다.",
+  "Scan. Pick an avatar. Join.": "스캔하고 아바타를 골라 참여하세요.",
+  "Join by QR code or room name on a phone, tablet or laptop. The teacher starts when everyone is ready.": "휴대폰, 태블릿, 노트북에서 QR 코드나 방 이름으로 참여하세요. 모두 준비되면 교사가 시작합니다.",
+  "Build your team. Race together.": "팀을 만들고 함께 경쟁하세요.",
+  "Choose teams or assign players randomly. Set 2–6 players per team. Students name their teams, and member avatars appear together.": "팀을 직접 선택하거나 무작위로 배정하세요. 팀당 2~6명을 설정할 수 있습니다. 학생이 팀 이름을 정하고 구성원 아바타가 함께 표시됩니다.",
+  "Keep the whole room playing.": "교실 전체가 함께 즐깁니다.",
+  "Lead each question, reveal answers and watch the rankings change. Finish with a winner’s podium.": "문제를 진행하고 정답과 순위 변화를 확인하세요. 마지막에는 시상대로 우승자를 축하합니다.",
+  "Make it yours in the game editor.": "게임 편집기로 나만의 게임을 만드세요.",
+  "Start with a quiz or generate questions from class material with AI. Review answers, drag and resize boxes, preview, and swap themes.": "퀴즈로 시작하거나 수업 자료에서 AI로 문제를 만드세요. 정답을 검토하고 상자 이동과 크기 조절, 미리보기, 테마 변경이 가능합니다.",
+  "The game ends. The report stays.": "게임이 끝나도 기록은 남습니다.",
+  "Review completed games, player scores and team standings. Game Mode does not create grades or alter your saved tests.": "완료된 게임, 개인 점수와 팀 순위를 확인하세요. 게임 모드는 시험 성적을 만들거나 저장된 시험을 변경하지 않습니다."
+});
+
+Object.assign(window.examioKorean,{
+  "One class. Three connected views.": "한 수업. 서로 연결된 세 화면.",
+  "Launch your own easy-to-create test with Quick Launch.": "간편 실행으로 직접 만든 시험을 시작하세요.",
+  "Project the QR code or room name. No apps to install.": "QR 코드나 방 이름으로 참여하세요. 앱 설치가 필요 없습니다.",
+  "Students enter their details and join.": "학생이 정보를 입력하고 참여합니다.",
+  "Everyone ready? Start the quiz.": "모두 준비됐나요? 시험을 시작하세요.",
+  "Students answer. You follow their progress live.": "학생은 답하고, 교수자는 진행 상황을 실시간으로 확인합니다.",
+  "Show live activity to the class—or keep it private.": "실시간 활동을 공개하거나 비공개로 유지하세요.",
+  "Optional: hiding the test page for more than five seconds locks the attempt.": "선택 사항: 시험 화면을 5초 넘게 숨기면 응시가 잠깁니다.",
+  "Submit answers. Check the final score and corrections.": "답안을 제출하고 최종 점수와 정답을 확인하세요.",
+  "End the session. Results stay saved and organized.": "세션을 종료해도 결과는 저장됩니다.",
+  "Review every answer. Export results your way.": "모든 답안을 검토하고 원하는 방식으로 결과를 내보내세요.",
+  "Your classroom. Connected.": "서로 연결된 교실."
+});
