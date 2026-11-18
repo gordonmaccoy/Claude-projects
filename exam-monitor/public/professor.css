@@ -241,3 +241,23 @@ select,textarea{font:inherit;background:#fff;color:#223c31;border:1px solid #c5c
 @media(max-width:380px){#professor-navigation .examio-brand strong{font-size:20px}#professor-navigation .examio-brand .brand-mark{width:26px;height:26px}#professor-navigation .examio-brand small{font-size:5px}#professor-navigation .topbar{padding-inline:10px;gap:5px}#professor-navigation .account{gap:4px}#professor-navigation [data-language-switch]{max-width:80px}#workspace-tabs{padding-inline:10px;gap:4px}#workspace-tabs button{font-size:11px}}
 
 @media(max-width:600px){#library>.section-heading>.actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%}#library #shares-open{grid-column:1/-1;justify-self:start}}
+
+/* Mobile results use the screen width; long content scrolls inside its table. */
+#workspace,#workspace>.tab,#result-sessions,#result-sessions>.card{min-width:0}
+#result-sessions{width:100%;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr))}
+.result-session-card h3{overflow-wrap:anywhere}
+#result-detail .table-wrap{max-width:100%;min-width:0}
+@media(max-width:600px){
+ #results>.section-heading{gap:12px;margin-bottom:18px;align-items:stretch}
+ #results>.section-heading>div:first-child{width:100%;min-width:0}
+ #results>.section-heading>div:first-child>p:last-child{margin:6px 0 0}
+ #results>.section-heading>.actions{width:100%;display:flex;flex-wrap:nowrap;gap:6px;min-width:0}
+ #results .result-sort{flex:1 1 auto;min-width:0;gap:4px}
+ #results .result-sort button{flex:1 1 0;min-width:0;min-height:40px;font-size:11px;padding:8px 5px;white-space:nowrap}
+ #results .layout-switch{flex:none;gap:4px}
+ #results .layout-switch button{width:34px;height:40px;font-size:20px;padding:4px}
+ #results-refresh{flex:none;min-height:40px;padding:8px;font-size:11px}
+ #result-sessions.cards{grid-template-columns:minmax(0,1fr);gap:12px}
+ #result-sessions>.result-session-card{width:100%;margin:0;padding:18px}
+ #result-sessions[data-layout=list]>.result-session-card{width:100%;padding:16px}
+}
