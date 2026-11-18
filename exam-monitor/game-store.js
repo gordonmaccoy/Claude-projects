@@ -22,7 +22,7 @@ function createGameStore(pool,accounts){
    await pool.query('UPDATE onscreen_v2_accounts SET game_sample_initialized=TRUE WHERE owner_id=$1',[ownerId]);
    return sample;
   });},
-  async listGames(ownerId){return (await pool.query("SELECT g.data FROM onscreen_v2_games g WHERE owner_id=$1 AND NOT EXISTS(SELECT 1 FROM onscreen_v2_accounts a WHERE a.owner_id=g.owner_id AND a.state<>'active') ORDER BY updated_at DESC",[ownerId])).rows.map(r=>withFolder(r.data));},
+  async listGames(ownerId){return (await pool.query("SELECT g.data,g.play_count FROM onscreen_v2_games g WHERE owner_id=$1 AND NOT EXISTS(SELECT 1 FROM onscreen_v2_accounts a WHERE a.owner_id=g.owner_id AND a.state<>'active') ORDER BY updated_at DESC",[ownerId])).rows.map(r=>({...withFolder(r.data),playCount:r.play_count}));},
   async getGame(ownerId,id){return withFolder((await pool.query("SELECT g.data FROM onscreen_v2_games g WHERE owner_id=$1 AND id=$2 AND NOT EXISTS(SELECT 1 FROM onscreen_v2_accounts a WHERE a.owner_id=g.owner_id AND a.state<>'active')",[ownerId,id])).rows[0]?.data);},
   async saveGame(ownerId,input,updateOnly=false){return accounts.withOwner(ownerId,async()=>{
    const clean=game.validateGame(input),id=input.id||randomUUID();if(typeof id!=='string'||id.length>100)throw problem('Invalid game identifier.',400);
@@ -70,7 +70,8 @@ function createGameStore(pool,accounts){
    return accounts.withOwner(owner,async()=>{
     const row=(await pool.query('SELECT data,expires_at FROM onscreen_v2_game_sessions WHERE id=$1 FOR UPDATE',[id])).rows[0];
     if(!row||Number(row.expires_at)<=Date.now())throw problem('Game not found or expired.',410);
-    const session=row.data,previousPhase=session.phase,result=await fn(session);
+    const session=row.data,previousPhase=session.phase,wasStarted=Number.isSafeInteger(session.gameStartedAt),result=await fn(session);
+    if(!wasStarted&&Number.isSafeInteger(session.gameStartedAt)&&session.sourceGameId)await pool.query('UPDATE onscreen_v2_games SET play_count=play_count+1 WHERE id=$1 AND owner_id=$2',[session.sourceGameId,owner]);
     // Saving inside the same locked transaction prevents duplicates and guarantees
     // a finished room and its report commit together. Never regenerate on reads.
     const report=previousPhase!=='podium'&&game.completedGameReport(session);
@@ -84,6 +85,7 @@ function createGameStore(pool,accounts){
  };
  return {methods,async init(){await pool.query('ALTER TABLE onscreen_v2_accounts ADD COLUMN IF NOT EXISTS game_sample_initialized BOOLEAN NOT NULL DEFAULT FALSE');await pool.query('CREATE TABLE IF NOT EXISTS onscreen_v2_game_folders(id TEXT PRIMARY KEY,owner_id TEXT NOT NULL REFERENCES onscreen_v2_accounts(owner_id),name TEXT NOT NULL)');await pool.query('ALTER TABLE onscreen_v2_game_folders ENABLE ROW LEVEL SECURITY');await pool.query('CREATE UNIQUE INDEX IF NOT EXISTS onscreen_v2_game_folders_name ON onscreen_v2_game_folders(owner_id,LOWER(name))');await pool.query('CREATE TABLE IF NOT EXISTS onscreen_v2_games(id TEXT PRIMARY KEY,owner_id TEXT NOT NULL REFERENCES onscreen_v2_accounts(owner_id),data JSONB NOT NULL,updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())');await pool.query('CREATE INDEX IF NOT EXISTS onscreen_v2_games_owner ON onscreen_v2_games(owner_id)');await pool.query('CREATE TABLE IF NOT EXISTS onscreen_v2_game_sessions(id TEXT PRIMARY KEY,owner_id TEXT NOT NULL REFERENCES onscreen_v2_accounts(owner_id),pin TEXT UNIQUE NOT NULL,data JSONB NOT NULL,expires_at BIGINT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())');await pool.query("CREATE UNIQUE INDEX IF NOT EXISTS onscreen_v2_game_sessions_room_name ON onscreen_v2_game_sessions(LOWER(data->>'roomName'))");await pool.query('CREATE INDEX IF NOT EXISTS onscreen_v2_game_sessions_owner ON onscreen_v2_game_sessions(owner_id)');await pool.query('CREATE INDEX IF NOT EXISTS onscreen_v2_game_sessions_expiry ON onscreen_v2_game_sessions(expires_at)');
   await pool.query('CREATE TABLE IF NOT EXISTS onscreen_v2_game_reports(id TEXT PRIMARY KEY,owner_id TEXT NOT NULL REFERENCES onscreen_v2_accounts(owner_id),completed_at BIGINT NOT NULL,data JSONB NOT NULL)');
+  await pool.query('ALTER TABLE onscreen_v2_games ADD COLUMN IF NOT EXISTS play_count INTEGER NOT NULL DEFAULT 0');
   await pool.query('ALTER TABLE onscreen_v2_game_reports ENABLE ROW LEVEL SECURITY');
   await pool.query('CREATE INDEX IF NOT EXISTS onscreen_v2_game_reports_owner ON onscreen_v2_game_reports(owner_id,completed_at DESC,id DESC)');
  }};

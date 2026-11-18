@@ -40,7 +40,7 @@ function newSession(ownerId,game,now=Date.now(),options={}){
  const {requireNames=true,largeClass=false}=options;
  if(typeof largeClass!=='boolean')fail('Large class must be on or off.');
  if(typeof requireNames!=='boolean')fail('Require names must be on or off.');
- return {...teams.settings(options,largeClass?50:30),requireNames,reportVersion:1,id:randomUUID(),ownerId,roomName:newGameRoomName(),pin:String(randomInt(100000,1000000)),displayToken:randomBytes(24).toString('base64url'),classroomControlKey:randomBytes(24).toString('base64url'),game:validateGame({...game,largeClass}),phase:'lobby',questionIndex:-1,players:[],participants:[],recoveryRequests:[],createdAt:now,updatedAt:now,expiresAt:now+TTL,startsAt:null,deadlineAt:null,roundEndReason:null,roundEndedAt:null};
+ return {...teams.settings(options,largeClass?50:30),requireNames,reportVersion:1,sourceGameId:game.id||null,id:randomUUID(),ownerId,roomName:newGameRoomName(),pin:String(randomInt(100000,1000000)),displayToken:randomBytes(24).toString('base64url'),classroomControlKey:randomBytes(24).toString('base64url'),game:validateGame({...game,largeClass}),phase:'lobby',questionIndex:-1,players:[],participants:[],recoveryRequests:[],createdAt:now,updatedAt:now,expiresAt:now+TTL,startsAt:null,deadlineAt:null,roundEndReason:null,roundEndedAt:null};
 }
 function active(s,now=Date.now()){if(s.phase==='closed'||s.expiresAt<=now)fail('Game has ended or expired.',410);}
 function changed(s,now){s.updatedAt=Math.max(s.updatedAt,now);s.expiresAt=Math.max(s.expiresAt,now+TTL);}

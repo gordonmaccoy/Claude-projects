@@ -21,7 +21,7 @@
    const section=el('details',undefined,'game-folder');section.dataset.folderId=group.id;section.open=openFolders.get(group.id)===true;
    const summary=el('summary');summary.append(el('span',group.name,'game-folder-name'),el('span','('+group.items.length+')','game-folder-count'));section.append(summary);
    const grid=el('div',undefined,'game-grid');
-   for(const game of group.items){const card=el('article',undefined,'game-card');card.append(el('h2',game.title),el('small',game.questions.length+' questions · Individual competition'),gameActions(game,card));grid.append(card);}
+   for(const game of group.items){const card=el('article',undefined,'game-card');card.append(el('h2',game.title),el('small',game.questions.length+' questions · Individual competition'),gameActions(game,card));const plays=el('span','▶ '+(game.playCount||0).toLocaleString()+' '+(game.playCount===1?'play':'plays'),'game-play-count');plays.title='Total started sessions tracked since play counters were added.';card.querySelector('small').append(plays);grid.append(card);}
    if(!group.items.length)grid.append(el('p',group.id==='uncategorized'?'No uncategorized games. Create a game or copy a test to get started.':'No games in this folder yet. Choose this folder when creating or editing a game.','folder-empty'));
    section.append(grid);section.addEventListener('toggle',()=>{openFolders.set(group.id,section.open);if(!section.open&&openActions&&section.contains(openActions.trigger))closeActions();});$('games').append(section);
   }
@@ -239,8 +239,9 @@
  };
  $('copy-source').onchange=copyInfo;
  $('copy-form').onsubmit=event=>{event.preventDefault();$('copy-error').textContent='';try{const source=tests.find(test=>test.id===$('copy-source').value);if(!source)throw new Error('Choose a saved quiz.');openSourceDraft(source,$('compatible-only').checked,'Copied from '+source.title);}catch(error){$('copy-error').textContent=error.message;}};
- const refreshedPodiums=new Set();
+ const refreshedPodiums=new Set(),countedSessions=new Set();
  try{api=await professor();loadGameLayout();reports=GameReports.mount({api});host=GameHost.mount({api,onPresented:view=>{
+  if(view.phase!=='lobby'&&view.phase!=='closed'&&!countedSessions.has(view.id)){countedSessions.add(view.id);void api('/games').then(rows=>{games=rows;renderFolders();}).catch(()=>countedSessions.delete(view.id));}
   if(view.phase==='podium'&&view.serverNow>=(view.podiumCompleteAt??0)&&!refreshedPodiums.has(view.id)){
    refreshedPodiums.add(view.id);void reports.refresh({announce:false});
   }

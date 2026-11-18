@@ -91,3 +91,5 @@
 .game-library .library-secondary-actions .game-layout-switch button[aria-pressed=true]{background:#0758cb;color:white;border-color:#0758cb}
 .game-library #games .game-card-actions>.primary{background:#0758cb;color:white;border-color:#0758cb}
 .game-library #game-report-list{--prof-surface:#fff;--prof-panel:#edf5fc;--prof-text:#102b42;--prof-muted:#617383;--prof-link:#0758cb;--prof-line:#d1deeb;--prof-error:#a23030;color-scheme:light}
+
+.game-library #games .game-play-count{display:inline-flex;align-items:center;white-space:nowrap;margin:5px 0 5px 8px;padding:2px 7px;border:1px solid #d1deeb;border-radius:20px;background:#edf5fc;color:#315775;font-size:11px;font-weight:600;line-height:1.4}
