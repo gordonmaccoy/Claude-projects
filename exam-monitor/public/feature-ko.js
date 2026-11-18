@@ -283,3 +283,10 @@ Object.assign(window.examioKorean,{
   "Review every answer. Export results your way.": "모든 답안을 검토하고 원하는 방식으로 결과를 내보내세요.",
   "Your classroom. Connected.": "서로 연결된 교실."
 });
+
+Object.assign(window.examioKorean,{
+  "Choose how your class answers.": "수업에 맞는 답안 진행 방식을 선택하세요.",
+  "One question at a time. No going back.": "한 번에 한 문제씩 풉니다. 이전 문제로 돌아갈 수 없습니다.",
+  "You control when the class moves forward.": "교사가 다음 문제로 넘어갈 시점을 정합니다.",
+  "Save your settings once. Quick Launch uses them next time.": "설정을 저장하면 다음 간편 실행에 그대로 적용됩니다."
+});
