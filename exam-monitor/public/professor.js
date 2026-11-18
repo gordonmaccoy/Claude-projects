@@ -61,6 +61,7 @@ function tab(name) {
   if(name!=='settings')lastWorkspaceTab=name;
   document.querySelectorAll('.tab').forEach(el => el.hidden = el.id !== name);
   document.querySelectorAll('[data-tab]').forEach(el => el.classList.toggle('selected', el.dataset.tab === name));
+  $('take-tour').hidden=name==='games';
   gameWorkspace.setActive(name==='games');
 }
 document.querySelectorAll('[data-tab]').forEach(el => el.onclick = () => { tab(el.dataset.tab); if (el.dataset.tab === 'results') refresh().catch(e => notice(e.message)); if(el.dataset.tab==='trash') refreshTrash().catch(e=>notice(e.message)); });
@@ -770,6 +771,16 @@ function imageControl(target,labelText,compact=false) {
   };
   return panel;
 }
+function growQuizField(field){
+ if(!field.clientWidth)return;
+ field.style.height='auto';
+ const css=getComputedStyle(field),border=parseFloat(css.borderTopWidth)+parseFloat(css.borderBottomWidth);
+ field.style.height=Math.ceil(field.scrollHeight+border)+'px';
+}
+function growQuizFields(){els.tbQuestions.querySelectorAll('textarea').forEach(growQuizField);}
+els.tbQuestions.addEventListener('input',event=>{if(event.target.tagName==='TEXTAREA')growQuizField(event.target);});
+let quizFieldsWidth=0;
+new ResizeObserver(entries=>{const width=entries[0].contentRect.width;if(width!==quizFieldsWidth){quizFieldsWidth=width;growQuizFields();}}).observe(els.tbQuestions);
 function renderTestBuilder() {
  hideTbError();
  els.tbQuestions.replaceChildren();
@@ -781,19 +792,20 @@ function renderTestBuilder() {
   const pointsLabel=document.createElement('label');pointsLabel.textContent=t('Points');const points=document.createElement('input');points.type='number';points.className='tb-points';points.min='0.01';points.max='1000';points.step='0.01';points.value=q.points??1;points.setAttribute('aria-label','Question '+(i+1)+' points');points.oninput=()=>q.points=Number(points.value);pointsLabel.append(points);header.append(pointsLabel);
   if(tbQuestions.length>1)header.append(button(t('Remove question'),()=>{tbQuestions.splice(i,1);renderTestBuilder();}));card.append(header);
   const type=document.createElement('select');type.className='tb-q-type';type.setAttribute('aria-label','Question '+(i+1)+' type');for(const [value,label] of [['mc','Multiple choice'],['blank','Fill in the blank'],['truefalse','True / False'],['short','Short answer']]){const o=document.createElement('option');o.value=value;o.textContent=label;type.append(o);}type.value=q.type||'mc';type.onchange=()=>{q.type=type.value;if(q.type==='truefalse'){q.options=[{id:q.id+'_true',text:'True'},{id:q.id+'_false',text:'False'}];q.correctOptionId='';}else if(q.type==='short'){q.modelAnswer=q.modelAnswer||'';q.gradingGuidance=q.gradingGuidance||'';}else if(q.type==='blank'){q.acceptedAnswers=q.acceptedAnswers||[];q.caseSensitive=q.caseSensitive||false;}else if(!q.options){q.options=[{id:q.id+'_a',text:''},{id:q.id+'_b',text:''}];q.correctOptionId='';}renderTestBuilder();};card.append(type);
-  const text=document.createElement('input');text.className='tb-q-text';text.placeholder='Question text…';text.setAttribute('aria-label','Question '+(i+1)+' text');text.maxLength=1000;text.value=q.text;text.oninput=()=>q.text=text.value;card.append(text,imageControl(q,'Question image (optional)'));
+  const text=document.createElement('textarea');text.rows=1;text.className='tb-q-text';text.placeholder='Question text…';text.setAttribute('aria-label','Question '+(i+1)+' text');text.maxLength=1000;text.value=q.text;text.oninput=()=>q.text=text.value;card.append(text,imageControl(q,'Question image (optional)'));
   if(q.type==='short') {const model=document.createElement('label');model.textContent=t('Model answer');const input=document.createElement('textarea');input.className='tb-model-answer';input.maxLength=2000;input.rows=3;input.value=q.modelAnswer||'';input.oninput=()=>q.modelAnswer=input.value;model.append(input);const guide=document.createElement('label');guide.textContent=t('Marking guidance (optional)');const guidance=document.createElement('textarea');guidance.className='tb-grading-guidance';guidance.maxLength=2000;guidance.rows=2;guidance.value=q.gradingGuidance||'';guidance.oninput=()=>q.gradingGuidance=guidance.value;guide.append(guidance);const note=document.createElement('p');note.textContent=t('AI awards partial credit against your model answer. You can review and override the score in Detailed Results.');card.append(model,guide,note);
   } else if(q.type==='blank') {
    const label=document.createElement('label');label.textContent=t('Accepted answers (one per line)');const answers=document.createElement('textarea');answers.className='tb-accepted';answers.rows=3;answers.value=(q.acceptedAnswers||[]).join('\n');answers.oninput=()=>q.acceptedAnswers=answers.value.split('\n').map(s=>s.trim()).filter(Boolean);label.append(answers);card.append(label);
    const sensitive=document.createElement('label');const check=document.createElement('input');check.type='checkbox';check.checked=q.caseSensitive;check.onchange=()=>q.caseSensitive=check.checked;sensitive.append(check,' Case sensitive');card.append(sensitive);
   } else {
-   (q.options||[]).forEach((o,j)=>{const row=document.createElement('div');row.className='tb-option-row';row.dataset.optionId=o.id;if(q.correctOptionId)row.classList.add(q.correctOptionId===o.id?'answer-key-correct':'answer-key-incorrect');const radio=document.createElement('input');radio.type='radio';radio.name=q.id;radio.checked=q.correctOptionId===o.id;radio.setAttribute('aria-label','Correct answer '+String.fromCharCode(65+j));radio.onchange=()=>{q.correctOptionId=o.id;for(const answerRow of card.querySelectorAll('.tb-option-row')){answerRow.classList.toggle('answer-key-correct',answerRow.dataset.optionId===o.id);answerRow.classList.toggle('answer-key-incorrect',answerRow.dataset.optionId!==o.id);}};const input=document.createElement('input');input.className='tb-opt-text';input.maxLength=500;input.placeholder='Option '+String.fromCharCode(65+j);input.value=o.text;input.readOnly=q.type==='truefalse';input.oninput=()=>o.text=input.value;row.append(radio,input);if(q.type!=='truefalse'&&q.options.length>2)row.append(button(t('Remove option'),()=>{q.options.splice(j,1);if(q.correctOptionId===o.id)q.correctOptionId='';renderTestBuilder();}));row.append(imageControl(o,'Image for option '+String.fromCharCode(65+j)+' (optional)',true));card.append(row);});
+   (q.options||[]).forEach((o,j)=>{const row=document.createElement('div');row.className='tb-option-row';row.dataset.optionId=o.id;if(q.correctOptionId)row.classList.add(q.correctOptionId===o.id?'answer-key-correct':'answer-key-incorrect');const radio=document.createElement('input');radio.type='radio';radio.name=q.id;radio.checked=q.correctOptionId===o.id;radio.setAttribute('aria-label','Correct answer '+String.fromCharCode(65+j));radio.onchange=()=>{q.correctOptionId=o.id;for(const answerRow of card.querySelectorAll('.tb-option-row')){answerRow.classList.toggle('answer-key-correct',answerRow.dataset.optionId===o.id);answerRow.classList.toggle('answer-key-incorrect',answerRow.dataset.optionId!==o.id);}};const input=document.createElement('textarea');input.rows=1;input.className='tb-opt-text';input.maxLength=500;input.placeholder='Option '+String.fromCharCode(65+j);input.value=o.text;input.readOnly=q.type==='truefalse';input.oninput=()=>o.text=input.value;row.append(radio,input);if(q.type!=='truefalse'&&q.options.length>2)row.append(button(t('Remove option'),()=>{q.options.splice(j,1);if(q.correctOptionId===o.id)q.correctOptionId='';renderTestBuilder();}));row.append(imageControl(o,'Image for option '+String.fromCharCode(65+j)+' (optional)',true));card.append(row);});
    if(q.type!=='truefalse'&&q.options.length<5)card.append(button(t('+ Add Option'),()=>{q.options.push({id:q.id+'_'+crypto.randomUUID(),text:''});renderTestBuilder();}));
   }
   if(q.answerExplanation){const reason=document.createElement('p');reason.className='answer-rationale';reason.textContent='AI answer rationale: '+q.answerExplanation;card.append(reason);}
   updateAnswerWarning(card,q,i);card.addEventListener('input',()=>{hideTbError();updateAnswerWarning(card,q,i);});card.addEventListener('change',()=>{hideTbError();updateAnswerWarning(card,q,i);});
   if(q.evidence){const evidence=document.createElement('details');evidence.className='source-evidence';const summary=document.createElement('summary');summary.textContent=t('Source excerpt');const excerpt=document.createElement('p');excerpt.textContent=q.evidence;evidence.append(summary,excerpt);card.append(evidence);}els.tbQuestions.append(card);
  });
+ requestAnimationFrame(growQuizFields);
 }
 function collectTest() {
  if(pendingImages)return {error:'Wait for images to finish loading.'};

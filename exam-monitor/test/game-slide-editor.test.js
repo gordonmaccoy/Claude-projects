@@ -20,3 +20,15 @@ test('media validation matches supported persisted images and YouTube forms',()=
  assert.match(Editor.validate([{...q,media:{type:'youtube',url:'https://example.com/watch?v=abcdefghijk'}}]).message,/YouTube/);
  assert.match(Editor.validate([{...q,media:{type:'video',url:'https://example.com/'+ 'a'.repeat(2050)}}]).message,/HTTPS/);
 });
+test('history groups typing, restores full drafts, discards redo after a new edit, and resets between games',()=>{
+ const history=Editor.history(),draft={title:'Game',theme:'default',questions:[structuredClone(q)]};
+ history.record(draft,0);const field={};draft.questions[0].text='First';history.record(draft,0,field,100);draft.questions[0].text='First question';history.record(draft,0,field,200);
+ assert.equal(history.undo().draft.questions[0].text,'Capital?');assert.equal(history.redo().draft.questions[0].text,'First question');
+ draft.theme='summer';history.record(draft,0);assert.equal(history.undo().draft.theme,'default');
+ draft.theme='winter';history.record(draft,0);assert.equal(history.canRedo,false);assert.equal(history.undo().draft.theme,'default');
+ history.reset();assert.equal(history.canUndo,false);assert.equal(history.canRedo,false);assert.equal(history.undo(),null);
+});
+test('history restores a deleted question and selection without aliasing snapshots',()=>{
+ const history=Editor.history(),draft={questions:[structuredClone(q),{...structuredClone(q),id:'second'}]};history.record(draft,1);draft.questions.pop();history.record(draft,0);
+ const restored=history.undo();assert.equal(restored.selected,1);assert.equal(restored.draft.questions[1].id,'second');restored.draft.questions[1].text='mutated';history.redo();assert.equal(history.undo().draft.questions[1].text,q.text);
+});

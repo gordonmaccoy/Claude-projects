@@ -28,15 +28,36 @@
   }
   return null;
  }
+ function history(limit=60){
+  let entries=[],cursor=-1,lastGroup=null,lastTime=0;
+  return {
+   record(draft,selected,group=null,now=Date.now()){
+    const value=JSON.stringify(draft),current=entries[cursor];
+    if(current?.value===value){current.selected=selected;return;}
+    entries.splice(cursor+1);
+    if(group&&group===lastGroup&&now-lastTime<700&&cursor>0)entries[cursor]={value,selected};
+    else {entries.push({value,selected});cursor++;}
+    lastGroup=group;lastTime=now;
+    while(entries.length>limit||(entries.length>2&&entries.reduce((sum,e)=>sum+e.value.length,0)>24000000)){entries.shift();cursor--;}
+   },
+   undo(){if(cursor<=0)return null;lastGroup=null;return {...entries[--cursor],draft:JSON.parse(entries[cursor].value)};},
+   redo(){if(cursor>=entries.length-1)return null;lastGroup=null;return {...entries[++cursor],draft:JSON.parse(entries[cursor].value)};},
+   get canUndo(){return cursor>0;},get canRedo(){return cursor<entries.length-1;},
+   reset(){entries=[];cursor=-1;lastGroup=null;lastTime=0;}
+  };
+ }
  function mount({getDraft,newQuestion,status}){
   const $=id=>document.getElementById(id),make=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
   const btn=(text,fn,cls)=>{const b=make('button',text,cls);b.type='button';b.onclick=fn;return b;};
   const label=(text,input)=>{const l=make('label',text);l.append(input);return l;};
-  let selected=0,dragged=null,selectedBox='prompt';const pendingImages=new Map();
+  let selected=0,dragged=null,selectedBox='prompt';const pendingImages=new Map(),timeline=history();
+  function checkpoint(group=null){if(!getDraft())return;timeline.record(getDraft(),selected,group);$('edit-undo').disabled=!timeline.canUndo;$('edit-redo').disabled=!timeline.canRedo;}
+  function restore(direction){const entry=timeline[direction]();if(!entry)return;pendingImages.clear();const draft=getDraft();for(const key of Object.keys(draft))delete draft[key];Object.assign(draft,entry.draft);selected=entry.selected;selectedBox='prompt';$('title').value=draft.title||'';$('game-folder').value=draft.folderId||'';render();}
+  function deleteSelected(){if(questions().length<=1)return;pendingImages.delete(questions()[selected]);questions().splice(selected,1);select(Math.min(selected,questions().length-1));$('slide-list').querySelector('[aria-current=true]')?.focus();}
   const questions=()=>getDraft()?.questions||[];
   function rail(){
    $('slide-list').replaceChildren();questions().forEach((q,i)=>{
-    const b=btn('',()=>select(i),'slide-thumb');b.setAttribute('aria-label','Question '+(i+1)+': '+(q.text||'Untitled question'));b.setAttribute('aria-current',String(i===selected));b.draggable=true;
+    const b=btn('',()=>{select(i);$('slide-list').querySelector('[aria-current=true]')?.focus();},'slide-thumb');b.setAttribute('aria-label','Question '+(i+1)+': '+(q.text||'Untitled question'));b.setAttribute('aria-current',String(i===selected));b.draggable=true;
     b.append(make('span',String(i+1).padStart(2,'0'),'slide-number'),make('strong',q.text||'Untitled question'));
     const mini=make('span',undefined,'slide-mini-answers');q.options.forEach(o=>mini.append(make('i',o.id===q.correctOptionId?'✓':'',o.id===q.correctOptionId?'is-correct':'')));b.append(mini,make('small',(q.durationSeconds||20)+' sec'+(!q.correctOptionId?' · Answer needed':'')));
     b.ondragstart=e=>{dragged=i;e.dataTransfer.setData('text/plain',String(i));e.dataTransfer.effectAllowed='move';};
@@ -47,7 +68,7 @@
   function move(from,to){const list=questions();if(to<0||to>=list.length||from===to)return;const [q]=list.splice(from,1);list.splice(to,0,q);selected=to;render();}
   function select(index){selectedBox='prompt';selected=Math.max(0,Math.min(index,questions().length-1));render();$('slide-properties').scrollTop=0;}
   function render(){
-   $('editor-error').textContent='';const list=questions();if(!list.length)return;selected=Math.min(selected,list.length-1);rail();
+   checkpoint();$('editor-error').textContent='';const list=questions();if(!list.length)return;selected=Math.min(selected,list.length-1);rail();
    const q=list[selected],card=make('section',undefined,'question-card slide-canvas'),props=$('slide-properties');props.replaceChildren();$('questions').replaceChildren(card);
    const heading=make('div',undefined,'slide-canvas-heading');heading.append(make('span','QUESTION '+(selected+1),'eyebrow'),make('span','Multiple choice','slide-type'));card.append(heading);
    if(q.answerKeyConflict||!q.correctOptionId)card.append(make('p',q.answerKeyConflict?'Answer needs review. Check the question and choose the correct answer.':'Choose a correct answer before saving.','answer-review-warning'));
@@ -79,7 +100,7 @@
    type.onchange=update;url.oninput=update;details.append(label('Media type',type),label('Public HTTPS media URL',url),make('small','Plays before the timer. The teacher controls playback. External providers receive playback requests.'));props.append(details);
    const tools=make('div',undefined,'slide-question-tools');const up=btn('↑ Move up',()=>move(selected,selected-1)),down=btn('↓ Move down',()=>move(selected,selected+1));up.disabled=selected===0;down.disabled=selected===list.length-1;
    const copy=btn('Duplicate question',()=>{if(list.length>=100){status('A game can contain up to 100 questions.',true);return;}list.splice(selected+1,0,duplicate(q));select(selected+1);});
-   const remove=btn('Delete question',()=>{if(!confirm('Delete this question?'))return;pendingImages.delete(q);list.splice(selected,1);select(Math.min(selected,list.length-1));},'danger');remove.disabled=list.length===1;tools.append(up,down,copy,remove);props.append(tools);
+   const remove=btn('Delete question',()=>{if(!confirm('Delete this question?'))return;deleteSelected();},'danger');remove.disabled=list.length===1;tools.append(up,down,copy,remove);props.append(tools);
    // The canvas and projector use the same renderer and proportional boxes.
    const answerWarning=card.querySelector('.answer-review-warning');if(answerWarning)props.prepend(answerWarning);card.className='slide-canvas-wrap';card.replaceChildren();
    const controls=make('section',undefined,'layout-controls');props.insertBefore(controls,props.children[1]);
@@ -87,7 +108,7 @@
     controls.replaceChildren();const layout=GamePresentation.normalize(q.presentation,q);if(!layout.boxes[selectedBox])selectedBox='prompt';
     controls.append(make('strong',selectedBox==='prompt'?'Question text':selectedBox==='image'?'Question image':'Answer box'));
     const fields=make('div',undefined,'layout-fields');
-    for(const [key,title,min,max] of [['fontSize','Font size',12,96],['x','Left %',0,100],['y','Top %',0,100],['w','Width %',8,100],['h','Height %',5,100]]){
+    for(const [key,title,min,max] of [['fontSize','Font size',12,96]]){
      if(selectedBox==='image'&&key==='fontSize')continue;
      const input=make('input');input.type='number';input.min=min;input.max=max;input.step=1;input.value=Math.round(layout.boxes[selectedBox][key]);input.setAttribute('aria-label',title);
      input.oninput=()=>{if(input.value==='')return;const next=GamePresentation.normalize(q.presentation,q);next.boxes[selectedBox][key]=Number(input.value);const normalized=GamePresentation.normalize(next,q);q.presentation={boxes:{...(q.presentation?.boxes||{}),[selectedBox]:normalized.boxes[selectedBox]}};const target=Array.from(card.querySelectorAll('[data-box]')).find(n=>n.dataset.box===selectedBox);if(target)GamePresentation.applyBox(target,q.presentation.boxes[selectedBox]);};fields.append(label(title,input));
@@ -123,7 +144,21 @@
   $('edit-themes').onclick=()=>{const dialog=$('game-theme-picker'),grid=$('game-theme-grid');grid.replaceChildren();for(const id of GamePresentation.themes){const name=id==='default'?'Examio Classic':id.split('-').map(w=>w[0].toUpperCase()+w.slice(1)).join(' ');const choice=btn('',()=>{getDraft().theme=id;render();grid.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.theme===id)));},'game-theme-choice');choice.dataset.theme=id;choice.setAttribute('aria-pressed',String(GamePresentation.theme(getDraft().theme)===id));const img=make('img');img.src=id==='default'?'/game-classroom-backdrop.svg':'/game-themes/'+id+'.png';img.alt='';img.loading='lazy';choice.append(img,make('span',name));grid.append(choice);}dialog.showModal();};
   $('game-theme-close').onclick=()=>$('game-theme-picker').close();
   for(const [id,cls] of [['editor-show-questions','show-editor-questions'],['editor-show-settings','show-editor-settings']])$(id).onclick=()=>{$('editor').classList.toggle(cls);};
-  return {render,select,add,preview,isLoading:()=>pendingImages.size>0,reset(){selected=0;pendingImages.clear();}};
+  $('edit-undo').onclick=()=>restore('undo');$('edit-redo').onclick=()=>restore('redo');
+  for(const event of ['input','change'])$('editor').addEventListener(event,e=>{
+   if(e.target.id==='title')getDraft().title=e.target.value;
+   if(e.target.id==='game-folder')getDraft().folderId=e.target.value||null;
+   checkpoint(e.type==='input'?e.target:null);
+  });
+  $('editor').addEventListener('pointerup',()=>checkpoint());
+  $('editor').addEventListener('keydown',e=>{
+   if(document.querySelector('dialog[open]'))return;
+   const typing=e.target.closest('input,textarea,select,[contenteditable=true]');
+   if(!typing&&(e.ctrlKey||e.metaKey)&&['z','y'].includes(e.key.toLowerCase())){e.preventDefault();restore(e.key.toLowerCase()==='y'||e.shiftKey?'redo':'undo');return;}
+   if(!typing&&e.key==='Delete'&&e.target.closest('#slide-list')){e.preventDefault();deleteSelected();return;}
+   if(!typing&&e.key.startsWith('Arrow'))checkpoint();
+  });
+  return {render,select,add,preview,isLoading:()=>pendingImages.size>0,reset(){selected=0;pendingImages.clear();timeline.reset();}};
  }
- const api={duplicate,validate,mount};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.GameSlideEditor=api;
+ const api={duplicate,validate,history,mount};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.GameSlideEditor=api;
 })(globalThis);

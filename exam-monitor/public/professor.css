@@ -261,3 +261,10 @@ select,textarea{font:inherit;background:#fff;color:#223c31;border:1px solid #c5c
  #result-sessions>.result-session-card{width:100%;margin:0;padding:18px}
  #result-sessions[data-layout=list]>.result-session-card{width:100%;padding:16px}
 }
+/* Keep long quiz prompts and answers fully visible while authoring. */
+#test-builder textarea{overflow-y:hidden;resize:none;white-space:pre-wrap;overflow-wrap:anywhere;min-width:0;max-width:100%;box-sizing:border-box}
+#test-builder :is(.tb-q-text,.tb-opt-text){font-family:inherit;font-size:inherit;line-height:1.5;width:100%;min-height:46px;border:1px solid #cfd9d0;border-radius:7px;padding:12px;background:#fff;color:inherit;margin:8px 0 16px}
+#test-builder .tb-option-row .tb-opt-text{margin:8px 0}
+#test-builder textarea:focus{outline:2px solid #619980;outline-offset:3px}
+#test-builder .answer-key-correct .tb-opt-text{background:#dff3e4;color:#174d2b;border-color:#a7d4b1}
+#test-builder .answer-key-incorrect .tb-opt-text{background:#fce2e2;color:#791e24;border-color:#e9b6ba}

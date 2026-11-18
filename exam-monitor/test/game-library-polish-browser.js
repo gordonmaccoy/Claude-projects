@@ -14,7 +14,7 @@ const assert=require('node:assert/strict'),express=require('express'),{once}=req
   await page.context().route('**/game-display.html',r=>r.fulfill({contentType:'text/html',body:'<h1>Projector launch destination</h1>'}));
   await page.route('**/api/**',r=>{const u=new URL(r.request().url());requests.push([u.pathname,r.request().method(),u.search,r.request().postData()]);if(['/api/import','/api/import-ai'].includes(u.pathname))return r.fulfill({contentType:'application/json',body:JSON.stringify({test:imported,warnings:['Source warning for review.']})});if(u.pathname==='/api/tests')return r.fulfill({contentType:'application/json',body:JSON.stringify([imported])});if(u.pathname==='/api/answer-key'){const body=r.request().postDataJSON();assert.equal(body.reviewSupplied,true);return r.fulfill({contentType:'application/json',body:JSON.stringify({test:{...body.test,questions:body.test.questions.map(q=>({...q,correctOptionId:q.options[0].id}))},warnings:['AI suggestion: please review.']})});}if(u.pathname==='/api/game-folders'&&r.request().method()==='POST'){if(rejectFolder)return r.fulfill({status:400,contentType:'application/json',body:JSON.stringify({error:'A folder with that name already exists.'})});const folder={id:'folder-2',name:r.request().postDataJSON().name};folders.push(folder);return r.fulfill({contentType:'application/json',body:JSON.stringify(folder)});}if(u.pathname==='/api/games/one'&&r.request().method()==='PUT')Object.assign(games[0],r.request().postDataJSON());const data=u.pathname==='/api/config'?{supabaseUrl:base,supabaseKey:'local-public',aiConfigured:true,uploadMaxBytes:1000000}:u.pathname==='/api/games'?games:u.pathname==='/api/game-folders'?folders:u.pathname==='/api/game-sessions'&&r.request().method()==='GET'?[mockSession('active')]:u.pathname==='/api/game-sessions'?mockSession('new'):u.pathname.startsWith('/api/game-sessions/')?mockSession(u.pathname.split('/').at(-1)):{};return r.fulfill({contentType:'application/json',body:JSON.stringify(data)});});
   await page.goto(base+'/game-library.html');await page.getByText('▶ 24 plays',{exact:true}).waitFor();await page.locator('.game-card').first().waitFor();
-  assert.equal(await page.locator('#game-tour').isDisabled(),true);assert.equal(await page.locator('.game-folder').first().getAttribute('data-folder-id'),'uncategorized');assert.equal(await page.locator('.game-folder').first().evaluate(n=>n.open),true);assert.equal(await page.locator('.game-folder').nth(1).evaluate(n=>n.open),false);assert.match(await page.locator('.game-folder').first().locator('summary').textContent(),/Uncategorized Games.*2/);
+  assert.equal(await page.locator('#game-tour').count(),0);assert.equal(await page.locator('.game-folder').first().getAttribute('data-folder-id'),'uncategorized');assert.equal(await page.locator('.game-folder').first().evaluate(n=>n.open),true);assert.equal(await page.locator('.game-folder').nth(1).evaluate(n=>n.open),false);assert.match(await page.locator('.game-folder').first().locator('summary').textContent(),/Uncategorized Games.*2/);
   assert.equal(await page.locator('#sample-game').count(),0);assert.equal(await page.locator('.game-card button:visible').count(),4);
   assert.ok(requests.some(([p,m,q])=>p==='/api/games'&&m==='GET'&&q==='?language=en'));
   assert.match(await page.locator('#active-games a').getAttribute('href'),/session=active/);
@@ -35,15 +35,23 @@ const assert=require('node:assert/strict'),express=require('express'),{once}=req
   assert.equal(await page.locator('.slide-thumb').count(),1);
   assert.ok(await page.evaluate(()=>document.documentElement.scrollHeight<=innerHeight));
   await page.getByRole('spinbutton',{name:'Font size',exact:true}).fill('48');
-  await page.getByRole('spinbutton',{name:'Width %',exact:true}).fill('80');await page.getByRole('spinbutton',{name:'Left %',exact:true}).fill('8');
+  assert.equal(await page.getByRole('spinbutton',{name:/%/}).count(),0);
+  await page.locator('#edit-undo').click();assert.equal(await page.getByRole('spinbutton',{name:'Font size',exact:true}).inputValue(),'40');
+  await page.locator('#edit-redo').click();assert.equal(await page.getByRole('spinbutton',{name:'Font size',exact:true}).inputValue(),'48');
   const promptBox=page.locator('[data-box=prompt]');await promptBox.hover();const drag=await promptBox.locator('.slide-box-drag').boundingBox();
   await page.mouse.move(drag.x+10,drag.y+10);await page.mouse.down();await page.mouse.move(drag.x+35,drag.y+22,{steps:5});await page.mouse.up();
-  assert.ok(Number.parseFloat(await promptBox.evaluate(n=>n.style.left))>8);
+  assert.ok(Number.parseFloat(await promptBox.evaluate(n=>n.style.left))>4);
   await page.locator('#edit-themes').click();await page.locator('.game-theme-choice[data-theme=summer]').click();await page.locator('#game-theme-close').click();
   assert.equal(await page.locator('#questions .game-slide-surface').getAttribute('data-game-theme'),'summer');
 
   await page.getByRole('button',{name:'Duplicate question',exact:true}).click();
   assert.equal(await page.locator('.slide-thumb').count(),2);
+  await page.locator('.slide-thumb').nth(1).click();await page.keyboard.press('Delete');assert.equal(await page.locator('.slide-thumb').count(),1);
+  await page.locator('#edit-undo').click();assert.equal(await page.locator('.slide-thumb').count(),2);
+  await page.locator('#edit-redo').click();assert.equal(await page.locator('.slide-thumb').count(),1);
+  await page.locator('#edit-undo').click();assert.equal(await page.locator('.slide-thumb').count(),2);
+  const typing=page.getByRole('textbox',{name:'Question',exact:true});await typing.focus();await page.keyboard.press('Home');await page.keyboard.press('Delete');assert.equal(await page.locator('.slide-thumb').count(),2);
+
   await page.getByRole('textbox',{name:'Question',exact:true}).fill('Second question');
   await page.getByRole('button',{name:'↑ Move up',exact:true}).click();
   assert.match(await page.locator('.slide-thumb').first().textContent(),/Second question/);
@@ -81,7 +89,7 @@ const assert=require('node:assert/strict'),express=require('express'),{once}=req
   await page.locator('#editor-error').filter({hasText:/finish loading/}).waitFor({state:'hidden'});await page.locator('.presentation-image img').waitFor();
   await page.locator('#save-game').click();await page.locator('#library:not([hidden])').waitFor();
   const savedSlides=JSON.parse(requests.filter(([p,m])=>p==='/api/games/one'&&m==='PUT').at(-1)[3]).questions;
-  assert.deepEqual(savedSlides.map(q=>q.text),['Second question','Question']);assert.equal(savedSlides[1].image,imageFixture);assert.equal(savedSlides[0].options[0].image,imageFixture);assert.equal(savedSlides[0].media.url,imageFixture);assert.equal(savedSlides[0].presentation.boxes.prompt.fontSize,48);assert.ok(savedSlides[0].presentation.boxes.prompt.x>8);
+  assert.deepEqual(savedSlides.map(q=>q.text),['Second question','Question']);assert.equal(savedSlides[1].image,imageFixture);assert.equal(savedSlides[0].options[0].image,imageFixture);assert.equal(savedSlides[0].media.url,imageFixture);assert.equal(savedSlides[0].presentation.boxes.prompt.fontSize,48);assert.ok(savedSlides[0].presentation.boxes.prompt.x>4);
   assert.notEqual(savedSlides[0].id,savedSlides[1].id);
   assert.notEqual(savedSlides[0].options[0].id,savedSlides[1].options[0].id);
   for(const q of savedSlides)assert.equal(q.correctOptionId,q.options[0].id);

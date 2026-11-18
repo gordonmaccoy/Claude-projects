@@ -53,6 +53,22 @@ const {chromium}=require('playwright'),{PGlite}=require('@electric-sql/pglite'),
   assert.deepEqual(saved.questions[0].acceptedAnswers,['Seoul']);
   assert.equal(saved.questions.length,8);
  }
+
+ await page.locator('[data-tab="games"]').click();assert.equal(await page.locator('#take-tour').isVisible(),false);
+ await page.locator('[data-tab="library"]').click();assert.equal(await page.locator('#take-tour').isVisible(),true);
+ await page.locator('#new-test').click();await page.locator('#new-title').fill('Wrapping fixture');await page.locator('#create-manual').click();
+ const longQuestion='Explain how specialization changes production and trade. '.repeat(12),longAnswer='Microeconomics concentrates on individual consumers and firms while macroeconomics studies the whole economy. '.repeat(4);
+ await page.locator('.tb-q-text').fill(longQuestion);await page.locator('.tb-opt-text').nth(0).fill(longAnswer);await page.locator('.tb-opt-text').nth(1).fill('Short answer');await page.locator('#tb-questions input[type=radio]').first().check();
+ for(const width of [1280,390,1280]){
+  await page.setViewportSize({width,height:900});await page.waitForTimeout(100);
+  for(const selector of ['.tb-q-text','.tb-opt-text']){
+   const metrics=await page.locator(selector).first().evaluate(n=>({tag:n.tagName,scroll:n.scrollHeight,height:n.clientHeight,width:n.scrollWidth,client:n.clientWidth}));
+   assert.equal(metrics.tag,'TEXTAREA');assert.ok(metrics.height>46);assert.ok(metrics.scroll<=metrics.height+1,JSON.stringify(metrics));assert.ok(metrics.width<=metrics.client+1);
+  }
+ }
+ await page.locator('.tb-q-text').fill('Short question');assert.ok(await page.locator('.tb-q-text').evaluate(n=>n.clientHeight<80));await page.locator('.tb-q-text').fill(longQuestion);
+ await page.screenshot({path:'output/quiz-wrapping-editor.png'});await page.locator('#tb-start-btn').click();await page.locator('#test-builder').waitFor({state:'hidden'});
+ const wrapped=(await store.listTests(owner)).find(t=>t.title==='Wrapping fixture');assert.equal(wrapped.questions[0].text,longQuestion.trim());assert.equal(wrapped.questions[0].options[0].text,longAnswer.trim());
  assert.deepEqual(errors,[]);
  console.log('Imported missing-answer validation: desktop/mobile focus, visible inline guidance, repeated saves, limits and corrected persistence passed.');
  }finally{await browser?.close();await runtime.close();await db.close();}
