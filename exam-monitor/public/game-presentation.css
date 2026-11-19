@@ -19,7 +19,12 @@
 #editor .game-slide-surface textarea{font:inherit!important;color:inherit!important;-webkit-text-fill-color:currentColor!important;width:100%;height:100%;min-height:0;resize:none;border:0;padding:0;background:transparent;box-shadow:none;text-align:inherit;outline-offset:0}
 #editor .game-slide-surface textarea::placeholder{color:inherit!important;-webkit-text-fill-color:currentColor!important;opacity:.65}
 #editor .game-slide-surface .presentation-answer textarea{flex:1;min-width:0}
-#editor .game-slide-surface input[type=radio]{position:absolute;right:7px;top:7px;width:18px;height:18px;margin:0;accent-color:#0a9b57;z-index:4}
+#editor .game-slide-surface .answer-key-selector{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;flex:0 0 72px;align-self:center;margin:0;padding:5px;border-radius:9px;background:#fff;color:#173b2c;cursor:pointer;font:700 11px/1.2 system-ui;text-align:center;z-index:4;box-shadow:0 1px 4px #0003}
+#editor .game-slide-surface .answer-key-selector input[type=radio]{appearance:none;position:static;display:grid;place-items:center;width:32px;height:32px;min-width:32px;padding:0;margin:0;border:2px solid #45675a;border-radius:50%;background:#fff;cursor:pointer}
+#editor .game-slide-surface .answer-key-selector input:checked{background:#167746;border-color:#167746}
+#editor .game-slide-surface .answer-key-selector input:checked::after{content:'✓';color:#fff;font:800 23px/1 system-ui}
+#editor .game-slide-surface .answer-key-selector:has(input:checked){background:#dcfce7;color:#14532d;box-shadow:0 0 0 2px #86efac}
+#editor .game-slide-surface .answer-key-selector input:focus-visible{outline:3px solid #59c5ff;outline-offset:3px}
 #editor .game-slide-surface .slide-box-drag,#editor .game-slide-surface .slide-box-resize{position:absolute;border:0;border-radius:4px;background:#0e65bc;color:#fff;font:16px/1 system-ui;padding:4px;min-width:24px;min-height:24px;z-index:5;touch-action:none;opacity:0}
 #editor .game-slide-surface .slide-box-drag{left:0;top:-12px;cursor:move}#editor .game-slide-surface .slide-box-resize{right:-8px;bottom:-8px;cursor:nwse-resize}
 #editor .game-slide-box:hover>.slide-box-drag,#editor .game-slide-box:hover>.slide-box-resize,#editor .game-slide-box.selected>button,#editor .game-slide-box:focus-within>button{opacity:1}
@@ -43,3 +48,4 @@
 .game-slide-surface .presentation-prompt{font-weight:750}
 #editor .game-slide-surface textarea{height:auto;field-sizing:content;min-height:1.2em;max-height:100%}
 #editor .game-slide-surface .presentation-answer textarea{height:auto;field-sizing:content}
+
