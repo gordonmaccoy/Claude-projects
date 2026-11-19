@@ -6,3 +6,5 @@
 #content>.panel+.panel{margin-top:16px}#support-filter{margin-top:12px;max-width:220px}
 
 .moderation{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}.moderation-dialog{width:min(520px,92vw);max-height:90dvh;overflow:auto;border:1px solid var(--line);border-radius:16px;padding:24px;background:var(--panel);color:var(--ink)}.moderation-dialog::backdrop{background:#102b4677}.moderation-dialog input{width:100%;margin:8px 0 16px}.danger{color:#b42318}
+
+.cost-form{display:grid;gap:14px;margin-top:16px;max-width:620px}.cost-form button{justify-self:start}#cost-period{max-width:220px;margin:0 0 20px}#content>details.panel{margin-top:16px}summary{cursor:pointer;font-weight:650}.plans li{margin:8px 0}.audit-row>div{min-width:0;overflow-wrap:anywhere}

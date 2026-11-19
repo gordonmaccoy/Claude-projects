@@ -31,13 +31,26 @@ function createAdminStore(pool,accounts){
    (SELECT COUNT(*)::int FROM onscreen_v2_games) AS games,
    (SELECT COUNT(*)::int FROM onscreen_v2_sessions WHERE data->>'phase'<>'ended' AND data->>'deletedAt' IS NULL) AS live_quizzes,
    (SELECT COUNT(*)::int FROM onscreen_v2_game_sessions WHERE expires_at>$1 AND data->>'phase' NOT IN ('podium','closed')) AS live_games,
-   (SELECT COUNT(*)::int FROM onscreen_v2_contacts c LEFT JOIN onscreen_v2_admin_support s ON s.contact_id=c.id WHERE COALESCE(s.state,'open')<>'resolved') AS open_requests`,[Date.now()])).rows[0];return row;},
+   (SELECT COUNT(*)::int FROM onscreen_v2_contacts c LEFT JOIN onscreen_v2_admin_support s ON s.contact_id=c.id WHERE COALESCE(s.state,'open')<>'resolved') AS open_requests`,[Date.now()])).rows[0];
+   row.usage=(await pool.query(`WITH sessions AS (
+    SELECT owner_id,created_at,data FROM onscreen_v2_sessions WHERE data->>'deletedAt' IS NULL AND data->>'startedAt' IS NOT NULL AND data->>'mode' IS DISTINCT FROM 'calculator'
+   ), recent AS (SELECT * FROM sessions WHERE created_at>=NOW()-INTERVAL '30 days')
+   SELECT (SELECT COUNT(DISTINCT owner_id)::int FROM recent) AS teaching_accounts,
+    (SELECT COUNT(*)::int FROM (SELECT owner_id FROM recent GROUP BY owner_id HAVING COUNT(*)>=2) repeated) AS repeat_teachers,
+    (SELECT COUNT(*)::int FROM recent) AS quizzes_started,
+    (SELECT COUNT(*)::int FROM recent WHERE data->>'phase'='ended') AS quizzes_completed,
+    (SELECT COALESCE(SUM(jsonb_array_length(COALESCE(data->'students','[]'::jsonb))),0)::int FROM recent) AS quiz_participations,
+    (SELECT COUNT(*)::int FROM onscreen_v2_game_reports WHERE completed_at>$1) AS game_reports,
+    (SELECT COUNT(*)::int FROM onscreen_v2_contacts WHERE status='queued') AS pending_emails`,[Date.now()-30*86400000])).rows[0];
+   return row;},
   async adminAccounts({q='',page=0}){
    const where=`WHERE a.state<>'deleted' AND ($1='' OR POSITION(LOWER($1) IN LOWER(COALESCE(i.email,'')||' '||COALESCE(a.profile->>'firstName','')||' '||COALESCE(a.profile->>'lastName','')||' '||COALESCE(a.profile->>'institution','')))>0)`;
    const total=(await pool.query('SELECT COUNT(*)::int AS count '+accountSource+' '+where,[q])).rows[0].count;
    const items=(await pool.query(`SELECT a.owner_id AS id,a.state,i.email,a.profile->>'firstName' AS first_name,a.profile->>'lastName' AS last_name,a.profile->>'institution' AS institution,a.profile->>'country' AS country,EXISTS(SELECT 1 FROM onscreen_v2_admin_bans b WHERE b.email=i.email OR b.owner_id=a.owner_id) AS banned,COALESCE(m.plan,'beta') AS plan,COALESCE(m.note,'') AS note,COALESCE(m.version,0) AS version,m.last_seen_at,
     (SELECT COUNT(*)::int FROM onscreen_v2_tests t WHERE t.owner_id=a.owner_id AND t.data->>'deletedAt' IS NULL) AS quizzes,
-    (SELECT COUNT(*)::int FROM onscreen_v2_sessions s WHERE s.owner_id=a.owner_id AND s.data->>'deletedAt' IS NULL) AS sessions
+    (SELECT COUNT(*)::int FROM onscreen_v2_sessions s WHERE s.owner_id=a.owner_id AND s.data->>'deletedAt' IS NULL) AS sessions,
+    (SELECT COUNT(*)::int FROM onscreen_v2_games g WHERE g.owner_id=a.owner_id) AS games,
+    (SELECT COUNT(*)::int FROM onscreen_v2_game_reports g WHERE g.owner_id=a.owner_id) AS game_reports
     ${accountSource} ${where} ORDER BY m.last_seen_at DESC NULLS LAST,a.owner_id LIMIT 25 OFFSET $2`,[q,page*25])).rows;
    return {items,total,page,pageSize:25};
   },

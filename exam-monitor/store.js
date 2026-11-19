@@ -12,6 +12,7 @@ function createStore(pool) {
       await sharing.init();
       await games.init();
       await admin.init();
+      await costs.init();
       await pool.query(`CREATE TABLE IF NOT EXISTS onscreen_v2_onboarding (
         owner_id TEXT PRIMARY KEY, data JSONB NOT NULL
       )`);
@@ -176,6 +177,7 @@ function createStore(pool) {
   const sharing=require('./sharing-store').createSharingStore(pool,accounts,store);
   const games=require('./game-store').createGameStore(pool,accounts);
   const admin=require('./admin-store').createAdminStore(pool,accounts);
-  return Object.assign(store,accounts.methods,sharing.methods,games.methods,admin.methods);
+  const costs=require('./cost-store').createCostStore(pool);
+  return Object.assign(store,accounts.methods,sharing.methods,games.methods,admin.methods,costs.methods);
 }
 module.exports = { createStore };

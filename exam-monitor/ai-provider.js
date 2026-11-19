@@ -13,9 +13,10 @@ async function throwProviderError(response){
 }
 async function structuredRequest({key,model,request=globalThis.fetch,instructions,input,schema,name,maxTokens=16000}){
  if(!key||!model)throw new Error('AI needs Development OPENAI_API_KEY and OPENAI_MODEL configuration.');
- const response=await request('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},signal:AbortSignal.timeout(90000),body:JSON.stringify({model,store:false,max_output_tokens:maxTokens,instructions,input:JSON.stringify(input),text:{format:{type:'json_schema',name,strict:true,schema}}})});
+ let response;try{response=await request('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},signal:AbortSignal.timeout(90000),body:JSON.stringify({model,store:false,max_output_tokens:maxTokens,instructions,input:JSON.stringify(input),text:{format:{type:'json_schema',name,strict:true,schema}}})});}catch(error){await require('./ai-usage').recordUsage(model,name,null,'network_error');throw error;}
+ if(!response.ok)await require('./ai-usage').recordUsage(model,name,null,'provider_error');
  if(!response.ok)await throwProviderError(response);
- const data=await response.json();if(data.status!=='completed')throw new Error('AI did not complete the answer key. Try a smaller test.');
+ const data=await response.json();await require('./ai-usage').recordUsage(model,name,data,data.status||'unknown');if(data.status!=='completed')throw new Error('AI did not complete the answer key. Try a smaller test.');
  const text=(data.output||[]).filter(i=>i.type==='message').flatMap(i=>i.content||[]).filter(i=>i.type==='output_text').map(i=>i.text).join('');
  try{return JSON.parse(text);}catch{throw new Error('AI returned an unreadable answer key. Please retry.');}
 }

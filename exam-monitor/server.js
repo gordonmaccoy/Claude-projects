@@ -59,7 +59,7 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, admin
     if(state==='active' && store.recordAccountActivity)await store.recordAccountActivity(req.user);
     // Continue only after remote identity validation, never from client claims.
     req.authenticated = true;
-    next();
+    require('./ai-usage').withAIUsage(store,next);
   }).catch(next));
   const api = express.Router();
   api.use((req, res, next) => req.authenticated ? next() : res.status(401).json({ error: 'Sign in required' }));
@@ -86,7 +86,7 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, admin
     changed(`display:${s.id}`, 'display:update', exam.publicView(s),true);
     for (const st of s.students) changed(`student:${s.id}:${st.id}`, 'student:update', exam.studentView(s, st),true);
   }
-  const grader=require('./grading-worker').createGradingWorker({store,grade:gradeShortAnswer,broadcast});
+  const grader=require('./grading-worker').createGradingWorker({store,grade:(...args)=>require('./ai-usage').withAIUsage(store,()=>gradeShortAnswer(...args)),broadcast});
   const queueGrading=s=>{if(s.gradingPending)void grader.process(s.id).catch(()=>console.error('Short-answer grading retry delayed'));};
   api.post('/sessions/:id/grade-override',wrap(async(req,res)=>{await owned(req.params.id,req.user);const {session}=await store.mutate(req.params.id,s=>require('./grading').override(s,req.body.studentId,req.body.questionId,req.user.id,req.body.points,req.body.reason));await broadcast(session);res.json(await decorate(session,req));}));
   api.use(settingsController.router);

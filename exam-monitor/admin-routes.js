@@ -7,6 +7,9 @@ function createAdminController({store,ownerEmail=process.env.ADMIN_OWNER_EMAIL||
  router.use((req,res,next)=>allowed(req.user).then(ok=>ok?next():next(problem('Owner access is required.',403))).catch(next));
  function page(req){const raw=req.query.page??'0';if(typeof raw!=='string'||!/^\d{1,6}$/.test(raw))throw problem('Invalid page.',400);return Number(raw);}
  function search(req){const q=req.query.q??'';if(typeof q!=='string'||q.length>120)throw problem('Search is too long.',400);return q.trim();}
+ router.get('/costs',wrap(async(req,res)=>res.json(await store.adminCosts(req.query.month||new Date().toISOString().slice(0,7)))));
+ router.put('/costs/entry',wrap(async(req,res)=>res.json(await store.adminSaveCost(req.user.id,req.body))));
+ router.put('/costs/rate',wrap(async(req,res)=>res.json(await store.adminSaveRate(req.user.id,req.body))));
  router.get('/overview',wrap(async(req,res)=>res.json(await store.adminOverview())));
  router.get('/accounts',wrap(async(req,res)=>res.json(await store.adminAccounts({q:search(req),page:page(req)}))));
  router.patch('/accounts/:id',wrap(async(req,res)=>{if(!(await store.getAccountForAdmin(req.params.id)))throw problem('Account not found.',404);res.json(await store.adminUpdateAccount(req.user.id,req.params.id,req.body));}));

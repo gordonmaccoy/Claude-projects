@@ -24,6 +24,12 @@ test('admin routes deny teachers; account labels and ticket workflow persist wit
   assert.equal((await req('admin/overview','GET',undefined,'teacher')).status,403);
   assert.equal((await req('admin/accounts/teacher','PATCH',{plan:'pro',note:'bad'},'teacher')).status,403);
   assert.equal((await req('admin/overview')).status,200);
+  const month=new Date().toISOString().slice(0,7);
+  assert.equal((await req('admin/costs?month='+month,'GET',undefined,'teacher')).status,403);
+  assert.equal((await req('admin/costs/entry','PUT',{month,provider:'Railway',amount:10,kind:'actual',note:'Test invoice'},'teacher')).status,403);
+  assert.equal((await req('admin/costs/entry','PUT',{month,provider:'Railway',amount:10,kind:'actual',note:'Test invoice'})).status,200);
+  assert.equal((await req('admin/costs?month='+month)).data.entries[0].amount,10);
+  assert.equal((await req('admin/costs?month=bad')).status,400);
   for(const phase of ['lobby','podium','closed'])await pool.query('INSERT INTO onscreen_v2_game_sessions(id,owner_id,pin,data,expires_at) VALUES($1,$2,$3,$4,$5)',[phase,'teacher',phase,JSON.stringify({phase}),Date.now()+60000]);
   assert.equal((await req('admin/overview')).data.live_games,1);
   assert.equal((await req('admin/accounts?q=Mike')).data.items[0].email,'mike@example.com');
