@@ -4,6 +4,9 @@
 .signup-tutorial-row{max-width:1480px;margin:-10px auto 10px;padding:0 clamp(20px,5vw,76px);text-align:right}
 .calculator-tutorial-row{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
 .folder-tutorial-row{text-align:right;margin:0 0 12px}
+.heading-controls{display:flex;flex-direction:column;align-items:flex-end;gap:10px;min-width:0}
+.topbar #take-tour{margin:0 auto 0 24px;white-space:nowrap;flex-shrink:0}
+@media(max-width:720px){.heading-controls{width:100%;align-items:flex-start}.topbar #take-tour{margin:0;padding:8px 10px;font-size:12px}.topbar{flex-wrap:wrap;gap:10px}}
 .tutorial-video-dialog{box-sizing:border-box;width:min(960px,calc(100vw - 28px));max-width:960px;max-height:calc(100dvh - 28px);padding:18px;border:1px solid #d5e1ec;border-radius:16px;background:#fff;color:#123247;overflow:auto}
 .tutorial-video-dialog::backdrop{background:rgba(7,24,42,.7)}
 .tutorial-video-header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px}

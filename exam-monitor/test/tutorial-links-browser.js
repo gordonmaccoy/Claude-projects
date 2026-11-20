@@ -56,6 +56,23 @@ async function main() {
       await folder.locator('summary').first().click();assert.equal(await link.isVisible(),false);
     }
     assert.equal(await page.locator('#library-tests [data-tutorial=launch]').count(),0);
+    assert.equal(await page.locator('.topbar #take-tour').isVisible(),true);
+    for(const [tab,key,id] of [['library','create','bKF0W2XEQso'],['results','results','kFL3qrujLxQ']]){
+      await page.locator('[data-tab='+tab+']').click();
+      const link=page.locator('#'+tab+' [data-tutorial='+key+']');await link.click();
+      assert.ok((await page.locator('.tutorial-video-player iframe').getAttribute('src')).includes(id));
+      await page.keyboard.press('Escape');await page.locator('.tutorial-video-player iframe').waitFor({state:'detached'});
+    }
+    await page.locator('#take-tour').click();await page.locator('#tour-dialog').waitFor({state:'visible'});await page.locator('#tour-skip').click();
+    await page.locator('[data-tab=games]').click();
+    const games=page.frameLocator('#game-workspace-frame');
+    const gameLink=games.locator('[data-tutorial=games]');await gameLink.waitFor({state:'visible'});await gameLink.click();
+    assert.ok((await games.locator('.tutorial-video-player iframe').getAttribute('src')).includes('7Ig0TopMwnk'));
+    await games.getByRole('button',{name:'Close tutorial video'}).click();
+    for(const width of [1440,390]){await page.setViewportSize({width,height:900});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);}
+
+    await page.setViewportSize({width:1440,height:900});await page.locator('[data-tab=library]').click();await page.screenshot({path:path.join(out,'tutorial-header-desktop.png')});
+    await page.setViewportSize({width:390,height:900});await page.screenshot({path:path.join(out,'tutorial-header-mobile.png')});
     console.log('Tutorial links verified: desktop/mobile, correct video IDs, Escape/close cleanup, focus return, collapsed visibility.');
   } finally {await browser.close();await runtime.close();await db.close();}
 }

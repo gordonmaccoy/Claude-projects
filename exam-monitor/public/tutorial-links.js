@@ -1,6 +1,9 @@
 (() => {
   'use strict';
   const videos = {
+    create: ['bKF0W2XEQso', 'Create your first quiz video tutorial'],
+    results: ['kFL3qrujLxQ', 'Quiz results video tutorial'],
+    games: ['7Ig0TopMwnk', 'Launch your first game video tutorial'],
     signup: ['oSKQeSRrffY', 'First-Time Sign-In Tutorial'],
     calculator: ['Z4LchHDBZBs', 'First Time Class Calculator Tutorial'],
     launch: ['xUPe_R1VbOQ', 'First Time Quiz Launch Tutorial Video'],

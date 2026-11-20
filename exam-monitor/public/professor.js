@@ -22,7 +22,7 @@ function clearPrivateWorkspace() {
   tab('launch');
   quizSharing.reset();
   closeCreation();exportsController.close();
-  $('workspace-tabs').hidden=true;finishFolderDrag();if($('question-detail-dialog').open)$('question-detail-dialog').close();questionData=null;
+  $('workspace-tabs').hidden=true;$('take-tour').hidden=true;finishFolderDrag();if($('question-detail-dialog').open)$('question-detail-dialog').close();questionData=null;
   settings.reset();tour.reset();$('launch-show-names').checked=false;$('launch-show-scores-live').checked=false;$('result-detail-rows').replaceChildren();$('result-settings-content').replaceChildren();delete $('result-settings-content').dataset.signature;delete $('result-settings-content').dataset.sessionId;$('result-settings').open=false;lastWorkspaceTab='launch';accountGeneration++;creationVersion++;professorTimerSnapshot=null;if($('answer-ai-dialog').open)$('answer-ai-dialog').close();$('answer-ai-status').textContent='';closeEntry();launchTest=null;$('new-title').value='';for(const id of ['tb-folder','new-folder-choice'])$(id).replaceChildren();$('launch-test-title').textContent='';if($('launch-dialog').open)$('launch-dialog').close();$('creation-choice').hidden=true;
   trashVersion++;pendingTrashDelete=null;if($('trash-confirm').open)$('trash-confirm').close();$('trash-confirm-message').textContent='';$('trash-items').replaceChildren();
   resultSort='newest';current=null; historySession=null; library=[]; folders=[]; sessionList=[]; $('import-source').value='';$('import-file').value='';$('import-panel').hidden=true;$('draft-review').textContent=''; editingId=null; tbQuestions=[];
@@ -596,7 +596,7 @@ async function loadSignedInWorkspace() {
     if(recoveringPassword)return;
     const authSession=(await auth.auth.getSession()).data.session;if(generation!==accountGeneration||sessionPreferences?.blocked||!authSession)return;
     if(registration&&await registration.resume(authSession))return;
-    document.getElementById("admin-link").hidden=!verified.adminAllowed;$('beta-feedback-tab').hidden=verified.plan!=='beta';settings.setAccount(verified);$('account-name').textContent=account.email;$('login').hidden=true;$('workspace').hidden=false;$('workspace-tabs').hidden=false;$('signout').hidden=false;
+    document.getElementById("admin-link").hidden=!verified.adminAllowed;$('beta-feedback-tab').hidden=verified.plan!=='beta';settings.setAccount(verified);$('account-name').textContent=account.email;$('login').hidden=true;$('workspace').hidden=false;$('workspace-tabs').hidden=false;$('take-tour').hidden=workspaceTab==='settings'||workspaceTab==='trash';$('signout').hidden=false;
     if(openGameTab&&workspaceTab==='launch')tab('games');
     socket.connect();
     try {

@@ -236,11 +236,11 @@ select,textarea{font:inherit;background:#fff;color:#223c31;border:1px solid #c5c
  #workspace-tabs button{flex:1 1 0;min-width:0;min-height:40px;padding:8px 4px;font-size:12px;border-radius:7px;white-space:nowrap}
  #workspace-tabs [data-tab="trash"]{margin-inline-start:0;flex:1 1 0}
  #workspace-tabs .tab-label-full{display:none}#workspace-tabs .tab-label-compact{display:inline}
- main{padding:16px 12px}#take-tour{margin:0 0 10px;padding:8px 12px;font-size:12px}#library>.section-heading{gap:14px;margin-bottom:18px}#library>.section-heading>.actions{gap:7px}#library>.section-heading>.actions button{padding:10px 12px;font-size:12px;min-height:40px}
+ main{padding:16px 12px}#take-tour{margin:0 0 10px;padding:8px 12px;font-size:12px}#library>.section-heading{gap:14px;margin-bottom:18px}#library>.section-heading>.heading-controls>.actions{gap:7px}#library>.section-heading>.heading-controls>.actions button{padding:10px 12px;font-size:12px;min-height:40px}
 }
 @media(max-width:380px){#professor-navigation .examio-brand strong{font-size:20px}#professor-navigation .examio-brand .brand-mark{width:26px;height:26px}#professor-navigation .examio-brand small{font-size:5px}#professor-navigation .topbar{padding-inline:10px;gap:5px}#professor-navigation .account{gap:4px}#professor-navigation [data-language-switch]{max-width:80px}#workspace-tabs{padding-inline:10px;gap:4px}#workspace-tabs button{font-size:11px}}
 
-@media(max-width:600px){#library>.section-heading>.actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%}#library #shares-open{grid-column:1/-1;justify-self:start}}
+@media(max-width:600px){#library>.section-heading>.heading-controls>.actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%}#library #shares-open{grid-column:1/-1;justify-self:start}}
 
 /* Mobile results use the screen width; long content scrolls inside its table. */
 #workspace,#workspace>.tab,#result-sessions,#result-sessions>.card{min-width:0}
@@ -251,7 +251,7 @@ select,textarea{font:inherit;background:#fff;color:#223c31;border:1px solid #c5c
  #results>.section-heading{gap:12px;margin-bottom:18px;align-items:stretch}
  #results>.section-heading>div:first-child{width:100%;min-width:0}
  #results>.section-heading>div:first-child>p:last-child{margin:6px 0 0}
- #results>.section-heading>.actions{width:100%;display:flex;flex-wrap:nowrap;gap:6px;min-width:0}
+ #results>.section-heading>.heading-controls>.actions{width:100%;display:flex;flex-wrap:nowrap;gap:6px;min-width:0}
  #results .result-sort{flex:1 1 auto;min-width:0;gap:4px}
  #results .result-sort button{flex:1 1 0;min-width:0;min-height:40px;font-size:11px;padding:8px 5px;white-space:nowrap}
  #results .layout-switch{flex:none;gap:4px}
