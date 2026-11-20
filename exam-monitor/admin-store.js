@@ -13,7 +13,15 @@ function createAdminStore(pool,accounts){
   async adminUnban(actor,email){await pool.query(`WITH changed AS (DELETE FROM onscreen_v2_admin_bans WHERE email=$1 RETURNING email) INSERT INTO onscreen_v2_admin_audit(id,actor_id,action,target_id) SELECT $2,$3,'email.unbanned',email FROM changed`,[email,randomUUID(),actor]);return {ok:true};},
   async getAccountForAdmin(id){return (await pool.query("SELECT a.owner_id,i.email FROM onscreen_v2_accounts a LEFT JOIN onscreen_v2_share_identities i USING(owner_id) WHERE a.owner_id=$1 AND a.state='active'",[id])).rows[0]||null;},
   async isAdmin(user,config={}){
-   if(!user?.id||!user.email||(!config.ownerEmail&&!config.ownerId))return false;
+   if(!user?.id||!user.email)return false;
+   const additional=(config.additionalAdminEmails||'').split(',').map(email=>email.trim().toLowerCase()).filter(Boolean);
+   const email=user.email.trim().toLowerCase();
+   if(additional.includes(email)){
+    await pool.query('INSERT INTO onscreen_v2_admin_members(email,owner_id) VALUES($1,$2) ON CONFLICT DO NOTHING',[email,user.id]);
+    const member=(await pool.query('SELECT owner_id FROM onscreen_v2_admin_members WHERE email=$1',[email])).rows[0];
+    if(member?.owner_id===user.id)return true;
+   }
+   if(!config.ownerEmail&&!config.ownerId)return false;
    if(config.ownerId)return user.id===config.ownerId;
    let owner=(await pool.query('SELECT owner_id FROM onscreen_v2_admin_owner WHERE singleton=TRUE')).rows[0];
    if(!owner&&user.email.toLowerCase()===config.ownerEmail.toLowerCase()){
@@ -90,7 +98,8 @@ function createAdminStore(pool,accounts){
   await pool.query("CREATE TABLE IF NOT EXISTS onscreen_v2_admin_support(contact_id TEXT PRIMARY KEY REFERENCES onscreen_v2_contacts(id) ON DELETE CASCADE,owner_id TEXT NOT NULL REFERENCES onscreen_v2_accounts(owner_id),state TEXT NOT NULL DEFAULT 'open' CHECK(state IN ('open','in_progress','resolved')),note TEXT NOT NULL DEFAULT '',version INTEGER NOT NULL DEFAULT 0)");
   await pool.query("CREATE TABLE IF NOT EXISTS onscreen_v2_admin_audit(id TEXT PRIMARY KEY,actor_id TEXT NOT NULL,action TEXT NOT NULL,target_id TEXT NOT NULL,details JSONB NOT NULL DEFAULT '{}',created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
   await pool.query("CREATE TABLE IF NOT EXISTS onscreen_v2_admin_bans(email TEXT PRIMARY KEY,owner_id TEXT,reason TEXT NOT NULL DEFAULT '',created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
-  for(const suffix of ['owner','accounts','support','audit','bans'])await pool.query('ALTER TABLE onscreen_v2_admin_'+suffix+' ENABLE ROW LEVEL SECURITY');
+  await pool.query('CREATE TABLE IF NOT EXISTS onscreen_v2_admin_members(email TEXT PRIMARY KEY,owner_id TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())');
+  for(const suffix of ['owner','accounts','support','audit','bans','members'])await pool.query('ALTER TABLE onscreen_v2_admin_'+suffix+' ENABLE ROW LEVEL SECURITY');
   await pool.query('CREATE INDEX IF NOT EXISTS onscreen_v2_admin_audit_date ON onscreen_v2_admin_audit(created_at DESC)');
  }};
 }

@@ -89,3 +89,15 @@ test('owner moderation protects owner, blocks existing tokens and returning emai
   await req('admin/bans/mike%40example.com','DELETE');assert.equal((await req('me','GET',undefined,'teacher')).status,423);
  }finally{socket?.disconnect();await runtime.close();await db.close();}
 });
+
+test('additional configured admin is identity-bound and removable without replacing owner',async()=>{
+ const {db,store}=await fixture();try{
+  const config={ownerEmail:'admin@examio.io',additionalAdminEmails:'gordon.maccoy.sejong@gmail.com'};
+  assert.equal(await store.isAdmin({id:'owner',email:'admin@examio.io'},config),true);
+  assert.equal(await store.isAdmin({id:'gordon',email:'Gordon.Maccoy.Sejong@gmail.com'},config),true);
+  assert.equal(await store.isAdmin({id:'other',email:'other@gmail.com'},config),false);
+  assert.equal(await store.isAdmin({id:'replacement',email:'gordon.maccoy.sejong@gmail.com'},config),false);
+  assert.equal(await store.isAdmin({id:'gordon',email:'gordon.maccoy.sejong@gmail.com'},{ownerEmail:config.ownerEmail}),false);
+  assert.equal(await store.isAdmin({id:'owner',email:'admin@examio.io'},config),true);
+ }finally{await db.close();}
+});
