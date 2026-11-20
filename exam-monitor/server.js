@@ -414,7 +414,9 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, admin
   const trashTimer=sweepInterval?setInterval(purgeTrash,60*60*1000):null;
   if(trashTimer) void purgeTrash();
   const settingsTimer = sweepInterval ? setInterval(()=>settingsController.runJobs().catch(()=>console.error('Support background retry failed')),60000) : null;
-  return { app, server, io, tick, runGrading:()=>grader.tick(), runSettingsJobs:()=>settingsController.runJobs(), close: async () => { if (timer) clearInterval(timer);if(gameTimer)clearInterval(gameTimer);if(settingsTimer)clearInterval(settingsTimer);if(trashTimer)clearInterval(trashTimer); await grader.close(); await new Promise(resolve => io.close(resolve)); } };
+  const billingTimer=sweepInterval&&store.syncBilling?setInterval(()=>store.syncBilling().catch(()=>console.error('Billing sync delayed')),60*60*1000):null;
+  if(billingTimer){billingTimer.unref();void store.syncBilling().catch(()=>console.error('Billing sync delayed'));}
+  return { app, server, io, tick, runGrading:()=>grader.tick(), runSettingsJobs:()=>settingsController.runJobs(), close: async () => { if(billingTimer)clearInterval(billingTimer); if (timer) clearInterval(timer);if(gameTimer)clearInterval(gameTimer);if(settingsTimer)clearInterval(settingsTimer);if(trashTimer)clearInterval(trashTimer); await grader.close(); await new Promise(resolve => io.close(resolve)); } };
 }
 async function main() {
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required. Configure PostgreSQL for this deployment.');
