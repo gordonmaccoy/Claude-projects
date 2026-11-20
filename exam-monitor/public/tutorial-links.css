@@ -1,0 +1,15 @@
+.tutorial-link{color:#0758cb;font-size:12px;font-weight:400;line-height:1.5;text-decoration:none;cursor:pointer}
+.tutorial-link:hover{text-decoration:underline}
+.tutorial-link:focus-visible{outline:2px solid #0758cb;outline-offset:4px}
+.signup-tutorial-row{max-width:1480px;margin:-10px auto 10px;padding:0 clamp(20px,5vw,76px);text-align:right}
+.calculator-tutorial-row{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.folder-tutorial-row{text-align:right;margin:0 0 12px}
+.tutorial-video-dialog{box-sizing:border-box;width:min(960px,calc(100vw - 28px));max-width:960px;max-height:calc(100dvh - 28px);padding:18px;border:1px solid #d5e1ec;border-radius:16px;background:#fff;color:#123247;overflow:auto}
+.tutorial-video-dialog::backdrop{background:rgba(7,24,42,.7)}
+.tutorial-video-header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px}
+.tutorial-video-header h2{font-size:18px;margin:0;color:#123247}
+.tutorial-video-header button{background:#fff;color:#123247;border:1px solid #cad9e5;border-radius:8px;padding:8px 14px;cursor:pointer}
+.tutorial-video-player{aspect-ratio:16/9;background:#000}
+.tutorial-video-player iframe{display:block;width:100%;height:100%;border:0}
+[data-theme="dark"] .tutorial-link{color:#8bc7ff}
+@media(max-width:760px){.signup-tutorial-row{margin:0 auto 10px;padding:0 18px}.tutorial-video-dialog{padding:12px}.tutorial-video-header h2{font-size:16px}}

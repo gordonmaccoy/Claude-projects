@@ -262,6 +262,7 @@ async function refresh() {
     if(!count && !folders.some(f=>f.id===folder.id) && root!=='library-tests')continue;
     const detail=document.createElement('details');detail.className='folder';detail.dataset.folderId=folder.id;detail.dataset.folderKey=root+':'+folder.id;detail.open=expanded.has(detail.dataset.folderKey);
     const summary=document.createElement('summary');summary.textContent=`${folder.name} (${count})`;if(root==='library-tests'&&folder.id)summary.append(folderActions(folder),folderHandle(folder,detail));detail.append(summary);
+    if(root==='launch-tests'&&!folder.id){const row=document.createElement('div');row.className='folder-tutorial-row';const link=document.createElement('a');link.className='tutorial-link';link.dataset.tutorial='launch';link.href='https://youtu.be/xUPe_R1VbOQ';link.textContent='First Time Quiz Launch Tutorial Video';row.append(link);detail.append(row);}
     const list=document.createElement('div');list.className=root==='library-tests'?'library-rows':'cards';list.dataset.folderId=folder.id;if(root==='library-tests')setupQuizDrop(detail,list);detail.append(list);$(root).append(detail);groups[root+folder.id]=list;
   }
   for (const test of library) {
