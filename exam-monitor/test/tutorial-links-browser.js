@@ -83,10 +83,13 @@ async function main() {
     await page.locator('#gradebook-list summary').click();
     assert.equal(await page.locator('#gradebook-list tbody tr').count(),15);
     assert.deepEqual(await page.locator('#gradebook-list th').allTextContents(),['Student name','Student number']);
-    await page.locator('#gradebook-new').click();await page.locator('#gradebook-create input').fill('Biology 101');await page.locator('#gradebook-create [type=submit]').click();
+    await page.locator('#gradebook-new').click();await page.locator('#gradebook-create input[name=name]').fill('Biology 101');await page.locator('#roster-paste').click();await page.locator('#roster-text').fill('Student number\tStudent name\n002\tZoe\n001\tAmy');await page.locator('#gradebook-create [type=submit]').click();
     await page.locator('#gradebook-list summary').filter({hasText:'Biology 101'}).waitFor();
+    const book=page.locator('.gradebook-folder').filter({has:page.locator('summary').filter({hasText:'Biology 101'})});await book.locator('summary').click();assert.deepEqual(await book.locator('tbody tr').first().locator('td').allTextContents(),['Amy','001']);await book.getByRole('button',{name:'Student name',exact:true}).press('ArrowRight');await page.waitForFunction(()=>[...document.querySelectorAll('.gradebook-folder')].find(el=>el.textContent.includes('Biology 101')).querySelector('th').textContent==='Student number');assert.deepEqual(await book.locator('tbody tr').first().locator('td').allTextContents(),['001','Amy']);await book.getByRole('button',{name:'Move gradebook Biology 101'}).press('ArrowUp');await page.waitForFunction(()=>document.querySelector('#gradebook-list summary').textContent.includes('Biology 101'));
     await page.locator('[data-tab=library]').click();await page.locator('[data-tab=gradebooks]').click();
     await page.locator('#gradebook-list summary').filter({hasText:'Biology 101'}).waitFor();
+    const handles=page.locator('#gradebook-list .folder-drag-handle');const start=await handles.first().boundingBox(),end=await handles.nth(1).boundingBox();await page.mouse.move(start.x+start.width/2,start.y+start.height/2);await page.mouse.down();await page.mouse.move(end.x+end.width/2,end.y+end.height/2,{steps:8});await page.mouse.up();await page.waitForFunction(()=>document.querySelector('#gradebook-list summary').textContent.includes('Sample Gradebook'));
+    await page.setViewportSize({width:390,height:900});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);await page.setViewportSize({width:1440,height:900});
     await page.locator('[data-tab=games]').click();
     const games=page.frameLocator('#game-workspace-frame');
     const gameLink=games.locator('[data-tutorial=games]');await gameLink.waitFor({state:'visible'});await gameLink.click();
