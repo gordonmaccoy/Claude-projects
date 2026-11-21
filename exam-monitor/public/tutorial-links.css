@@ -16,3 +16,6 @@
 .tutorial-video-player iframe{display:block;width:100%;height:100%;border:0}
 [data-theme="dark"] .tutorial-link{color:#8bc7ff}
 @media(max-width:760px){.signup-tutorial-row{margin:0 auto 10px;padding:0 18px}.tutorial-video-dialog{padding:12px}.tutorial-video-header h2{font-size:16px}}
+
+@media(max-width:720px){#professor-navigation .topbar #take-tour{display:none}#professor-navigation .topbar{flex-wrap:nowrap;gap:6px}#professor-navigation .account{flex-wrap:nowrap;min-width:0}#professor-navigation #account-name{display:none}}
+@media(max-width:380px){#professor-navigation .examio-brand{gap:4px}#professor-navigation .examio-brand strong{font-size:18px}#professor-navigation .examio-brand small{font-size:4px}#professor-navigation .theme-toggle{width:28px}#professor-navigation [data-language-switch]{max-width:72px}#professor-navigation #settings-menu>summary{padding-inline:5px}}
