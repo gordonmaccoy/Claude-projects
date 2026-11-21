@@ -18,7 +18,7 @@ let accountGeneration = 0,creationVersion=0,professorTimerSnapshot=null;
 let lastWorkspaceTab = 'launch';
 let popupSessionId = null, openingDisplay = false, launching = false;
 function clearPrivateWorkspace() {
-  gradebooks.reset();gameWorkspace.reset();$('admin-link').hidden=true;$('beta-feedback-tab').hidden=true;if(shortGradeDialog.open)shortGradeDialog.close();shortGradeDialog.querySelector('form').reset();for(const el of shortGradeDialog.querySelectorAll('p'))el.textContent='';
+  gradebooks.reset();$('gradebooks-tab').hidden=true;gameWorkspace.reset();$('admin-link').hidden=true;$('beta-feedback-tab').hidden=true;if(shortGradeDialog.open)shortGradeDialog.close();shortGradeDialog.querySelector('form').reset();for(const el of shortGradeDialog.querySelectorAll('p'))el.textContent='';
   tab('launch');
   quizSharing.reset();
   closeCreation();exportsController.close();
@@ -58,6 +58,7 @@ const settings=window.createOnScreenSettings({api,onResetPassword:async()=>{cons
 $('beta-feedback-tab').onclick=()=>settings.open('beta');
 function action(fn) { return async event => { const version=tabVersion; try { notice(''); await fn(event); } catch (e) { if(version===tabVersion)notice(e.message); } }; }
 function tab(name) {
+  if(name==='gradebooks'&&$('gradebooks-tab').hidden)name='launch';
   if(name!==workspaceTab){workspaceTab=name;tabVersion++;notice('');}
   if(name!=='settings')lastWorkspaceTab=name;
   document.querySelectorAll('.tab').forEach(el => el.hidden = el.id !== name);
@@ -598,7 +599,7 @@ async function loadSignedInWorkspace() {
     if(recoveringPassword)return;
     const authSession=(await auth.auth.getSession()).data.session;if(generation!==accountGeneration||sessionPreferences?.blocked||!authSession)return;
     if(registration&&await registration.resume(authSession))return;
-    document.getElementById("admin-link").hidden=!verified.adminAllowed;$('beta-feedback-tab').hidden=verified.plan!=='beta';settings.setAccount(verified);$('account-name').textContent=account.email;$('login').hidden=true;$('workspace').hidden=false;$('workspace-tabs').hidden=false;$('take-tour').hidden=workspaceTab==='settings'||workspaceTab==='trash';$('signout').hidden=false;
+    document.getElementById("admin-link").hidden=!verified.adminAllowed;$('gradebooks-tab').hidden=!verified.adminAllowed;$('beta-feedback-tab').hidden=verified.plan!=='beta';settings.setAccount(verified);$('account-name').textContent=account.email;$('login').hidden=true;$('workspace').hidden=false;$('workspace-tabs').hidden=false;$('take-tour').hidden=workspaceTab==='settings'||workspaceTab==='trash';$('signout').hidden=false;
     if(openGameTab&&workspaceTab==='launch')tab('games');
     socket.connect();
     try {
