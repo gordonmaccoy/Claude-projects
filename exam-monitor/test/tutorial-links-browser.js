@@ -65,6 +65,18 @@ async function main() {
     }
     await page.setViewportSize({width:1440,height:900});await page.locator('#take-tour').click();await page.locator('#tour-dialog').waitFor({state:'visible'});await page.locator('#tour-skip').click();
     await page.locator('[data-tab=games]').click();
+    await page.locator('[data-tab=launch]').click();
+    await page.locator('#launch-tests details').first().evaluate(el=>el.open=true);
+    await page.locator('#launch-tests button').filter({hasText:'Launch test'}).first().click();
+    assert.equal(await page.locator('#launch-require-fullscreen').isChecked(),true);
+    await page.locator('[name=delivery-type][value=teacher]').check();
+    await page.locator('label').filter({has:page.locator('#launch-immediate-feedback')}).click();assert.equal(await page.locator('#launch-immediate-feedback').isChecked(),true);
+    await page.locator('#launch-cancel').click();
+    await page.locator('#launch-tests button').filter({hasText:'Launch test'}).first().click();
+    assert.equal(await page.locator('#launch-immediate-feedback').isChecked(),false);
+    assert.equal(await page.locator('#launch-require-fullscreen').isChecked(),true);
+    assert.equal(await page.locator('#launch-require-fullscreen').evaluate(el=>el.closest('.launch-option').previousElementSibling.contains(document.querySelector('#launch-fail-hidden'))),true);
+    await page.locator('#launch-cancel').click();
     await page.locator('[data-tab=gradebooks]').click();
     await page.locator('#gradebook-list summary').waitFor();
     assert.equal(await page.locator('#gradebook-list details').evaluate(el=>el.open),false);

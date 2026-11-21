@@ -36,7 +36,7 @@ function advanceQuestion(s,ownerId,expected,now=Date.now()){if(s.ownerId!==owner
 function flow(s,st){
  const ids=order(s,st),i=index(s,st),id=ids[i],locked=Object.hasOwn(st.committedAnswers||{},id),ready=sequential(s)&&(i>=ids.length||(type(s)==='teacher'&&i===ids.length-1&&locked));
  const value={type:type(s),onlyOneAttempt:!!s.onlyOneAttempt,immediateFeedback:!!s.immediateFeedback,total:ids.length,index:i,questionId:id||null,locked,readyToSubmit:ready,lockedIds:Object.keys(st.committedAnswers||{})};
- if(s.immediateFeedback&&locked&&s.phase==='running'&&!st.submission){const q=s.test.questions.find(q=>q.id===id),a=st.committedAnswers[id],choice=q.options?.find(o=>o.id===a),key=q.options?.find(o=>o.id===q.correctOptionId);const aResult=grading.assessment(q,a,st);value.feedback=aResult.pending?{pending:true}:{question:q.text,answer:grading.textQuestion(q)?a:choice?.text||'',correct:grading.answerKey(q),isCorrect:aResult.points===aResult.maxPoints,points:aResult.points,maxPoints:aResult.maxPoints,explanation:aResult.explanation};}
+ if(s.immediateFeedback===true&&locked&&s.phase==='running'&&!st.submission){const q=s.test.questions.find(q=>q.id===id),a=st.committedAnswers[id],choice=q.options?.find(o=>o.id===a),key=q.options?.find(o=>o.id===q.correctOptionId);const aResult=grading.assessment(q,a,st);value.feedback=aResult.pending?{pending:true}:{question:q.text,answer:grading.textQuestion(q)?a:choice?.text||'',correct:grading.answerKey(q),isCorrect:aResult.points===aResult.maxPoints,points:aResult.points,maxPoints:aResult.maxPoints,explanation:aResult.explanation};}
  return value;
 }
 function visibleQuestions(s,st){if(!sequential(s))return order(s,st);const id=order(s,st)[index(s,st)];return id?[id]:[];}

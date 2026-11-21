@@ -658,7 +658,7 @@ function folderActions(folder) {
   return actions;
 }
 let launchTest=null,quickLaunchPreferences=null;
-function resetLaunchOptions(){$('launch-require-fullscreen').checked=false;
+function resetLaunchOptions(){$('launch-require-fullscreen').checked=true;$('launch-immediate-feedback').checked=false;
  $('launch-room-enabled').checked=false;$('launch-room-name').value='';$('launch-room-name').disabled=true;$('launch-room-field').hidden=true;
  $('launch-time-enabled').checked=false;$('launch-duration').value='10';$('launch-duration').disabled=true;$('launch-time-field').hidden=true;
  for(const id of ['launch-show-scores','launch-corrections','launch-monitoring','launch-fail-hidden','launch-text-selection','launch-copy-block','launch-fullscreen','launch-tab-visibility','launch-focus'])$(id).checked=true;
