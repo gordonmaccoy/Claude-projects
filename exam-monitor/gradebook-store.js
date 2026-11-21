@@ -11,7 +11,7 @@ function createGradebookStore(pool,accounts){
   async listGradebooks(owner){return accounts.withOwner(owner,async()=>{
    const sample={id:'sample-'+owner,name:'Sample Gradebook',sample:true,students:names.map((name,index)=>({name,number:String(20261001+index)}))};
    await pool.query('INSERT INTO onscreen_v2_gradebooks(id,owner_id,data) VALUES($1,$2,$3) ON CONFLICT(id) DO NOTHING',[sample.id,owner,JSON.stringify(sample)]);
-   return (await pool.query('SELECT data FROM onscreen_v2_gradebooks WHERE owner_id=$1 ORDER BY sort_index,created_at,id',[owner])).rows.map(row=>row.data);
+   return (await pool.query("SELECT data FROM onscreen_v2_gradebooks WHERE owner_id=$1 AND data->>'deletedAt' IS NULL ORDER BY sort_index,created_at,id",[owner])).rows.map(row=>row.data);
   });},
   async createGradebook(owner,input){
    if(!input||typeof input.name!=='string'||!input.name.trim()||input.name.trim().length>120||Object.keys(input).some(key=>!['name','students'].includes(key)))throw problem('Enter a gradebook name (maximum 120 characters).',400);
@@ -20,16 +20,16 @@ function createGradebookStore(pool,accounts){
    const numbers=students.map(s=>s.number.trim()).filter(Boolean);if(new Set(numbers).size!==numbers.length)throw problem('Student numbers must be unique.',400);
    return accounts.withOwner(owner,async()=>{const book={id:randomUUID(),name:input.name.trim(),sample:false,students:students.map(s=>({name:s.name.trim(),number:s.number.trim()})),columns:['name','number'],sortBy:'name'};await pool.query('INSERT INTO onscreen_v2_gradebooks(id,owner_id,data,sort_index) SELECT $1,$2,$3,COALESCE(MAX(sort_index),-1)+1 FROM onscreen_v2_gradebooks WHERE owner_id=$2',[book.id,owner,JSON.stringify(book)]);return book;});
   },
-  async orderGradebooks(owner,ids){if(!Array.isArray(ids)||new Set(ids).size!==ids.length||ids.some(id=>typeof id!=='string'))throw problem('Invalid gradebook order.',400);return accounts.withOwner(owner,async()=>{const existing=(await pool.query('SELECT id FROM onscreen_v2_gradebooks WHERE owner_id=$1',[owner])).rows.map(r=>r.id);if(ids.length!==existing.length||ids.some(id=>!existing.includes(id)))throw problem('Gradebooks changed. Refresh and try again.',409);for(const [index,id]of ids.entries())await pool.query('UPDATE onscreen_v2_gradebooks SET sort_index=$3 WHERE owner_id=$1 AND id=$2',[owner,id,index]);return {ok:true};});},
+  async orderGradebooks(owner,ids){if(!Array.isArray(ids)||new Set(ids).size!==ids.length||ids.some(id=>typeof id!=='string'))throw problem('Invalid gradebook order.',400);return accounts.withOwner(owner,async()=>{const existing=(await pool.query("SELECT id FROM onscreen_v2_gradebooks WHERE owner_id=$1 AND data->>'deletedAt' IS NULL",[owner])).rows.map(r=>r.id);if(ids.length!==existing.length||ids.some(id=>!existing.includes(id)))throw problem('Gradebooks changed. Refresh and try again.',409);for(const [index,id]of ids.entries())await pool.query('UPDATE onscreen_v2_gradebooks SET sort_index=$3 WHERE owner_id=$1 AND id=$2',[owner,id,index]);return {ok:true};});},
   async sendResultsToGradebook(owner,id,sessionId){
    if(typeof sessionId!=='string'||!sessionId||sessionId.length>100)throw problem('Select valid quiz results.',400);
    return accounts.withOwner(owner,async()=>{
     const row=(await pool.query('SELECT data FROM onscreen_v2_gradebooks WHERE owner_id=$1 AND id=$2',[owner,id])).rows[0];
-    if(!row)throw problem('Gradebook not found.',404);
+    if(!row||row.data.deletedAt)throw problem('Gradebook not found.',404);
     const session=(await pool.query("SELECT data FROM onscreen_v2_sessions WHERE owner_id=$1 AND id=$2 AND data->>'deletedAt' IS NULL",[owner,sessionId])).rows[0]?.data;
     if(!session||session.mode!=='test')throw problem('Quiz results not found.',404);
     const book=row.data;book.students=book.students.map(student=>({...student,id:student.id||randomUUID()}));
-    const result=buildGradebookResult(book,session);
+    const result=buildGradebookResult(book,session);book.revision=(book.revision||0)+1;
     book.assessments=book.assessments||[];
     const index=book.assessments.findIndex(item=>item.sessionId===sessionId);
     if(index<0&&book.assessments.length>=200)throw problem('This gradebook already contains 200 quizzes.',400);
@@ -38,7 +38,21 @@ function createGradebookStore(pool,accounts){
     return {book,matched:result.grades.length,skipped:result.skipped.length};
    });
   },
-  async gradebookPreferences(owner,id,input){if(!input||Object.keys(input).some(k=>!['columns','sortBy','showNames','gradeDisplay'].includes(k))||(input.showNames!==undefined&&typeof input.showNames!=='boolean')||(input.gradeDisplay!==undefined&&!['scores','percentage'].includes(input.gradeDisplay))||(input.sortBy!==undefined&&!['name','number'].includes(input.sortBy))||(input.columns!==undefined&&(!Array.isArray(input.columns)||input.columns.length!==2||new Set(input.columns).size!==2||input.columns.some(k=>!['name','number'].includes(k)))))throw problem('Invalid gradebook display options.',400);return accounts.withOwner(owner,async()=>{const row=(await pool.query('SELECT data FROM onscreen_v2_gradebooks WHERE owner_id=$1 AND id=$2',[owner,id])).rows[0];if(!row)throw problem('Gradebook not found.',404);const data={...row.data,...input};await pool.query('UPDATE onscreen_v2_gradebooks SET data=$3 WHERE owner_id=$1 AND id=$2',[owner,id,JSON.stringify(data)]);return data;});}
+
+  async getGradebook(owner,id){return accounts.withOwner(owner,async()=>{const row=(await pool.query('SELECT data FROM onscreen_v2_gradebooks WHERE owner_id=$1 AND id=$2',[owner,id])).rows[0];if(!row||row.data.deletedAt)throw problem('Gradebook not found.',404);return row.data;});},
+  async changeGradebook(owner,id,input){return accounts.withOwner(owner,async()=>{const row=(await pool.query('SELECT data FROM onscreen_v2_gradebooks WHERE owner_id=$1 AND id=$2',[owner,id])).rows[0];if(!row||row.data.deletedAt)throw problem('Gradebook not found.',404);const book=row.data;
+   if(input.action==='duplicate'){const copy={...book,id:randomUUID(),name:(book.name+' (copy)').slice(0,120),sample:false};await pool.query('INSERT INTO onscreen_v2_gradebooks(id,owner_id,data,sort_index) SELECT $1,$2,$3,COALESCE(MAX(sort_index),-1)+1 FROM onscreen_v2_gradebooks WHERE owner_id=$2',[copy.id,owner,JSON.stringify(copy)]);return copy;}
+   if(input.action==='delete'){book.deletedAt=new Date().toISOString();}
+   else if(input.action==='edit'){
+    if((book.revision||0)!==input.revision)throw problem('This gradebook changed. Reopen Edit and try again.',409);
+    if(typeof input.name!=='string'||!input.name.trim()||input.name.length>120||!Array.isArray(input.students)||input.students.length>1000||!Array.isArray(input.assessments)||input.assessments.length!==(book.assessments||[]).length)throw problem('Invalid gradebook changes.',400);
+    const ids=new Set(),numbers=new Set();for(const student of input.students){if(!Number.isInteger(student.index)||!book.students[student.index]||ids.has(student.index)||typeof student.name!=='string'||!student.name.trim()||student.name.length>120||typeof student.number!=='string'||student.number.length>64||(student.number.trim()&&numbers.has(student.number.trim())))throw problem('Use unique student numbers and valid names.',400);ids.add(student.index);numbers.add(student.number.trim());}
+    const students=input.students.map(st=>({...book.students[st.index],name:st.name.trim(),number:st.number.trim()}));
+    const assessments=(book.assessments||[]).map((a,i)=>{const patch=input.assessments[i];if(patch.sessionId!==a.sessionId||typeof patch.title!=='string'||!patch.title.trim()||patch.title.length>200||!Array.isArray(patch.scores)||patch.scores.length!==students.length)throw problem('Invalid quiz changes.',400);const grades=students.map((st,j)=>{const old=a.grades.find(g=>g.studentId===st.id),value=patch.scores[j];if(value===null)return {...old,studentId:st.id,score:null,percentage:null,status:'Not submitted'};const total=old?.total??a.grades.find(g=>Number.isFinite(g.total))?.total;if(!Number.isFinite(value)||!Number.isFinite(total)||value<0||value>total)throw problem('Scores must be between zero and the quiz total.',400);return {...old,studentId:st.id,score:value,total,percentage:Math.round(value/total*10000)/100,status:'Submitted'};});return {...a,title:patch.title.trim(),grades};});book.name=input.name.trim();book.students=students;book.assessments=assessments;book.revision=(book.revision||0)+1;
+   }else throw problem('Invalid gradebook action.',400);
+   await pool.query('UPDATE onscreen_v2_gradebooks SET data=$3 WHERE owner_id=$1 AND id=$2',[owner,id,JSON.stringify(book)]);return book;
+  });},
+  async gradebookPreferences(owner,id,input){if(!input||Object.keys(input).some(k=>!['columns','sortBy','showNames','gradeDisplay'].includes(k))||(input.showNames!==undefined&&typeof input.showNames!=='boolean')||(input.gradeDisplay!==undefined&&!['scores','percentage'].includes(input.gradeDisplay))||(input.sortBy!==undefined&&!['name','number'].includes(input.sortBy))||(input.columns!==undefined&&(!Array.isArray(input.columns)||input.columns.length!==2||new Set(input.columns).size!==2||input.columns.some(k=>!['name','number'].includes(k)))))throw problem('Invalid gradebook display options.',400);return accounts.withOwner(owner,async()=>{const row=(await pool.query('SELECT data FROM onscreen_v2_gradebooks WHERE owner_id=$1 AND id=$2',[owner,id])).rows[0];if(!row||row.data.deletedAt)throw problem('Gradebook not found.',404);const data={...row.data,...input};await pool.query('UPDATE onscreen_v2_gradebooks SET data=$3 WHERE owner_id=$1 AND id=$2',[owner,id,JSON.stringify(data)]);return data;});}
  }};
 }
 function buildGradebookResult(book,session){
