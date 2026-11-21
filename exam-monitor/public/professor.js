@@ -18,7 +18,7 @@ let accountGeneration = 0,creationVersion=0,professorTimerSnapshot=null;
 let lastWorkspaceTab = 'launch';
 let popupSessionId = null, openingDisplay = false, launching = false;
 function clearPrivateWorkspace() {
-  gradebooks.reset();$('gradebooks-tab').hidden=true;gameWorkspace.reset();$('admin-link').hidden=true;$('beta-feedback-tab').hidden=true;if(shortGradeDialog.open)shortGradeDialog.close();shortGradeDialog.querySelector('form').reset();for(const el of shortGradeDialog.querySelectorAll('p'))el.textContent='';
+  gradebooks.reset();$('gradebooks-tab').hidden=true;$('result-gradebook').hidden=true;gameWorkspace.reset();$('admin-link').hidden=true;$('beta-feedback-tab').hidden=true;if(shortGradeDialog.open)shortGradeDialog.close();shortGradeDialog.querySelector('form').reset();for(const el of shortGradeDialog.querySelectorAll('p'))el.textContent='';
   tab('launch');
   quizSharing.reset();
   closeCreation();exportsController.close();
@@ -599,7 +599,7 @@ async function loadSignedInWorkspace() {
     if(recoveringPassword)return;
     const authSession=(await auth.auth.getSession()).data.session;if(generation!==accountGeneration||sessionPreferences?.blocked||!authSession)return;
     if(registration&&await registration.resume(authSession))return;
-    document.getElementById("admin-link").hidden=!verified.adminAllowed;$('gradebooks-tab').hidden=!verified.adminAllowed;$('beta-feedback-tab').hidden=verified.plan!=='beta';settings.setAccount(verified);$('account-name').textContent=account.email;$('login').hidden=true;$('workspace').hidden=false;$('workspace-tabs').hidden=false;$('take-tour').hidden=workspaceTab==='settings'||workspaceTab==='trash';$('signout').hidden=false;
+    document.getElementById("admin-link").hidden=!verified.adminAllowed;$('gradebooks-tab').hidden=!verified.adminAllowed;$('result-gradebook').hidden=!verified.adminAllowed;$('beta-feedback-tab').hidden=verified.plan!=='beta';settings.setAccount(verified);$('account-name').textContent=account.email;$('login').hidden=true;$('workspace').hidden=false;$('workspace-tabs').hidden=false;$('take-tour').hidden=workspaceTab==='settings'||workspaceTab==='trash';$('signout').hidden=false;
     if(openGameTab&&workspaceTab==='launch')tab('games');
     socket.connect();
     try {
@@ -933,3 +933,5 @@ window.addEventListener('resize',positionResultSettings);
 const gradebooks=window.createExamioGradebooks({api,t});
 const liveResults=window.createExamioLiveResults({api,t,renderSummary:renderTable,isVisible:()=>!!account&&!$('launch').hidden,openQuestion:(data,index)=>{questionData=data;questionIndex=index;questionResultsVisible=false;renderQuestionDetail();$('question-detail-dialog').showModal();}});
 setInterval(()=>liveResults.refresh(),1500);
+
+$('result-gradebook').onclick=action(async()=>{if(historySession&&!$('gradebooks-tab').hidden)await gradebooks.sendResults(historySession);});

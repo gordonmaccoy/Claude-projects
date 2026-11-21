@@ -21,7 +21,36 @@ function createGradebookStore(pool,accounts){
    return accounts.withOwner(owner,async()=>{const book={id:randomUUID(),name:input.name.trim(),sample:false,students:students.map(s=>({name:s.name.trim(),number:s.number.trim()})),columns:['name','number'],sortBy:'name'};await pool.query('INSERT INTO onscreen_v2_gradebooks(id,owner_id,data,sort_index) SELECT $1,$2,$3,COALESCE(MAX(sort_index),-1)+1 FROM onscreen_v2_gradebooks WHERE owner_id=$2',[book.id,owner,JSON.stringify(book)]);return book;});
   },
   async orderGradebooks(owner,ids){if(!Array.isArray(ids)||new Set(ids).size!==ids.length||ids.some(id=>typeof id!=='string'))throw problem('Invalid gradebook order.',400);return accounts.withOwner(owner,async()=>{const existing=(await pool.query('SELECT id FROM onscreen_v2_gradebooks WHERE owner_id=$1',[owner])).rows.map(r=>r.id);if(ids.length!==existing.length||ids.some(id=>!existing.includes(id)))throw problem('Gradebooks changed. Refresh and try again.',409);for(const [index,id]of ids.entries())await pool.query('UPDATE onscreen_v2_gradebooks SET sort_index=$3 WHERE owner_id=$1 AND id=$2',[owner,id,index]);return {ok:true};});},
-  async gradebookPreferences(owner,id,input){if(!input||Object.keys(input).some(k=>!['columns','sortBy'].includes(k))||(input.sortBy!==undefined&&!['name','number'].includes(input.sortBy))||(input.columns!==undefined&&(!Array.isArray(input.columns)||input.columns.length!==2||new Set(input.columns).size!==2||input.columns.some(k=>!['name','number'].includes(k)))))throw problem('Invalid gradebook display options.',400);return accounts.withOwner(owner,async()=>{const row=(await pool.query('SELECT data FROM onscreen_v2_gradebooks WHERE owner_id=$1 AND id=$2',[owner,id])).rows[0];if(!row)throw problem('Gradebook not found.',404);const data={...row.data,...input};await pool.query('UPDATE onscreen_v2_gradebooks SET data=$3 WHERE owner_id=$1 AND id=$2',[owner,id,JSON.stringify(data)]);return data;});}
+  async sendResultsToGradebook(owner,id,sessionId){
+   if(typeof sessionId!=='string'||!sessionId||sessionId.length>100)throw problem('Select valid quiz results.',400);
+   return accounts.withOwner(owner,async()=>{
+    const row=(await pool.query('SELECT data FROM onscreen_v2_gradebooks WHERE owner_id=$1 AND id=$2',[owner,id])).rows[0];
+    if(!row)throw problem('Gradebook not found.',404);
+    const session=(await pool.query("SELECT data FROM onscreen_v2_sessions WHERE owner_id=$1 AND id=$2 AND data->>'deletedAt' IS NULL",[owner,sessionId])).rows[0]?.data;
+    if(!session||session.mode!=='test')throw problem('Quiz results not found.',404);
+    const book=row.data;book.students=book.students.map(student=>({...student,id:student.id||randomUUID()}));
+    const result=buildGradebookResult(book,session);
+    book.assessments=book.assessments||[];
+    const index=book.assessments.findIndex(item=>item.sessionId===sessionId);
+    if(index<0&&book.assessments.length>=200)throw problem('This gradebook already contains 200 quizzes.',400);
+    if(index<0)book.assessments.push(result);else book.assessments[index]=result;
+    await pool.query('UPDATE onscreen_v2_gradebooks SET data=$3 WHERE owner_id=$1 AND id=$2',[owner,id,JSON.stringify(book)]);
+    return {book,matched:result.grades.length,skipped:result.skipped.length};
+   });
+  },
+  async gradebookPreferences(owner,id,input){if(!input||Object.keys(input).some(k=>!['columns','sortBy','showNames','gradeDisplay'].includes(k))||(input.showNames!==undefined&&typeof input.showNames!=='boolean')||(input.gradeDisplay!==undefined&&!['scores','percentage'].includes(input.gradeDisplay))||(input.sortBy!==undefined&&!['name','number'].includes(input.sortBy))||(input.columns!==undefined&&(!Array.isArray(input.columns)||input.columns.length!==2||new Set(input.columns).size!==2||input.columns.some(k=>!['name','number'].includes(k)))))throw problem('Invalid gradebook display options.',400);return accounts.withOwner(owner,async()=>{const row=(await pool.query('SELECT data FROM onscreen_v2_gradebooks WHERE owner_id=$1 AND id=$2',[owner,id])).rows[0];if(!row)throw problem('Gradebook not found.',404);const data={...row.data,...input};await pool.query('UPDATE onscreen_v2_gradebooks SET data=$3 WHERE owner_id=$1 AND id=$2',[owner,id,JSON.stringify(data)]);return data;});}
  }};
 }
-module.exports={createGradebookStore};
+function buildGradebookResult(book,session){
+ const normalize=value=>String(value||'').normalize('NFKC').trim().replace(/\s+/g,' ').toLocaleLowerCase();
+ const source=require('./exam').privateView(session).students,grades=[],skipped=[],claimed=new Set();
+ const key=student=>session.requireStudentNumber===false?normalize(student.name):String(student.number||'').trim();
+ const counts=new Map();for(const student of source)counts.set(key(student),(counts.get(key(student))||0)+1);
+ for(const student of source){const value=key(student),matches=value?book.students.filter(target=>key(target)===value):[];
+  if(matches.length!==1||counts.get(value)!==1||claimed.has(matches[0]?.id)){skipped.push({name:student.name,number:session.requireStudentNumber===false?'':student.number,reason:matches.length>1||counts.get(value)>1?'Ambiguous match':'Not in gradebook'});continue;}
+  const target=matches[0];claimed.add(target.id);const result=student.result;
+  grades.push({studentId:target.id,score:result&&!result.pending&&Number.isFinite(result.score)?result.score:null,total:result?.total??student.total,percentage:result&&!result.pending&&Number.isFinite(result.percentage)?result.percentage:null,status:!result?'Not submitted':result.pending?'Grading…':'Submitted'});
+ }
+ return {sessionId:session.id,title:session.resultTitle||session.test.title,importedAt:new Date().toISOString(),grades,skipped};
+}
+module.exports={createGradebookStore,buildGradebookResult};
