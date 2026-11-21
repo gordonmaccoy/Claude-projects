@@ -43,6 +43,14 @@ function createGradebookStore(pool,accounts){
   async changeGradebook(owner,id,input){return accounts.withOwner(owner,async()=>{const row=(await pool.query('SELECT data FROM onscreen_v2_gradebooks WHERE owner_id=$1 AND id=$2',[owner,id])).rows[0];if(!row||row.data.deletedAt)throw problem('Gradebook not found.',404);const book=row.data;
    if(input.action==='duplicate'){const copy={...book,id:randomUUID(),name:(book.name+' (copy)').slice(0,120),sample:false};await pool.query('INSERT INTO onscreen_v2_gradebooks(id,owner_id,data,sort_index) SELECT $1,$2,$3,COALESCE(MAX(sort_index),-1)+1 FROM onscreen_v2_gradebooks WHERE owner_id=$2',[copy.id,owner,JSON.stringify(copy)]);return copy;}
    if(input.action==='delete'){book.deletedAt=new Date().toISOString();}
+   else if(input.action==='roster'){
+    if((book.revision||0)!==input.revision)throw problem('This gradebook changed. Reopen the roster and try again.',409);
+    if(!Array.isArray(input.students)||input.students.length>1000)throw problem('Use up to 1,000 students.',400);
+    const numbers=new Set();for(const st of input.students){if(!st||typeof st.name!=='string'||!st.name.trim()||st.name.length>120||typeof st.number!=='string'||st.number.length>64||(st.number.trim()&&numbers.has(st.number.trim())))throw problem('Use valid names and unique student numbers.',400);if(st.number.trim())numbers.add(st.number.trim());}
+    const normalize=v=>v.normalize('NFKC').trim().toLowerCase();
+    book.students=input.students.map(st=>{const name=st.name.trim(),number=st.number.trim();const matches=book.students.filter(old=>number?old.number===number:!old.number&&normalize(old.name)===normalize(name));const unique=number||input.students.filter(other=>!other.number.trim()&&normalize(other.name)===normalize(name)).length===1;return {name,number,id:unique&&matches.length===1?(matches[0].id||randomUUID()):randomUUID()};});
+    const keep=new Set(book.students.map(st=>st.id));book.assessments=(book.assessments||[]).map(a=>({...a,grades:a.grades.filter(g=>keep.has(g.studentId))}));book.revision=(book.revision||0)+1;
+   }
    else if(input.action==='edit'){
     if((book.revision||0)!==input.revision)throw problem('This gradebook changed. Reopen Edit and try again.',409);
     if(typeof input.name!=='string'||!input.name.trim()||input.name.length>120||!Array.isArray(input.students)||input.students.length>1000||!Array.isArray(input.assessments)||input.assessments.length!==(book.assessments||[]).length)throw problem('Invalid gradebook changes.',400);
