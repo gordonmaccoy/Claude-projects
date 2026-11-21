@@ -177,6 +177,7 @@ function renderTestQuestions(questions) {
 
 }
 async function commitQuestion(questionId,button){
+ if(securityGuard.blocked())return;
  if(!testAnswers[questionId]?.trim()){message(t('Enter an answer before continuing'));return;}
  clearTimeout(draftTimer);button.disabled=true;const response=await emit('student:answer',{questionId,answer:testAnswers[questionId]});if(response.view)showView(response.view);if(!response.ok){message(response.error);button.disabled=false;}
 }
@@ -201,14 +202,14 @@ async function uploadDraft() {
   else if(res.ok && version===updateVersion && !currentView?.failed) message(t('Answers saved.'));
 }
 els.testSubmitBtn.onclick=()=> {
- if(submitting||currentView?.failed||currentView?.result||currentView?.phase!=='running')return;
+ if(securityGuard.blocked()||submitting||currentView?.failed||currentView?.result||currentView?.phase!=='running')return;
  const unanswered=currentView.test.questions.map((q,i)=>testAnswers[q.id]?.trim()?null:i+1).filter(n=>n!==null);
  $('submit-warning').textContent=unanswered.length?t(unanswered.length===1?'You have {count} unanswered question ({numbers}). Unanswered questions receive zero points. Submit anyway?':'You have {count} unanswered questions ({numbers}). Unanswered questions receive zero points. Submit anyway?',{count:unanswered.length,numbers:unanswered.join(', ')}):'';
  $('submit-dialog').showModal();
 };
 $('submit-review').onclick=()=> $('submit-dialog').close();
 $('submit-confirm').onclick=async()=>{
- if(submitting||currentView?.failed||currentView?.result||currentView?.phase!=='running')return;
+ if(securityGuard.blocked()||submitting||currentView?.failed||currentView?.result||currentView?.phase!=='running')return;
  submitting=true;els.testSubmitBtn.disabled=true;$('submit-confirm').disabled=true;clearTimeout(draftTimer);
  const res=await emit('student:submit',{answers:testAnswers});
  submitting=false;els.testSubmitBtn.disabled=false;$('submit-confirm').disabled=false;
@@ -222,7 +223,7 @@ function updateTimer(){
  $('time-left').textContent=remaining<=10?String(remaining):`${Math.floor(remaining/60)}:${String(remaining%60).padStart(2,'0')}`;$('test-timer').classList.toggle('critical',remaining<=10);
  if(performance.now()>extensionNoticeUntil)$('time-notice').textContent=remaining===0?t('Time is up. Submitting your saved answers…'):remaining<=10?t('Submitting automatically in {seconds} seconds.',{seconds:remaining}):remaining<=60?t('One minute or less remains.'):'';
  if(remaining===0){els.testQuestions.inert=true;els.testSubmitBtn.disabled=true;if(socket.connected&&!timerSyncing){timerSyncing=true;emit('student:sync',{}).then(r=>{timerSyncing=false;if(r.view)showView(r.view);});}}
- else{els.testQuestions.inert=!!currentView?.failed;els.testSubmitBtn.disabled=submitting;}
+ else{els.testQuestions.inert=!!currentView?.failed||securityGuard.blocked();els.testSubmitBtn.disabled=submitting||securityGuard.blocked();}
 }
 setInterval(updateTimer,250);
 async function visibility() { if(!joined || currentView?.result || currentView?.phase==='ended' || !socket.connected) return; const res=await emit('student:visibility',{visible:!document.hidden}); if(res.view)showView(res.view);if(!res.ok && !res.timedOut && !currentView?.terminal) message(res.error); }

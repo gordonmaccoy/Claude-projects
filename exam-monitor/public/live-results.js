@@ -30,7 +30,7 @@
     const body=table.createTBody();
     for(const student of [...data.students].sort((a,b)=>session.requireStudentNumber===false?a.name.localeCompare(b.name):String(a.number).localeCompare(String(b.number),undefined,{numeric:true}))){
      const row=body.insertRow();if(session.requireStudentNumber!==false&&s.numbers)row.insertCell().textContent=student.number;if(s.names)row.insertCell().textContent=student.name;
-     row.insertCell().textContent=t(student.submitted?'Submitted':'Draft');
+     row.insertCell().textContent=t(student.submitted?'Submitted':'Draft')+(students.find(item=>item.id===student.id)?.fullscreenUnavailable?' · '+t('Fullscreen unavailable'):'');
      if(s.scores){const summary=students.find(item=>item.id===student.id);row.insertCell().textContent=summary?.result?.pending?t('Grading…'):summary?.result?summary.score+' / '+summary.total+' · '+summary.result.percentage+'%':t('Pending');}
      for(const answer of student.answers){const cell=row.insertCell();cell.className='answer-'+answer.status;cell.textContent=answer.status==='grading'?t('Grading…'):(answer.status==='correct'?'✓ ':answer.status==='incorrect'?'✗ ':'')+(answer.letter||answer.answer||'—')+(answer.status==='partial'?' · '+answer.points+'/'+answer.maxPoints:'');cell.title=answer.question+' · '+(answer.answer||t('Unanswered'));}
     }

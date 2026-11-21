@@ -155,10 +155,12 @@ function visibility(s, id, visible, now = Date.now()) {
   else if (s.phase === 'running' && security.inactivityFail && st.hiddenSince === null && wasVisible) st.hiddenSince = now;
 }
 function securityEvent(s,id,type,now=Date.now()){
- if(!['focus-lost','focus-returned','fullscreen-entered','fullscreen-exit'].includes(type))throw Error('Invalid security event');
+ if(!['focus-lost','focus-returned','fullscreen-entered','fullscreen-exit','fullscreen-unavailable'].includes(type))throw Error('Invalid security event');
  const st=student(s,id),security=effectiveSecurity(s);
  if(s.phase!=='running'||st.completedAt||st.submission||isFailed(st)||!security.enabled)return;
- const focus=type.startsWith('focus-');if(focus?!security.focusVisibility:!security.fullscreen)return;
+ const focus=type.startsWith('focus-');if(focus?!security.focusVisibility:!(security.fullscreen||security.requireFullscreen))return;
+ if(type==='fullscreen-unavailable'){if(!st.fullscreenUnavailable){st.fullscreenUnavailable=true;recordMonitoring(st,{type,at:now});}return;}
+ if(type==='fullscreen-entered')st.fullscreenUnavailable=false;
  const key=focus?'focused':'fullscreen',value=type==='focus-returned'||type==='fullscreen-entered';
  if(st[key]===value||(focus&&value&&st[key]===undefined)||(!focus&&!value&&st[key]!==true))return;
  st[key]=value;recordMonitoring(st,{type,at:now});
@@ -272,7 +274,7 @@ function privateView(s, now = Date.now()) {
     remainingMs:remainingTime(s,now),durationMinutes:s.durationMinutes||0,deadlineAt:s.deadlineAt||null,showScores:s.showScores!==false,shuffleAnswers:effectiveSecurity(s).enabled&&!!s.shuffleAnswers,extensionVersion:s.extensionVersion||0,
     createdAt: s.createdAt, startedAt: s.startedAt, endedAt: s.endedAt, displayToken: s.displayToken,
     students: s.students.map(st => ({ id: st.id, number: st.number, name: st.name, status: status(st, now,s),
-      failed: isFailed(st), completed:Boolean(st.completedAt), result: result(s, st), events: st.events,
+      fullscreenUnavailable:st.fullscreenUnavailable===true, failed: isFailed(st), completed:Boolean(st.completedAt), result: result(s, st), events: st.events,
       finalized:Boolean(st.submission?.professorFinalized),
       progress:s.mode==='test'?{question:Math.max(0,(st.questionOrder||s.test.questions.map(q=>q.id)).indexOf(st.progressQuestionId)+1),answered:s.test.questions.filter(q=>{const a=(st.submission?.answers||st.draft||{})[q.id];return typeof a==='string'&&a.trim();}).length,total:s.test.questions.length}:null,
       score: result(s, st)?.score ?? (isFailed(st) ? 0 : null), total: totalPoints(s.test) })) };
