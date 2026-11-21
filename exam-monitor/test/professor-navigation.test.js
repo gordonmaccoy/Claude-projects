@@ -6,10 +6,10 @@ test('professor navigation groups quiz actions before Game Library and places Tr
  assert.ok(nav);
  assert.match(nav,/\bhidden\b/,'signed-out navigation stays hidden');
  const controls=[...nav.matchAll(/<(button|a) ([^>]+)>([\s\S]*?)<\/\1>/g)];
- assert.deepEqual(controls.map(match=>match[2].match(/aria-label="([^"]+)"/)?.[1]),['Launch Quiz','Quiz Library','Quiz Results','Game Library','Admin Dashboard','Beta Feedback','Trash']);
- assert.deepEqual(controls.filter(m=>m[1]==='button'&&m[2].includes('data-tab=')).map(m=>m[2].match(/data-tab="([^"]+)"/)?.[1]),['launch','library','results','games','trash']);
+ assert.deepEqual(controls.map(match=>match[2].match(/aria-label="([^"]+)"/)?.[1]),['Launch Quiz','Quiz Library','Quiz Results','Gradebooks','Game Library','Admin Dashboard','Beta Feedback','Trash']);
+ assert.deepEqual(controls.filter(m=>m[1]==='button'&&m[2].includes('data-tab=')).map(m=>m[2].match(/data-tab="([^"]+)"/)?.[1]),['launch','library','results','gradebooks','games','trash']);
  assert.equal(controls[3][1],'button');
- assert.match(controls[6][2],/data-tab="trash"/);
+ assert.match(controls[7][2],/data-tab="trash"/);
 });
 test('workspace navigation wraps, places Trash against the right edge, and translates its labels',()=>{
  const css=read('professor.css'),ko=read('ko.js');

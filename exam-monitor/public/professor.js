@@ -18,7 +18,7 @@ let accountGeneration = 0,creationVersion=0,professorTimerSnapshot=null;
 let lastWorkspaceTab = 'launch';
 let popupSessionId = null, openingDisplay = false, launching = false;
 function clearPrivateWorkspace() {
-  gameWorkspace.reset();$('admin-link').hidden=true;$('beta-feedback-tab').hidden=true;if(shortGradeDialog.open)shortGradeDialog.close();shortGradeDialog.querySelector('form').reset();for(const el of shortGradeDialog.querySelectorAll('p'))el.textContent='';
+  gradebooks.reset();gameWorkspace.reset();$('admin-link').hidden=true;$('beta-feedback-tab').hidden=true;if(shortGradeDialog.open)shortGradeDialog.close();shortGradeDialog.querySelector('form').reset();for(const el of shortGradeDialog.querySelectorAll('p'))el.textContent='';
   tab('launch');
   quizSharing.reset();
   closeCreation();exportsController.close();
@@ -62,8 +62,8 @@ function tab(name) {
   if(name!=='settings')lastWorkspaceTab=name;
   document.querySelectorAll('.tab').forEach(el => el.hidden = el.id !== name);
   document.querySelectorAll('[data-tab]').forEach(el => el.classList.toggle('selected', el.dataset.tab === name));
-  $('take-tour').hidden=name==='settings'||name==='trash';$('take-tour').dataset.tour=({launch:'launch',library:'create',results:'results',games:'games'})[name]||'launch';
-  gameWorkspace.setActive(name==='games');
+  $('take-tour').hidden=name==='settings'||name==='trash'||name==='gradebooks';$('take-tour').dataset.tour=({launch:'launch',library:'create',results:'results',games:'games'})[name]||'launch';
+  gameWorkspace.setActive(name==='games');if(name==='gradebooks')gradebooks.load();
 }
 document.querySelectorAll('[data-tab]').forEach(el => el.onclick = () => { tab(el.dataset.tab); if (el.dataset.tab === 'results') refresh().catch(e => notice(e.message)); if(el.dataset.tab==='trash') refreshTrash().catch(e=>notice(e.message)); });
 function button(text, fn, className = '') { const b = document.createElement('button'); b.textContent = t(text); b.className = className; b.onclick = action(fn); return b; }
@@ -929,5 +929,6 @@ function positionResultSettings(){
 $('result-settings').addEventListener('toggle',positionResultSettings);
 window.addEventListener('resize',positionResultSettings);
 
+const gradebooks=window.createExamioGradebooks({api,t});
 const liveResults=window.createExamioLiveResults({api,t,renderSummary:renderTable,isVisible:()=>!!account&&!$('launch').hidden,openQuestion:(data,index)=>{questionData=data;questionIndex=index;questionResultsVisible=false;renderQuestionDetail();$('question-detail-dialog').showModal();}});
 setInterval(()=>liveResults.refresh(),1500);

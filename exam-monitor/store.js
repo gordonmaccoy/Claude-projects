@@ -9,6 +9,7 @@ function createStore(pool) {
   const store={
     async init() {
       await accounts.init();
+      await gradebooks.init();
       await sharing.init();
       await games.init();
       await admin.init();
@@ -177,7 +178,8 @@ function createStore(pool) {
   const sharing=require('./sharing-store').createSharingStore(pool,accounts,store);
   const games=require('./game-store').createGameStore(pool,accounts);
   const admin=require('./admin-store').createAdminStore(pool,accounts);
+  const gradebooks=require('./gradebook-store').createGradebookStore(pool,accounts);
   const costs=require('./cost-store').createCostStore(pool);
-  return Object.assign(store,accounts.methods,sharing.methods,games.methods,admin.methods,costs.methods);
+  return Object.assign(store,accounts.methods,sharing.methods,games.methods,admin.methods,costs.methods,gradebooks.methods);
 }
 module.exports = { createStore };
