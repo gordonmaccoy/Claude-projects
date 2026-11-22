@@ -7,11 +7,12 @@ function createGradebookStore(pool,accounts){
   await pool.query('ALTER TABLE onscreen_v2_gradebooks ADD COLUMN IF NOT EXISTS sort_index INTEGER NOT NULL DEFAULT 0');
   await pool.query('CREATE INDEX IF NOT EXISTS onscreen_v2_gradebooks_owner ON onscreen_v2_gradebooks(owner_id)');
   await pool.query('ALTER TABLE onscreen_v2_gradebooks ENABLE ROW LEVEL SECURITY');
+  await pool.query("UPDATE onscreen_v2_gradebooks SET data=data || '{\"sortBy\":\"number\",\"numberSortDefaultVersion\":1}'::jsonb WHERE NOT (data ? 'numberSortDefaultVersion')");
  },methods:{
   async listGradebooks(owner){return accounts.withOwner(owner,async()=>{
    const students=names.slice(0,5).map((name,index)=>({id:randomUUID(),name,number:String(20261001+index)})),categories=['Quizzes','Attendance','Participation','Homework'].map((name,index)=>({id:index?'sample-'+name.toLowerCase():'daily-quizzes',name,weight:25}));
    const assessments=categories.map((category,index)=>{const scores=[8,9,7,10,6];const scoringColumns=['Part 1','Part 2'].map((name,i)=>({id:randomUUID(),name,maximum:5,scores:students.map((st,j)=>({studentId:st.id,score:i?Math.max(0,scores[j]-5):5}))}));return {sessionId:'manual-'+randomUUID(),title:category.name+' example',categoryId:category.id,manual:true,total:10,importedAt:new Date().toISOString(),scoringColumns,grades:students.map((st,j)=>({studentId:st.id,score:scores[j],total:10,percentage:scores[j]*10,status:'Submitted'})),skipped:[]};});
-   const sample={id:'sample-'+owner,name:'Sample Gradebook',sample:true,sampleVersion:2,students,categories,quizCategoryId:'daily-quizzes',assessments,columns:['name','number']};
+   const sample={id:'sample-'+owner,name:'Sample Gradebook',sample:true,sampleVersion:2,sortBy:'number',numberSortDefaultVersion:1,students,categories,quizCategoryId:'daily-quizzes',assessments,columns:['name','number']};
    await pool.query('INSERT INTO onscreen_v2_gradebooks(id,owner_id,data) VALUES($1,$2,$3) ON CONFLICT(id) DO NOTHING',[sample.id,owner,JSON.stringify(sample)]);
    return (await pool.query("SELECT data FROM onscreen_v2_gradebooks WHERE owner_id=$1 AND data->>'deletedAt' IS NULL ORDER BY sort_index,created_at,id",[owner])).rows.map(row=>row.data);
   });},
@@ -20,7 +21,7 @@ function createGradebookStore(pool,accounts){
    const students=input.students??[];
    if(!Array.isArray(students)||students.length>1000||students.some(s=>!s||typeof s.name!=='string'||!s.name.trim()||s.name.length>120||typeof s.number!=='string'||s.number.length>64||Object.keys(s).some(k=>!['name','number'].includes(k))))throw problem('Use up to 1,000 students with a name and student number.',400);
    const numbers=students.map(s=>s.number.trim()).filter(Boolean);if(new Set(numbers).size!==numbers.length)throw problem('Student numbers must be unique.',400);
-   return accounts.withOwner(owner,async()=>{const book={id:randomUUID(),name:input.name.trim(),sample:false,students:students.map(s=>({name:s.name.trim(),number:s.number.trim()})),columns:['name','number'],sortBy:'name'};await pool.query('INSERT INTO onscreen_v2_gradebooks(id,owner_id,data,sort_index) SELECT $1,$2,$3,COALESCE(MAX(sort_index),-1)+1 FROM onscreen_v2_gradebooks WHERE owner_id=$2',[book.id,owner,JSON.stringify(book)]);return book;});
+   return accounts.withOwner(owner,async()=>{const book={id:randomUUID(),name:input.name.trim(),sample:false,students:students.map(s=>({name:s.name.trim(),number:s.number.trim()})),columns:['name','number'],sortBy:'number',numberSortDefaultVersion:1};await pool.query('INSERT INTO onscreen_v2_gradebooks(id,owner_id,data,sort_index) SELECT $1,$2,$3,COALESCE(MAX(sort_index),-1)+1 FROM onscreen_v2_gradebooks WHERE owner_id=$2',[book.id,owner,JSON.stringify(book)]);return book;});
   },
   async orderGradebooks(owner,ids){if(!Array.isArray(ids)||new Set(ids).size!==ids.length||ids.some(id=>typeof id!=='string'))throw problem('Invalid gradebook order.',400);return accounts.withOwner(owner,async()=>{const existing=(await pool.query("SELECT id FROM onscreen_v2_gradebooks WHERE owner_id=$1 AND data->>'deletedAt' IS NULL",[owner])).rows.map(r=>r.id);if(ids.length!==existing.length||ids.some(id=>!existing.includes(id)))throw problem('Gradebooks changed. Refresh and try again.',409);for(const [index,id]of ids.entries())await pool.query('UPDATE onscreen_v2_gradebooks SET sort_index=$3 WHERE owner_id=$1 AND id=$2',[owner,id,index]);return {ok:true};});},
   async sendResultsToGradebook(owner,id,sessionId){

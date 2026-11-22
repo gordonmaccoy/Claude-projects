@@ -3,7 +3,7 @@ const math=require('./public/gradebook-math');
 const escape=value=>String(value??'').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g,'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const col=index=>{let name='';for(index++;index;index=Math.floor((index-1)/26))name=String.fromCharCode(65+(index-1)%26)+name;return name;};
 function gradebookWorkbook(book){
- const columns=book.columns||['name','number'],categories=math.categories(book),students=[...book.students].sort((a,b)=>a[book.sortBy||'name'].localeCompare(b[book.sortBy||'name'],undefined,{numeric:book.sortBy==='number'}));
+ const columns=book.columns||['name','number'],categories=math.categories(book),students=[...book.students].sort((a,b)=>a[book.sortBy||'number'].localeCompare(b[book.sortBy||'number'],undefined,{numeric:(book.sortBy||'number')==='number'}));
  const identity=student=>columns.map(key=>key==='name'&&book.showNames===false?'****':String(student[key]||''));
  const labels=columns.map(key=>key==='name'?'Student name':'Student number');
  const percent=value=>value==null?'—':value/100;
