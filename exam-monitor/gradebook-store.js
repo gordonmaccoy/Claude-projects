@@ -2,11 +2,14 @@ const {randomUUID}=require('node:crypto');
 const {problem}=require('./account-store');
 const names=['Alex Morgan','Minji Kim','Daniel Park','Sofia Rivera','Liam Chen','Emma Wilson','Noah Patel','Hana Lee','Ethan Brown','Yuna Choi','Olivia Martin','Lucas Silva','Mia Nguyen','Leo Thompson','Sara Ahmed'];
 function createGradebookStore(pool,accounts){
- return {async init(){
+ const store={async init(){
   await pool.query("CREATE TABLE IF NOT EXISTS onscreen_v2_gradebooks(id TEXT PRIMARY KEY,owner_id TEXT NOT NULL,data JSONB NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
   await pool.query('ALTER TABLE onscreen_v2_gradebooks ADD COLUMN IF NOT EXISTS sort_index INTEGER NOT NULL DEFAULT 0');
   await pool.query('CREATE INDEX IF NOT EXISTS onscreen_v2_gradebooks_owner ON onscreen_v2_gradebooks(owner_id)');
   await pool.query('ALTER TABLE onscreen_v2_gradebooks ENABLE ROW LEVEL SECURITY');
+  await pool.query('CREATE TABLE IF NOT EXISTS onscreen_v2_gradebook_history(id BIGSERIAL PRIMARY KEY,owner_id TEXT NOT NULL,changes JSONB NOT NULL)');
+  await pool.query('CREATE INDEX IF NOT EXISTS gradebook_history_owner ON onscreen_v2_gradebook_history(owner_id,id)');
+  await pool.query('ALTER TABLE onscreen_v2_gradebook_history ENABLE ROW LEVEL SECURITY');
   await pool.query("UPDATE onscreen_v2_gradebooks SET data=data || '{\"sortBy\":\"number\",\"numberSortDefaultVersion\":1}'::jsonb WHERE NOT (data ? 'numberSortDefaultVersion')");
  },methods:{
   async listGradebooks(owner){return accounts.withOwner(owner,async()=>{
@@ -123,6 +126,7 @@ function createGradebookStore(pool,accounts){
   });},
   async gradebookPreferences(owner,id,input){if(!input||Object.keys(input).some(k=>!['columns','sortBy','showNames','gradeDisplay'].includes(k))||(input.showNames!==undefined&&typeof input.showNames!=='boolean')||(input.gradeDisplay!==undefined&&!['scores','percentage'].includes(input.gradeDisplay))||(input.sortBy!==undefined&&!['name','number'].includes(input.sortBy))||(input.columns!==undefined&&(!Array.isArray(input.columns)||input.columns.length!==2||new Set(input.columns).size!==2||input.columns.some(k=>!['name','number'].includes(k)))))throw problem('Invalid gradebook display options.',400);return accounts.withOwner(owner,async()=>{const row=(await pool.query('SELECT data FROM onscreen_v2_gradebooks WHERE owner_id=$1 AND id=$2',[owner,id])).rows[0];if(!row||row.data.deletedAt)throw problem('Gradebook not found.',404);const data={...row.data,...input};await pool.query('UPDATE onscreen_v2_gradebooks SET data=$3 WHERE owner_id=$1 AND id=$2',[owner,id,JSON.stringify(data)]);return data;});}
  }};
+ require('./gradebook-undo')(store,pool,accounts);return store;
 }
 function buildGradebookResult(book,session){
  const normalize=value=>String(value||'').normalize('NFKC').trim().replace(/\s+/g,' ').toLocaleLowerCase();

@@ -10,6 +10,8 @@ function createSettingsController({store,config={},supportAdminEmail='',adminAll
  async function deliver(id){if(!sendMail)return;try{return await store.deliverContact(id,sendMail);}catch{await store.delayContact(id);}}
  async function erase(id){if(!removeAccount)return {state:'deleting'};try{return await store.completeDeletion(id,removeAccount);}catch{await store.delayDeletion(id);return {state:'deleting'};}}
  router.use('/gradebooks',(req,res,next)=>Promise.resolve(adminAllowed(req.user)).then(allowed=>allowed?next():next(problem('Admin access is required.',403))).catch(next));
+ router.post('/gradebooks/undo',wrap(async(req,res)=>res.json(await store.undoGradebook(req.user.id))));
+ router.get('/gradebooks/undo-status',wrap(async(req,res)=>res.json(await store.gradebookUndoStatus(req.user.id))));
  router.get('/gradebooks/:id/export',wrap(async(req,res)=>{const book=await store.getGradebook(req.user.id,req.params.id);res.json({file:require('./gradebook-export').gradebookWorkbook(book).toString('base64')});}));
  router.post('/gradebooks/:id/manage',wrap(async(req,res)=>res.json(await store.changeGradebook(req.user.id,req.params.id,req.body||{}))));
  router.post('/gradebooks/:id/results',wrap(async(req,res)=>res.json(await store.sendResultsToGradebook(req.user.id,req.params.id,req.body?.sessionId))));
