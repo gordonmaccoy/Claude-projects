@@ -9,7 +9,9 @@ function createGradebookStore(pool,accounts){
   await pool.query('ALTER TABLE onscreen_v2_gradebooks ENABLE ROW LEVEL SECURITY');
  },methods:{
   async listGradebooks(owner){return accounts.withOwner(owner,async()=>{
-   const sample={id:'sample-'+owner,name:'Sample Gradebook',sample:true,students:names.map((name,index)=>({name,number:String(20261001+index)}))};
+   const students=names.slice(0,5).map((name,index)=>({id:randomUUID(),name,number:String(20261001+index)})),categories=['Quizzes','Attendance','Participation','Homework'].map((name,index)=>({id:index?'sample-'+name.toLowerCase():'daily-quizzes',name,weight:25}));
+   const assessments=categories.map((category,index)=>{const scores=[8,9,7,10,6];const scoringColumns=['Part 1','Part 2'].map((name,i)=>({id:randomUUID(),name,maximum:5,scores:students.map((st,j)=>({studentId:st.id,score:i?Math.max(0,scores[j]-5):5}))}));return {sessionId:'manual-'+randomUUID(),title:category.name+' example',categoryId:category.id,manual:true,total:10,importedAt:new Date().toISOString(),scoringColumns,grades:students.map((st,j)=>({studentId:st.id,score:scores[j],total:10,percentage:scores[j]*10,status:'Submitted'})),skipped:[]};});
+   const sample={id:'sample-'+owner,name:'Sample Gradebook',sample:true,sampleVersion:2,students,categories,quizCategoryId:'daily-quizzes',assessments,columns:['name','number']};
    await pool.query('INSERT INTO onscreen_v2_gradebooks(id,owner_id,data) VALUES($1,$2,$3) ON CONFLICT(id) DO NOTHING',[sample.id,owner,JSON.stringify(sample)]);
    return (await pool.query("SELECT data FROM onscreen_v2_gradebooks WHERE owner_id=$1 AND data->>'deletedAt' IS NULL ORDER BY sort_index,created_at,id",[owner])).rows.map(row=>row.data);
   });},
@@ -52,7 +54,14 @@ function createGradebookStore(pool,accounts){
     if((book.assessments||[]).some(a=>!categories.some(c=>c.id===(a.categoryId||book.quizCategoryId||'daily-quizzes'))))throw problem('Categories containing grades cannot be removed.',400);
     book.categories=categories.map(c=>({id:c.id,name:c.name.trim(),weight:c.weight}));book.quizCategoryId=input.quizCategoryId;book.revision=(book.revision||0)+1;
    }
+   else if(input.action==='order-assessments'){
+    if((book.revision||0)!==input.revision)throw problem('This gradebook changed. Refresh and try again.',409);
+    const all=book.assessments||[],manual=all.filter(a=>a.manual&&(a.categoryId||'daily-quizzes')===input.categoryId),ids=input.ids;
+    if(!Array.isArray(ids)||ids.length!==manual.length||new Set(ids).size!==ids.length||ids.some(id=>!manual.some(a=>a.sessionId===id)))throw problem('Invalid column order.',400);
+    let index=0;book.assessments=all.map(a=>{if(!manual.includes(a))return a;const id=ids[index++];return manual.find(item=>item.sessionId===id);});book.revision=(book.revision||0)+1;
+   }
    else if(input.action==='detailed-scores'){
+
     if((book.revision||0)!==input.revision)throw problem('This gradebook changed. Reopen Scores and try again.',409);
     const a=book.assessments?.find(a=>a.sessionId===input.sessionId);if(!a?.manual)throw problem('Select a manually added assessment.',400);
     const columns=input.columns;if(!Array.isArray(columns)||!columns.length||columns.length>50||columns.some(c=>!c||typeof c.id!=='string'||!c.id||c.id.length>80||typeof c.name!=='string'||!c.name.trim()||c.name.length>100||!Number.isFinite(c.maximum)||c.maximum<=0||c.maximum>100000||!Array.isArray(c.scores)||c.scores.length>1000)||new Set(columns.map(c=>c.id)).size!==columns.length)throw problem('Enter grading column names and positive maximum points.',400);
