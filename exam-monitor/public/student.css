@@ -500,3 +500,6 @@ body:has(#calculator-section:not([hidden])) .student-brandbar { display: none; }
 textarea.short-answer{box-sizing:border-box;width:100%;font:inherit;border:1px solid #ccd8e6;border-radius:10px;padding:14px;resize:vertical;background:#fff;color:#123959}[data-theme=dark] textarea.short-answer{background:#102e49;color:#fff;border-color:#46627d}
 
 .fullscreen-answer-gate{position:fixed;inset:0;z-index:900;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:24px;text-align:center;background:rgba(15,35,50,.82);color:white;backdrop-filter:blur(4px)}.fullscreen-answer-gate[hidden]{display:none}.fullscreen-answer-gate p{font-size:22px;font-weight:700;max-width:440px}.fullscreen-answer-gate button{background:#075bd8;color:#fff;border:1px solid white;border-radius:12px;font:inherit;font-weight:700;padding:16px 24px}.fullscreen-answer-locked{opacity:.35}
+
+/* Compact, readable consent below Join. */
+#join-form .join-agreement label{display:flex;align-items:flex-start;gap:8px;font-size:12px;line-height:1.5;color:var(--text);font-weight:400}#integrity-agreement{flex:0 0 14px;width:14px;height:14px;margin:3px 0 0;accent-color:var(--key-accent)}.join-agreement a{color:var(--text);text-decoration:underline;text-underline-offset:2px}
