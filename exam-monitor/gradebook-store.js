@@ -43,6 +43,12 @@ function createGradebookStore(pool,accounts){
   async changeGradebook(owner,id,input){return accounts.withOwner(owner,async()=>{const row=(await pool.query('SELECT data FROM onscreen_v2_gradebooks WHERE owner_id=$1 AND id=$2',[owner,id])).rows[0];if(!row||row.data.deletedAt)throw problem('Gradebook not found.',404);const book=row.data;
    if(input.action==='duplicate'){const copy={...book,id:randomUUID(),name:(book.name+' (copy)').slice(0,120),sample:false};await pool.query('INSERT INTO onscreen_v2_gradebooks(id,owner_id,data,sort_index) SELECT $1,$2,$3,COALESCE(MAX(sort_index),-1)+1 FROM onscreen_v2_gradebooks WHERE owner_id=$2',[copy.id,owner,JSON.stringify(copy)]);return copy;}
    if(input.action==='delete'){book.deletedAt=new Date().toISOString();}
+   else if(input.action==='paste-grades'){
+    if((book.revision||0)!==input.revision)throw problem('This gradebook changed. Refresh and paste again.',409);
+    const assessment=book.assessments?.find(a=>a.sessionId===input.sessionId);if(!assessment||!Array.isArray(input.grades)||!input.grades.length||input.grades.length>1000)throw problem('Invalid grade column.',400);
+    const total=require('./public/gradebook-math').total(assessment),seen=new Set();for(const g of input.grades){if(!g||seen.has(g.studentId)||!book.students.some(st=>st.id===g.studentId)||(g.score!=='excused'&&(!Number.isFinite(g.score)||g.score<0||g.score>total)))throw problem('Check student rows and score limits. Nothing was changed.',400);seen.add(g.studentId);}
+    const updates=input.grades.map(g=>({studentId:g.studentId,total,score:g.score==='excused'?null:g.score,percentage:g.score==='excused'?null:Math.round(g.score/total*10000)/100,excused:g.score==='excused',status:g.score==='excused'?'Excused':'Submitted'}));assessment.grades=assessment.grades.filter(g=>!seen.has(g.studentId)).concat(updates);book.revision=(book.revision||0)+1;
+   }
    else if(input.action==='grade'){
     if((book.revision||0)!==input.revision)throw problem('This gradebook changed. Refresh and try again.',409);
     const assessment=book.assessments?.find(a=>a.sessionId===input.sessionId),student=book.students.find(st=>st.id===input.studentId);if(!assessment||!student)throw problem('Grade not found.',404);
