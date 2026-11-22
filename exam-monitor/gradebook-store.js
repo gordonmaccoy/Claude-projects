@@ -61,7 +61,7 @@ function createGradebookStore(pool,accounts){
    else if(input.action==='order-assessments'){
 
     if((book.revision||0)!==input.revision)throw problem('This gradebook changed. Refresh and try again.',409);
-    const all=book.assessments||[],manual=all.filter(a=>a.manual&&(a.categoryId||'daily-quizzes')===input.categoryId),ids=input.ids;
+    const all=book.assessments||[],manual=all.filter(a=>(a.categoryId||'daily-quizzes')===input.categoryId),ids=input.ids;
     if(!Array.isArray(ids)||ids.length!==manual.length||new Set(ids).size!==ids.length||ids.some(id=>!manual.some(a=>a.sessionId===id)))throw problem('Invalid column order.',400);
     let index=0;book.assessments=all.map(a=>{if(!manual.includes(a))return a;const id=ids[index++];return manual.find(item=>item.sessionId===id);});book.revision=(book.revision||0)+1;
    }
