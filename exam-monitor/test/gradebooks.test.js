@@ -26,6 +26,10 @@ test('weighted categories validate setup and persist editable manual grades',asy
  await assert.rejects(store.changeGradebook('bob',book.id,{action:'setup',revision:book.revision,categories,quizCategoryId:'daily-quizzes'}));
  for(const [categoryId,score]of [['daily-quizzes',80],['final',90]]){book=await store.changeGradebook('alice',book.id,{action:'add-assessment',revision:book.revision,categoryId,title:categoryId,total:100});book=await store.changeGradebook('alice',book.id,{action:'grade',revision:book.revision,sessionId:book.assessments.at(-1).sessionId,studentId:book.students[0].id,score});}
  const math=require('../public/gradebook-math');assert.equal(math.weighted(book,book.students[0].id).total,88);assert.equal(math.weighted(book,book.students[0].id).categories[0].contribution,16);
+ const detailed=[{id:'part1',name:'Knowledge',maximum:20,scores:[{studentId:book.students[0].id,score:16}]},{id:'part2',name:'Application',maximum:80,scores:[{studentId:book.students[0].id,score:64}]}];
+ await assert.rejects(store.changeGradebook('alice',book.id,{action:'detailed-scores',revision:book.revision,sessionId:book.assessments[1].sessionId,columns:[{...detailed[0],scores:[{studentId:book.students[0].id,score:21}]}]}));
+ book=await store.changeGradebook('alice',book.id,{action:'detailed-scores',revision:book.revision,sessionId:book.assessments[1].sessionId,columns:detailed});assert.equal(book.assessments[1].grades[0].score,80);assert.equal(math.weighted(book,book.students[0].id).total,80);assert.deepEqual(book.assessments[1].scoringColumns,detailed);
+
  await assert.rejects(store.changeGradebook('alice',book.id,{action:'setup',revision:book.revision,categories:[{id:'final',name:'Final',weight:100}],quizCategoryId:'final'}));
  book=await store.changeGradebook('alice',book.id,{action:'grade',revision:book.revision,sessionId:book.assessments[0].sessionId,studentId:book.students[0].id,score:'excused'});assert.equal(math.weighted(book,book.students[0].id).incomplete,true);
  assert.deepEqual((await store.getGradebook('alice',book.id)).categories,categories);
