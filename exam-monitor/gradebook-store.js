@@ -35,7 +35,7 @@ function createGradebookStore(pool,accounts){
     if(index<0&&book.assessments.length>=200)throw problem('This gradebook already contains 200 quizzes.',400);
     if(index<0)book.assessments.push(result);else book.assessments[index]=result;
     await pool.query('UPDATE onscreen_v2_gradebooks SET data=$3 WHERE owner_id=$1 AND id=$2',[owner,id,JSON.stringify(book)]);
-    return {book,matched:result.grades.length,skipped:result.skipped.length};
+    return {book,matched:result.matched,skipped:result.skipped.length};
    });
   },
 
@@ -43,6 +43,12 @@ function createGradebookStore(pool,accounts){
   async changeGradebook(owner,id,input){return accounts.withOwner(owner,async()=>{const row=(await pool.query('SELECT data FROM onscreen_v2_gradebooks WHERE owner_id=$1 AND id=$2',[owner,id])).rows[0];if(!row||row.data.deletedAt)throw problem('Gradebook not found.',404);const book=row.data;
    if(input.action==='duplicate'){const copy={...book,id:randomUUID(),name:(book.name+' (copy)').slice(0,120),sample:false};await pool.query('INSERT INTO onscreen_v2_gradebooks(id,owner_id,data,sort_index) SELECT $1,$2,$3,COALESCE(MAX(sort_index),-1)+1 FROM onscreen_v2_gradebooks WHERE owner_id=$2',[copy.id,owner,JSON.stringify(copy)]);return copy;}
    if(input.action==='delete'){book.deletedAt=new Date().toISOString();}
+   else if(input.action==='grade'){
+    if((book.revision||0)!==input.revision)throw problem('This gradebook changed. Refresh and try again.',409);
+    const assessment=book.assessments?.find(a=>a.sessionId===input.sessionId),student=book.students.find(st=>st.id===input.studentId);if(!assessment||!student)throw problem('Grade not found.',404);
+    const total=require('./public/gradebook-math').total(assessment),excused=input.score==='excused';if(!excused&&(!Number.isFinite(input.score)||input.score<0||input.score>total))throw problem('Enter a score between zero and the quiz total.',400);
+    const grade={studentId:student.id,total,score:excused?null:input.score,percentage:excused?null:Math.round(input.score/total*10000)/100,excused,status:excused?'Excused':'Submitted'};assessment.grades=assessment.grades.filter(g=>g.studentId!==student.id);assessment.grades.push(grade);book.revision=(book.revision||0)+1;
+   }
    else if(input.action==='roster'){
     if((book.revision||0)!==input.revision)throw problem('This gradebook changed. Reopen the roster and try again.',409);
     if(!Array.isArray(input.students)||input.students.length>1000)throw problem('Use up to 1,000 students.',400);
@@ -56,7 +62,7 @@ function createGradebookStore(pool,accounts){
     if(typeof input.name!=='string'||!input.name.trim()||input.name.length>120||!Array.isArray(input.students)||input.students.length>1000||!Array.isArray(input.assessments)||input.assessments.length!==(book.assessments||[]).length)throw problem('Invalid gradebook changes.',400);
     const ids=new Set(),numbers=new Set();for(const student of input.students){if(!Number.isInteger(student.index)||!book.students[student.index]||ids.has(student.index)||typeof student.name!=='string'||!student.name.trim()||student.name.length>120||typeof student.number!=='string'||student.number.length>64||(student.number.trim()&&numbers.has(student.number.trim())))throw problem('Use unique student numbers and valid names.',400);ids.add(student.index);numbers.add(student.number.trim());}
     const students=input.students.map(st=>({...book.students[st.index],name:st.name.trim(),number:st.number.trim()}));
-    const assessments=(book.assessments||[]).map((a,i)=>{const patch=input.assessments[i];if(patch.sessionId!==a.sessionId||typeof patch.title!=='string'||!patch.title.trim()||patch.title.length>200||!Array.isArray(patch.scores)||patch.scores.length!==students.length)throw problem('Invalid quiz changes.',400);const grades=students.map((st,j)=>{const old=a.grades.find(g=>g.studentId===st.id),value=patch.scores[j];if(value===null)return {...old,studentId:st.id,score:null,percentage:null,status:'Not submitted'};const total=old?.total??a.grades.find(g=>Number.isFinite(g.total))?.total;if(!Number.isFinite(value)||!Number.isFinite(total)||value<0||value>total)throw problem('Scores must be between zero and the quiz total.',400);return {...old,studentId:st.id,score:value,total,percentage:Math.round(value/total*10000)/100,status:'Submitted'};});return {...a,title:patch.title.trim(),grades};});book.name=input.name.trim();book.students=students;book.assessments=assessments;book.revision=(book.revision||0)+1;
+    const assessments=(book.assessments||[]).map((a,i)=>{const patch=input.assessments[i];if(patch.sessionId!==a.sessionId||typeof patch.title!=='string'||!patch.title.trim()||patch.title.length>200||!Array.isArray(patch.scores)||patch.scores.length!==students.length)throw problem('Invalid quiz changes.',400);const grades=students.map((st,j)=>{const old=a.grades.find(g=>g.studentId===st.id),value=patch.scores[j];if(value===null)return {...old,studentId:st.id,score:null,percentage:null,status:old?.excused?'Excused':'Not submitted'};const total=old?.total??a.grades.find(g=>Number.isFinite(g.total))?.total;if(!Number.isFinite(value)||!Number.isFinite(total)||value<0||value>total)throw problem('Scores must be between zero and the quiz total.',400);return {...old,excused:false,studentId:st.id,score:value,total,percentage:Math.round(value/total*10000)/100,status:'Submitted'};});return {...a,title:patch.title.trim(),grades};});book.name=input.name.trim();book.students=students;book.assessments=assessments;book.revision=(book.revision||0)+1;
    }else throw problem('Invalid gradebook action.',400);
    await pool.query('UPDATE onscreen_v2_gradebooks SET data=$3 WHERE owner_id=$1 AND id=$2',[owner,id,JSON.stringify(book)]);return book;
   });},
@@ -70,9 +76,10 @@ function buildGradebookResult(book,session){
  const counts=new Map();for(const student of source)counts.set(key(student),(counts.get(key(student))||0)+1);
  for(const student of source){const value=key(student),matches=value?book.students.filter(target=>key(target)===value):[];
   if(matches.length!==1||counts.get(value)!==1||claimed.has(matches[0]?.id)){skipped.push({name:student.name,number:session.requireStudentNumber===false?'':student.number,reason:matches.length>1||counts.get(value)>1?'Ambiguous match':'Not in gradebook'});continue;}
-  const target=matches[0];claimed.add(target.id);const result=student.result;
-  grades.push({studentId:target.id,score:result&&!result.pending&&Number.isFinite(result.score)?result.score:null,total:result?.total??student.total,percentage:result&&!result.pending&&Number.isFinite(result.percentage)?result.percentage:null,status:!result?'Not submitted':result.pending?'Grading…':'Submitted'});
+  const target=matches[0];claimed.add(target.id);const result=student.result;const absent=!student.name?.trim()||!result;const pending=!absent&&result.pending;
+  grades.push({studentId:target.id,score:pending?null:!absent&&Number.isFinite(result.score)?result.score:0,total:result?.total??student.total,percentage:pending?null:!absent&&Number.isFinite(result.percentage)?result.percentage:0,status:!result?'Not submitted':result.pending?'Grading…':'Submitted'});
  }
- return {sessionId:session.id,title:session.resultTitle||session.test.title,importedAt:new Date().toISOString(),grades,skipped};
+ const total=require('./exam').totalPoints(session.test);for(const st of book.students)if(!claimed.has(st.id))grades.push({studentId:st.id,score:0,total,percentage:0,status:'Missing'});
+ return {total,matched:claimed.size,sessionId:session.id,title:session.resultTitle||session.test.title,importedAt:new Date().toISOString(),grades,skipped};
 }
 module.exports={createGradebookStore,buildGradebookResult};
