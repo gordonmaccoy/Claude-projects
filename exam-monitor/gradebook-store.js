@@ -36,7 +36,7 @@ function createGradebookStore(pool,accounts){
     const index=book.assessments.findIndex(item=>item.sessionId===sessionId);
     if(index<0&&book.assessments.length>=200)throw problem('This gradebook already contains 200 quizzes.',400);
     result.categoryId=index<0?(book.quizCategoryId||'daily-quizzes'):(book.assessments[index].categoryId||book.quizCategoryId||'daily-quizzes');
-    if(index<0)book.assessments.push(result);else book.assessments[index]=result;
+    if(index<0)book.assessments.push(result);else{result.included=book.assessments[index].included;book.assessments[index]=result;}
     await pool.query('UPDATE onscreen_v2_gradebooks SET data=$3 WHERE owner_id=$1 AND id=$2',[owner,id,JSON.stringify(book)]);
     return {book,matched:result.matched,skipped:result.skipped.length};
    });
@@ -54,7 +54,12 @@ function createGradebookStore(pool,accounts){
     if((book.assessments||[]).some(a=>!categories.some(c=>c.id===(a.categoryId||book.quizCategoryId||'daily-quizzes'))))throw problem('Categories containing grades cannot be removed.',400);
     book.categories=categories.map(c=>({id:c.id,name:c.name.trim(),weight:c.weight}));book.quizCategoryId=input.quizCategoryId;book.revision=(book.revision||0)+1;
    }
+   else if(input.action==='include-assessment'){
+    if((book.revision||0)!==input.revision)throw problem('This gradebook changed. Refresh and try again.',409);
+    const assessment=book.assessments?.find(a=>a.sessionId===input.sessionId);if(!assessment||typeof input.included!=='boolean')throw problem('Select a valid assessment.',400);assessment.included=input.included;book.revision=(book.revision||0)+1;
+   }
    else if(input.action==='order-assessments'){
+
     if((book.revision||0)!==input.revision)throw problem('This gradebook changed. Refresh and try again.',409);
     const all=book.assessments||[],manual=all.filter(a=>a.manual&&(a.categoryId||'daily-quizzes')===input.categoryId),ids=input.ids;
     if(!Array.isArray(ids)||ids.length!==manual.length||new Set(ids).size!==ids.length||ids.some(id=>!manual.some(a=>a.sessionId===id)))throw problem('Invalid column order.',400);

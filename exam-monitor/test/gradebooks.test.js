@@ -37,3 +37,5 @@ test('weighted categories validate setup and persist editable manual grades',asy
 
  }finally{await db.close();}
 });
+
+test('excluded assessments do not add earned or possible points to totals',()=>{const math=require('../public/gradebook-math');const assessments=[{total:20,grades:[{studentId:'a',score:19,total:20,percentage:95}]},{total:60,included:false,grades:[{studentId:'a',score:0,total:60,percentage:0}]}];assert.equal(math.summary(assessments,'a').score,19);assert.equal(math.summary(assessments,'a').total,20);assert.equal(math.summary(assessments,'a').percentage,95);assert.equal(math.summary([{...assessments[0],included:false}],'a').percentage,null);});
