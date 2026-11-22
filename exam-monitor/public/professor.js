@@ -27,7 +27,7 @@ function clearPrivateWorkspace() {
   liveResults.reset();settings.reset();tour.reset();$('launch-show-names').checked=false;$('launch-show-scores-live').checked=false;$('result-detail-rows').replaceChildren();$('result-settings-content').replaceChildren();delete $('result-settings-content').dataset.signature;delete $('result-settings-content').dataset.sessionId;$('result-settings').open=false;lastWorkspaceTab='launch';accountGeneration++;creationVersion++;professorTimerSnapshot=null;if($('answer-ai-dialog').open)$('answer-ai-dialog').close();$('answer-ai-status').textContent='';closeEntry();launchTest=null;$('new-title').value='';for(const id of ['tb-folder','new-folder-choice'])$(id).replaceChildren();$('launch-test-title').textContent='';if($('launch-dialog').open)$('launch-dialog').close();$('creation-choice').hidden=true;
   trashVersion++;pendingTrashDelete=null;if($('trash-confirm').open)$('trash-confirm').close();$('trash-confirm-message').textContent='';$('trash-items').replaceChildren();
   resultSort='newest';current=null; historySession=null; library=[]; folders=[]; sessionList=[]; $('import-source').value='';$('import-file').value='';$('import-panel').hidden=true;$('draft-review').textContent=''; editingId=null; tbQuestions=[];
-  detachResultsPanel();$('in-session-section').append($('dashboard'));document.querySelectorAll('.session-group').forEach(el=>el.remove());sessionGroupSelection.clear();
+  detachResultsPanel();$('in-session-section').append($('dashboard'));document.querySelectorAll('.session-group').forEach(el=>el.remove());sessionGroupSelection.clear();$('archived-results').replaceChildren();$('archived-gradebooks').replaceChildren();$('archives-status').textContent='';
   for(const id of ['launch-tests','library-tests','active-sessions','result-sessions','live-students','result-students','tb-questions']) $(id).replaceChildren();
   for(const id of ['dashboard','result-detail','test-builder']) $(id).hidden=true;
   $('calculator-card').hidden=false;
@@ -65,7 +65,7 @@ function tab(name) {
   document.querySelectorAll('.tab').forEach(el => el.hidden = el.id !== name);
   document.querySelectorAll('[data-tab]').forEach(el => el.classList.toggle('selected', el.dataset.tab === name));
   $('take-tour').hidden=name==='settings'||name==='trash'||name==='gradebooks';$('take-tour').dataset.tour=({launch:'launch',library:'create',results:'results',games:'games'})[name]||'launch';
-  gameWorkspace.setActive(name==='games');if(name==='gradebooks')gradebooks.load();
+  if(name==='archives'){ $('settings-menu').open=false;const archiveGeneration=accountGeneration;window.examioArchives({api,admin:!$('gradebooks-tab').hidden,isCurrent:()=>archiveGeneration===accountGeneration&&!$('archives').hidden});}gameWorkspace.setActive(name==='games');if(name==='gradebooks')gradebooks.load();
 }
 document.querySelectorAll('[data-tab]').forEach(el => el.onclick = () => { tab(el.dataset.tab); if (el.dataset.tab === 'results') refresh().catch(e => notice(e.message)); if(el.dataset.tab==='trash') refreshTrash().catch(e=>notice(e.message)); });
 function button(text, fn, className = '') { const b = document.createElement('button'); b.textContent = t(text); b.className = className; b.onclick = action(fn); return b; }
@@ -496,6 +496,7 @@ async function deleteResults(session) {
   if(current?.id === session.id) { current=null; $('dashboard').hidden=true; $('calculator-card').hidden=false; }
   await refresh(); if(!$('results').hidden)notice(t('Results moved to Trash.'));
 }
+$('result-archive').onclick=action(async()=>{if(!historySession)return;await api('/sessions/'+encodeURIComponent(historySession.id)+'/archive','POST',{archived:true});closeResults();await refresh();notice('Results moved to Archives.');});
 $('result-delete').onclick=action(()=>deleteResults(historySession));
 async function downloadFile(path,fallback) {
   const response=await fetch(path,{headers:{Authorization:'Bearer '+await token()}});

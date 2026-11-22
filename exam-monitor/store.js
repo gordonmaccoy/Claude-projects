@@ -147,19 +147,20 @@ function createStore(pool) {
     async getSession(id) {
       return (await pool.query("SELECT data FROM onscreen_v2_sessions WHERE id=$1 AND data->>'deletedAt' IS NULL AND NOT EXISTS(SELECT 1 FROM onscreen_v2_accounts a WHERE a.owner_id=onscreen_v2_sessions.owner_id AND a.state<>'active')", [id])).rows[0]?.data || null;
     },
-    async listSessions(ownerId) {
-      return (await pool.query("SELECT data FROM onscreen_v2_sessions WHERE owner_id=$1 AND data->>'deletedAt' IS NULL ORDER BY created_at DESC", [ownerId])).rows.map(r => r.data);
+    async listSessions(ownerId,archived=false) {
+      return (await pool.query("SELECT data FROM onscreen_v2_sessions WHERE owner_id=$1 AND data->>'deletedAt' IS NULL ORDER BY created_at DESC", [ownerId])).rows.map(r => r.data).filter(s=>Boolean(s.archivedAt)===archived);
     },
     async gradingSessions(){return (await pool.query("SELECT data FROM onscreen_v2_sessions WHERE data->>'gradingPending'='true' AND data->>'deletedAt' IS NULL AND EXISTS(SELECT 1 FROM jsonb_array_elements(data->'students') st CROSS JOIN LATERAL jsonb_each(COALESCE(st->'grades','{}'::jsonb)) g WHERE g.value->>'status'<>'graded' AND COALESCE((g.value->>'nextAttemptAt')::numeric,0)<=$1 AND (g.value->>'status'<>'processing' OR COALESCE((g.value->>'leaseUntil')::numeric,0)<=$1)) AND NOT EXISTS(SELECT 1 FROM onscreen_v2_accounts a WHERE a.owner_id=onscreen_v2_sessions.owner_id AND a.state<>'active') ORDER BY created_at LIMIT 25",[Date.now()])).rows.map(r=>r.data);},
     async activeSessions() {
       return (await pool.query("SELECT data FROM onscreen_v2_sessions WHERE data->>'phase' <> 'ended' AND NOT EXISTS(SELECT 1 FROM onscreen_v2_accounts a WHERE a.owner_id=onscreen_v2_sessions.owner_id AND a.state<>'active')")).rows.map(r => r.data);
     },
-    async mutate(id, fn) {
+    async mutate(id, fn, allowArchived=false) {
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
         const s = (await client.query("SELECT data FROM onscreen_v2_sessions WHERE id=$1 AND data->>'deletedAt' IS NULL FOR UPDATE", [id])).rows[0]?.data;
         if (!s) throw new Error('Session not found');
+        if(s.archivedAt&&!allowArchived)throw Object.assign(new Error('Unarchive results before editing.'),{status:409});
         const result = await fn(s);
         await client.query('UPDATE onscreen_v2_sessions SET data=$2 WHERE id=$1', [id, JSON.stringify(s)]);
         await client.query('COMMIT');
@@ -174,7 +175,7 @@ function createStore(pool) {
     const operation=store[name];store[name]=(...args)=>accounts.withOwner(args[0],()=>operation(...args));
   }
   const createSession=store.createSession;store.createSession=s=>accounts.withOwner(s.ownerId,()=>createSession(s));
-  const mutate=store.mutate;store.mutate=async(id,fn)=>{const owner=(await pool.query('SELECT owner_id FROM onscreen_v2_sessions WHERE id=$1',[id])).rows[0]?.owner_id;if(!owner)throw new Error('Session not found');return accounts.withOwner(owner,()=>mutate(id,fn));};
+  const mutate=store.mutate;store.mutate=async(id,fn,allowArchived=false)=>{const owner=(await pool.query('SELECT owner_id FROM onscreen_v2_sessions WHERE id=$1',[id])).rows[0]?.owner_id;if(!owner)throw new Error('Session not found');return accounts.withOwner(owner,()=>mutate(id,fn,allowArchived));};
   const sharing=require('./sharing-store').createSharingStore(pool,accounts,store);
   const games=require('./game-store').createGameStore(pool,accounts);
   const admin=require('./admin-store').createAdminStore(pool,accounts);

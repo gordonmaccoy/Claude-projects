@@ -223,6 +223,8 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, admin
     }
     res.status(503).json({error:'Unable to reserve a room name. Please try again.'});
   }));
+  api.get('/archived-results',wrap(async(req,res)=>res.json(await Promise.all((await store.listSessions(req.user.id,true)).sort((a,b)=>b.archivedAt-a.archivedAt).map(s=>decorate(s,req))))));
+  api.post('/sessions/:id/archive',wrap(async(req,res)=>{await owned(req.params.id,req.user);if(typeof req.body.archived!=='boolean')return res.status(400).json({error:'Choose archive or unarchive.'});await store.mutate(req.params.id,s=>{if(s.mode!=='test'||s.phase!=='ended'||s.gradingPending)throw Object.assign(new Error('Only completed, fully graded results can be archived.'),{status:409});if(req.body.archived)s.archivedAt=Date.now();else delete s.archivedAt;},true);res.json({ok:true});}));
   api.get('/sessions/:id', wrap(async (req, res) => res.json(await decorate(await owned(req.params.id, req.user), req))));
   api.patch('/sessions/:id',wrap(async(req,res)=>{
     await owned(req.params.id,req.user);

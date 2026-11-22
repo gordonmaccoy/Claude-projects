@@ -305,3 +305,5 @@ select,textarea{font:inherit;background:#fff;color:#223c31;border:1px solid #c5c
 .gradebook-inclusion{display:flex;align-items:center;justify-content:center;gap:6px;margin:8px 0 0;font-size:11px;font-weight:400;letter-spacing:0;text-transform:none;white-space:nowrap}.gradebook-inclusion input{width:13px;min-width:13px;margin:0}.gradebook-excluded{color:#77848c}
 
 @media(min-width:1000px){.card.session-group{position:relative;left:50%;width:80vw;margin-left:0;margin-right:0;transform:translateX(-50%);min-width:0}}
+
+.gradebook-detail-dialog{position:relative}.gradebook-detail-close{position:absolute;right:12px;top:12px;padding:4px 10px;font-size:22px;line-height:1.2}.gradebook-detail-dialog h2{padding-right:32px}#result-archive{margin-left:auto}#result-delete{margin-left:0}#archives .archive-actions{display:flex;gap:10px;margin:12px 0}#archives .card{overflow:auto}
