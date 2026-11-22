@@ -28,6 +28,7 @@ function createGradebookStore(pool,accounts){
    return accounts.withOwner(owner,async()=>{
     const row=(await pool.query('SELECT data FROM onscreen_v2_gradebooks WHERE owner_id=$1 AND id=$2',[owner,id])).rows[0];
     if(!row||row.data.deletedAt)throw problem('Gradebook not found.',404);
+    if(row.data.quizCategoryId==='')throw problem('Imported quizzes are disabled for this gradebook. Select a category in Gradebook Setup first.',400);
     const session=(await pool.query("SELECT data FROM onscreen_v2_sessions WHERE owner_id=$1 AND id=$2 AND data->>'deletedAt' IS NULL",[owner,sessionId])).rows[0]?.data;
     if(!session||session.mode!=='test')throw problem('Quiz results not found.',404);
     const book=row.data;book.students=book.students.map(student=>({...student,id:student.id||randomUUID()}));
@@ -50,7 +51,7 @@ function createGradebookStore(pool,accounts){
     if((book.revision||0)!==input.revision)throw problem('This gradebook changed. Reopen setup and try again.',409);
     const categories=input.categories;
     if(!Array.isArray(categories)||!categories.length||categories.length>20||categories.some(c=>!c||typeof c.id!=='string'||!c.id||c.id.length>80||typeof c.name!=='string'||!c.name.trim()||c.name.length>80||!Number.isFinite(c.weight)||c.weight<0||c.weight>100)||new Set(categories.map(c=>c.id)).size!==categories.length||new Set(categories.map(c=>c.name.trim().toLowerCase())).size!==categories.length||Math.abs(categories.reduce((n,c)=>n+c.weight,0)-100)>0.001)throw problem('Use unique category names and weights totaling 100%.',400);
-    if(!categories.some(c=>c.id===input.quizCategoryId))throw problem('Select a category for imported quizzes.',400);
+    if(input.quizCategoryId!==''&&!categories.some(c=>c.id===input.quizCategoryId))throw problem('Select a category for imported quizzes.',400);
     if((book.assessments||[]).some(a=>!categories.some(c=>c.id===(a.categoryId||book.quizCategoryId||'daily-quizzes'))))throw problem('Categories containing grades cannot be removed.',400);
     book.categories=categories.map(c=>({id:c.id,name:c.name.trim(),weight:c.weight}));book.quizCategoryId=input.quizCategoryId;book.revision=(book.revision||0)+1;
    }
