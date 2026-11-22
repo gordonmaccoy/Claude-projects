@@ -341,6 +341,9 @@ $('creation-back').onclick=()=>{creationVersion++;importRequest?.abort();importR
 $('import-file').onchange=()=>{$('clear-import-file').hidden=!$('import-file').files.length;};$('clear-import-file').onclick=()=>{$('import-file').value='';$('clear-import-file').hidden=true;};
 $('tb-add-q-btn').onclick = () => { if (tbQuestions.length < 100) addQuestion(); };
 $('tb-cancel-btn').onclick = () =>{creationVersion++;$('test-builder').hidden=true;};
+$('tb-save-top').onclick=()=>$('tb-start-btn').click();
+$('tb-cancel-top').onclick=()=>$('tb-cancel-btn').click();
+new MutationObserver(()=>$('tb-save-top').disabled=$('tb-start-btn').disabled).observe($('tb-start-btn'),{attributes:true,attributeFilter:['disabled']});
 $('tb-start-btn').onclick = action(async () => {
   const collected = collectTest(); if (collected.error) return showTbError(collected);
   await api('/tests', 'POST', { ...collected.test, ...(editingId ? { id: editingId } : {}) });
@@ -657,7 +660,7 @@ function renderFolderOptions(selected=$('tb-folder').value) {
 function folderActions(folder) {
   const actions=document.createElement('span');actions.className='folder-inline-actions';
   actions.append(button(t('Rename'),()=>openEntry({title:t('Rename folder'),value:folder.name,max:80},async name=>{await api('/folders/'+folder.id,'PATCH',{name});await refresh();})),button(t('Delete folder'),async()=>{
-    if(!confirm('Delete “'+folder.name+'”? Its tests will move to Uncategorized Test.'))return;
+    if(!confirm('Are you sure you want to delete the folder “'+folder.name+'”? Its quizzes will move to Uncategorized Test. Confirm delete to continue.'))return;
     await api('/folders/'+folder.id,'DELETE');await refresh();
   },'danger'));
   actions.onclick=event=>event.preventDefault();
