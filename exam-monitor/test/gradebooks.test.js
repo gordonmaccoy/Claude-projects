@@ -54,3 +54,11 @@ test('gradebook setup can disable imported quizzes and later enable them',async(
  const enabled=await store.methods.changeGradebook('alice',book.id,{action:'setup',revision:disabled.revision,categories,quizCategoryId:'homework'});assert.equal(enabled.quizCategoryId,'homework');
  }finally{await db.close();}
 });
+
+test('single-component grades support inline edits and paste without stale detailed scores',async()=>{
+ const db=new PGlite(),store=require('../gradebook-store').createGradebookStore({query:(...a)=>db.query(...a)},{withOwner:async(o,f)=>f()});
+ try{await store.init();const b=await store.methods.createGradebook('alice',{name:'Skills'});b.students=[{id:'a',name:'A',number:'1'},{id:'b',name:'B',number:'2'}];b.assessments=[{sessionId:'skills',manual:true,total:5,grades:[],scoringColumns:[{id:'c',name:'Score',maximum:5,scores:[]}]}];await db.query('UPDATE onscreen_v2_gradebooks SET data=$1 WHERE id=$2',[JSON.stringify(b),b.id]);
+ let updated=await store.methods.changeGradebook('alice',b.id,{action:'paste-grades',revision:0,sessionId:'skills',grades:[{studentId:'a',score:5},{studentId:'b',score:0}]});assert.deepEqual(updated.assessments[0].scoringColumns[0].scores,[{studentId:'a',score:5},{studentId:'b',score:0}]);
+ updated=await store.methods.changeGradebook('alice',b.id,{action:'grade',revision:updated.revision,sessionId:'skills',studentId:'b',score:4});assert.equal(updated.assessments[0].scoringColumns[0].scores.find(g=>g.studentId==='b').score,4);assert.equal(updated.assessments[0].grades.find(g=>g.studentId==='b').score,4);
+ }finally{await db.close();}
+});
