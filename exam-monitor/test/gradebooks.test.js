@@ -19,3 +19,15 @@ test('number-free imports reject ambiguous names and preserve unsubmitted status
 test('gradebook math excludes zeros from class averages but includes them in student totals; excuses remove possible points',()=>{
  const m=require('../public/gradebook-math');const students=[{id:'a'},{id:'b'},{id:'c'}],assessments=[{total:10,grades:[{studentId:'a',score:8,total:10,percentage:80},{studentId:'b',score:0,total:10,percentage:0}]},{total:5,grades:[{studentId:'a',score:0,total:5,percentage:0},{studentId:'b',score:null,total:5,percentage:null,excused:true}]}];assert.deepEqual(m.average(assessments[0],students),{score:8,total:10,percentage:80});assert.equal(m.average(assessments[1],students),null);assert.deepEqual(m.summary(assessments,'a'),{score:8,total:15,percentage:53.33,pending:false});assert.deepEqual(m.summary(assessments,'b'),{score:0,total:10,percentage:0,pending:false});assert.equal(m.summary(assessments,'c').total,15);
 });
+test('weighted categories validate setup and persist editable manual grades',async()=>{
+ const db=new PGlite(),pool={query:(...a)=>db.query(...a)},accounts={withOwner:async(owner,fn)=>fn()},module=require('../gradebook-store').createGradebookStore(pool,accounts);try{await module.init();const store=module.methods;let book=await store.createGradebook('alice',{name:'Categories',students:[{name:'Amy',number:'001'}]});const categories=[{id:'daily-quizzes',name:'Daily Quizzes',weight:20},{id:'final',name:'Final Exam',weight:80}];
+ await assert.rejects(store.changeGradebook('alice',book.id,{action:'setup',revision:0,categories:[{id:'x',name:'X',weight:90}],quizCategoryId:'x'}));
+ book=await store.changeGradebook('alice',book.id,{action:'setup',revision:0,categories,quizCategoryId:'daily-quizzes'});
+ await assert.rejects(store.changeGradebook('bob',book.id,{action:'setup',revision:book.revision,categories,quizCategoryId:'daily-quizzes'}));
+ for(const [categoryId,score]of [['daily-quizzes',80],['final',90]]){book=await store.changeGradebook('alice',book.id,{action:'add-assessment',revision:book.revision,categoryId,title:categoryId,total:100});book=await store.changeGradebook('alice',book.id,{action:'grade',revision:book.revision,sessionId:book.assessments.at(-1).sessionId,studentId:book.students[0].id,score});}
+ const math=require('../public/gradebook-math');assert.equal(math.weighted(book,book.students[0].id).total,88);assert.equal(math.weighted(book,book.students[0].id).categories[0].contribution,16);
+ await assert.rejects(store.changeGradebook('alice',book.id,{action:'setup',revision:book.revision,categories:[{id:'final',name:'Final',weight:100}],quizCategoryId:'final'}));
+ book=await store.changeGradebook('alice',book.id,{action:'grade',revision:book.revision,sessionId:book.assessments[0].sessionId,studentId:book.students[0].id,score:'excused'});assert.equal(math.weighted(book,book.students[0].id).incomplete,true);
+ assert.deepEqual((await store.getGradebook('alice',book.id)).categories,categories);
+ }finally{await db.close();}
+});

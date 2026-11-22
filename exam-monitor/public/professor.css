@@ -291,3 +291,6 @@ select,textarea{font:inherit;background:#fff;color:#223c31;border:1px solid #c5c
 .library-rows>#test-builder{grid-column:1/-1;width:100%;box-sizing:border-box;margin:8px 0 16px;scroll-margin-top:150px}
 
 .quiz-editor-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}.quiz-editor-heading .actions{margin:0}
+
+main:has(#gradebooks:not([hidden])){max-width:none;width:100%;box-sizing:border-box;padding:28px 24px}.gradebook-category-tabs{display:flex;gap:8px;overflow-x:auto;margin:20px 0}.gradebook-category-tabs button{white-space:nowrap}.gradebook-setup-dialog{width:min(720px,90vw);max-height:85vh;overflow:auto}.gradebook-setup-row{display:grid;grid-template-columns:1fr 110px 42px;gap:12px;align-items:center;margin:12px 0}.gradebook-summary{width:100%}.gradebook-summary td:not(:first-child),.gradebook-summary th{text-align:center}@media(max-width:600px){main:has(#gradebooks:not([hidden])){padding:16px 12px}}
+.gradebook-body table.gradebook-summary{width:100%}.gradebook-setup-dialog{background:#fff;color:#123247;border:1px solid #ccd9df;border-radius:18px;padding:24px}.gradebook-setup-dialog input,.gradebook-setup-dialog select{box-sizing:border-box;width:100%}.gradebook-setup-dialog label{display:block;margin:12px 0}
