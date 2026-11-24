@@ -65,6 +65,11 @@ function createGradebookStore(pool,accounts){
     for(const c of categories){const old=book.categories?.find(v=>v.id===c.id);if(old?.sections?.length&&Math.abs(old.sections.reduce((n,v)=>n+v.weight,0)-c.weight)>0.001)throw problem('Update section weights before changing this category weight, or remove its sections first.',400);}
     book.categories=categories.map(c=>({...book.categories?.find(v=>v.id===c.id),id:c.id,name:c.name.trim(),weight:c.weight}));book.quizCategoryId=input.quizCategoryId;if(input.importLocations!==undefined){const locations=input.importLocations;if(!Array.isArray(locations)||locations.length>400||locations.some(l=>{const c=book.categories.find(c=>c.id===l?.categoryId);return !c||(c.sections?.length?!c.sections.some(s=>s.id===l.sectionId):!!l.sectionId);})||new Set(locations.map(l=>JSON.stringify([l.categoryId,l.sectionId||'']))).size!==locations.length)throw problem('Select valid quiz import locations.',400);book.importLocations=locations.map(l=>({categoryId:l.categoryId,...(l.sectionId?{sectionId:l.sectionId}:{})}));book.quizCategoryId=locations[0]?.categoryId||'';}else delete book.importLocations;book.revision=(book.revision||0)+1;
    }
+   else if(input.action==='rubric'){
+    if((book.revision||0)!==input.revision)throw problem('This gradebook changed. Reopen Rubric.',409);
+    const r=input.rubric;if(!r||!Array.isArray(r.thresholds)||r.thresholds.length!==8||r.thresholds.some((n,i)=>!Number.isFinite(n)||n<0||n>100||i>0&&n>=r.thresholds[i-1])||typeof r.curved!=='boolean'||typeof r.maxCurve!=='boolean'||![r.aCap,r.bCap].every(n=>Number.isFinite(n)&&n>=0&&n<=100)||r.aCap>r.bCap)throw problem('Use descending grade thresholds from 0–100. The B0–A+ cap must be at least the A0/A+ cap.',400);
+    book.rubric={thresholds:r.thresholds,curved:r.curved,maxCurve:r.maxCurve,aCap:r.aCap,bCap:r.bCap};book.revision=(book.revision||0)+1;
+   }
    else if(input.action==='sections'){
     if((book.revision||0)!==input.revision)throw problem('This gradebook changed. Reopen Sections setup.',409);
     book.categories=book.categories||[{id:'daily-quizzes',name:'Daily Quizzes',weight:100}];

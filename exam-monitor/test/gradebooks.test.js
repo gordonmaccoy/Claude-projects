@@ -109,3 +109,9 @@ test('moving columns between sections validates ownership, revision and destinat
  await assert.rejects(store.changeGradebook('teacher',book.id,change));
  }finally{await db.close();}
 });
+
+test('rubric saves with validation, ownership, archive protection, duplication and undo',async()=>{
+ const db=new PGlite(),pool={query:(...a)=>db.query(...a),connect:async()=>({query:(...a)=>db.query(...a),release(){}})},store=require('../store').createStore(pool);
+ try{await store.init();const b=(await store.listGradebooks('teacher'))[0],r=require('../public/gradebook-math').defaultRubric(),change={action:'rubric',revision:0,rubric:r};await assert.rejects(store.changeGradebook('other',b.id,change));await assert.rejects(store.changeGradebook('teacher',b.id,{...change,rubric:{...r,aCap:80,bCap:70}}));await assert.rejects(store.changeGradebook('teacher',b.id,{...change,rubric:{...r,thresholds:[95,96,85,80,75,70,65,60]}}));const saved=await store.changeGradebook('teacher',b.id,change);assert.deepEqual(saved.rubric,r);await assert.rejects(store.changeGradebook('teacher',b.id,change));const copy=await store.changeGradebook('teacher',b.id,{action:'duplicate-blank'});assert.deepEqual(copy.rubric,r);await store.undoGradebook('teacher');await store.undoGradebook('teacher');assert.equal((await store.getGradebook('teacher',b.id)).rubric,undefined);await store.changeGradebook('teacher',b.id,{action:'archive'});await assert.rejects(store.changeGradebook('teacher',b.id,change),/Unarchive/);
+ }finally{await db.close();}
+});

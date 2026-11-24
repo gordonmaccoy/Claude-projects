@@ -22,5 +22,17 @@
   const categoryId=book.quizCategoryId||'daily-quizzes',category=categories(book).find(c=>c.id===categoryId);
   return category?[{categoryId,...(category.sections?.length?{sectionId:category.importSectionId||category.sections[0].id}:{})}]:[];
  }
- const api={importLocations,categorySummary,grade,total,summary,average,categories,categoryAssessments,weighted};if(typeof module==='object')module.exports=api;else root.examioGradebookMath=api;
+ const letterLabels=['A+','A0','B+','B0','C+','C0','D+','D0','F'];
+ function defaultRubric(){return {thresholds:[95,90,85,80,75,70,65,60],curved:false,maxCurve:false,aCap:30,bCap:70};}
+ function letterGrades(book){
+  const rubric=book.rubric||defaultRubric(),result=new Map(),ranked=book.students.map(st=>({id:st.id,...weighted(book,st.id)})).filter(g=>g.currentPercentage!=null).sort((a,b)=>b.currentPercentage-a.currentPercentage);
+  const aLimit=Math.floor(ranked.length*rubric.aCap/100),bLimit=Math.floor(ranked.length*rubric.bCap/100);
+  for(let i=0;i<ranked.length;){let end=i+1;while(end<ranked.length&&ranked[end].currentPercentage===ranked[i].currentPercentage)end++;
+   for(let j=i;j<end;j++){const g=ranked[j];let band=rubric.thresholds.findIndex(n=>g.currentPercentage>=n);if(band<0)band=8;const original=band;
+    if(rubric.curved){if(rubric.maxCurve){if(end<=aLimit)band=Math.min(band,1);else if(end<=bLimit)band=Math.max(2,Math.min(band,3));else band=Math.max(band,4);}else{if(end>aLimit)band=Math.max(band,2);if(end>bLimit)band=Math.max(band,4);}}
+    result.set(g.id,{letter:letterLabels[band],original:letterLabels[original],adjusted:band!==original,provisional:g.incomplete});
+   }i=end;
+  }return result;
+ }
+ const api={letterGrades,letterLabels,defaultRubric,importLocations,categorySummary,grade,total,summary,average,categories,categoryAssessments,weighted};if(typeof module==='object')module.exports=api;else root.examioGradebookMath=api;
 })(typeof window==='object'?window:globalThis);
