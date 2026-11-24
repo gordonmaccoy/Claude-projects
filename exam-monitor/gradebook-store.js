@@ -24,13 +24,13 @@ function createGradebookStore(pool,accounts){
    return accounts.withOwner(owner,async()=>{const book={id:randomUUID(),name:input.name.trim(),sample:false,students:students.map(s=>({name:s.name.trim(),number:s.number.trim()})),columns:['name','number'],sortBy:'number',numberSortDefaultVersion:1};await pool.query('INSERT INTO onscreen_v2_gradebooks(id,owner_id,data,sort_index) SELECT $1,$2,$3,COALESCE(MAX(sort_index),-1)+1 FROM onscreen_v2_gradebooks WHERE owner_id=$2',[book.id,owner,JSON.stringify(book)]);return book;});
   },
   async orderGradebooks(owner,ids){if(!Array.isArray(ids)||new Set(ids).size!==ids.length||ids.some(id=>typeof id!=='string'))throw problem('Invalid gradebook order.',400);return accounts.withOwner(owner,async()=>{const existing=(await pool.query("SELECT id FROM onscreen_v2_gradebooks WHERE owner_id=$1 AND data->>'deletedAt' IS NULL AND data->>'archivedAt' IS NULL",[owner])).rows.map(r=>r.id);if(ids.length!==existing.length||ids.some(id=>!existing.includes(id)))throw problem('Gradebooks changed. Refresh and try again.',409);for(const [index,id]of ids.entries())await pool.query('UPDATE onscreen_v2_gradebooks SET sort_index=$3 WHERE owner_id=$1 AND id=$2',[owner,id,index]);return {ok:true};});},
-  async sendResultsToGradebook(owner,id,sessionId){
+  async sendResultsToGradebook(owner,id,sessionId,destination){
    if(typeof sessionId!=='string'||!sessionId||sessionId.length>100)throw problem('Select valid quiz results.',400);
    return accounts.withOwner(owner,async()=>{
     const row=(await pool.query('SELECT data FROM onscreen_v2_gradebooks WHERE owner_id=$1 AND id=$2',[owner,id])).rows[0];
     if(!row||row.data.deletedAt)throw problem('Gradebook not found.',404);
     if(row.data.archivedAt)throw problem('Unarchive this gradebook before editing.',409);
-    if(row.data.quizCategoryId==='')throw problem('Imported quizzes are disabled for this gradebook. Select a category in Gradebook Setup first.',400);
+    const locations=require('./public/gradebook-math').importLocations(row.data);if(!locations.length)throw problem('Imported quizzes are disabled for this gradebook. Select a category in Gradebook Setup first.',400);
     const session=(await pool.query("SELECT data FROM onscreen_v2_sessions WHERE owner_id=$1 AND id=$2 AND data->>'deletedAt' IS NULL",[owner,sessionId])).rows[0]?.data;
     if(!session||session.mode!=='test')throw problem('Quiz results not found.',404);
     const book=row.data;book.students=book.students.map(student=>({...student,id:student.id||randomUUID()}));
@@ -38,9 +38,10 @@ function createGradebookStore(pool,accounts){
     book.assessments=book.assessments||[];
     const index=book.assessments.findIndex(item=>item.sessionId===sessionId);
     if(index<0&&book.assessments.length>=200)throw problem('This gradebook already contains 200 quizzes.',400);
-    result.categoryId=index<0?(book.quizCategoryId||'daily-quizzes'):(book.assessments[index].categoryId||book.quizCategoryId||'daily-quizzes');
+    let chosen=destination;if(chosen&&!locations.some(l=>l.categoryId===chosen.categoryId&&(l.sectionId||'')===(chosen.sectionId||'')))throw problem('Choose an enabled import location.',400);if(!chosen&&locations.length>1)throw problem('Choose where to save these quiz results.',400);chosen=chosen||locations[0];
+    result.categoryId=destination||index<0?chosen.categoryId:(book.assessments[index].categoryId||book.quizCategoryId||'daily-quizzes');
     const category=book.categories?.find(c=>c.id===result.categoryId);
-    if(category?.sections?.length)result.sectionId=index<0?category.importSectionId:book.assessments[index].sectionId;
+    if(category?.sections?.length)result.sectionId=destination||index<0?chosen.sectionId:book.assessments[index].sectionId;
     if(index<0)book.assessments.push(result);else{result.included=book.assessments[index].included;book.assessments[index]=result;}
     await pool.query('UPDATE onscreen_v2_gradebooks SET data=$3 WHERE owner_id=$1 AND id=$2',[owner,id,JSON.stringify(book)]);
     return {book,matched:result.matched,skipped:result.skipped.length};
@@ -59,10 +60,10 @@ function createGradebookStore(pool,accounts){
     if((book.revision||0)!==input.revision)throw problem('This gradebook changed. Reopen setup and try again.',409);
     const categories=input.categories;
     if(!Array.isArray(categories)||!categories.length||categories.length>20||categories.some(c=>!c||typeof c.id!=='string'||!c.id||c.id.length>80||typeof c.name!=='string'||!c.name.trim()||c.name.length>80||!Number.isFinite(c.weight)||c.weight<0||c.weight>100)||new Set(categories.map(c=>c.id)).size!==categories.length||new Set(categories.map(c=>c.name.trim().toLowerCase())).size!==categories.length||Math.abs(categories.reduce((n,c)=>n+c.weight,0)-100)>0.001)throw problem('Use unique category names and weights totaling 100%.',400);
-    if(input.quizCategoryId!==''&&!categories.some(c=>c.id===input.quizCategoryId))throw problem('Select a category for imported quizzes.',400);
+    if(!Array.isArray(input.importLocations)&&input.quizCategoryId!==''&&!categories.some(c=>c.id===input.quizCategoryId))throw problem('Select a category for imported quizzes.',400);
     if((book.assessments||[]).some(a=>!categories.some(c=>c.id===(a.categoryId||book.quizCategoryId||'daily-quizzes'))))throw problem('Categories containing grades cannot be removed.',400);
     for(const c of categories){const old=book.categories?.find(v=>v.id===c.id);if(old?.sections?.length&&Math.abs(old.sections.reduce((n,v)=>n+v.weight,0)-c.weight)>0.001)throw problem('Update section weights before changing this category weight, or remove its sections first.',400);}
-    book.categories=categories.map(c=>({...book.categories?.find(v=>v.id===c.id),id:c.id,name:c.name.trim(),weight:c.weight}));book.quizCategoryId=input.quizCategoryId;book.revision=(book.revision||0)+1;
+    book.categories=categories.map(c=>({...book.categories?.find(v=>v.id===c.id),id:c.id,name:c.name.trim(),weight:c.weight}));book.quizCategoryId=input.quizCategoryId;if(input.importLocations!==undefined){const locations=input.importLocations;if(!Array.isArray(locations)||locations.length>400||locations.some(l=>{const c=book.categories.find(c=>c.id===l?.categoryId);return !c||(c.sections?.length?!c.sections.some(s=>s.id===l.sectionId):!!l.sectionId);})||new Set(locations.map(l=>JSON.stringify([l.categoryId,l.sectionId||'']))).size!==locations.length)throw problem('Select valid quiz import locations.',400);book.importLocations=locations.map(l=>({categoryId:l.categoryId,...(l.sectionId?{sectionId:l.sectionId}:{})}));book.quizCategoryId=locations[0]?.categoryId||'';}else delete book.importLocations;book.revision=(book.revision||0)+1;
    }
    else if(input.action==='sections'){
     if((book.revision||0)!==input.revision)throw problem('This gradebook changed. Reopen Sections setup.',409);
@@ -72,7 +73,9 @@ function createGradebookStore(pool,accounts){
     const items=(book.assessments||[]).filter(a=>(a.categoryId||'daily-quizzes')===category.id),assignments=input.assignments;
     if(!Array.isArray(assignments)||assignments.length!==items.length||new Set(assignments.map(a=>a?.sessionId)).size!==items.length||assignments.some(a=>!a||!items.some(v=>v.sessionId===a.sessionId)||sections.length&&!sections.some(v=>v.id===a.sectionId)))throw problem('Assign each grade column to a section.',400);
     if(sections.length&&!sections.some(c=>c.id===input.importSectionId))throw problem('Choose a section for new imported quizzes.',400);
+    const oldLocations=require('./public/gradebook-math').importLocations(book),enabled=oldLocations.some(l=>l.categoryId===category.id);
     category.sections=sections.map(c=>({id:c.id,name:c.name.trim(),weight:c.weight}));category.importSectionId=sections.length?input.importSectionId:null;
+    if(Array.isArray(book.importLocations)){const retained=oldLocations.filter(l=>l.categoryId!==category.id||sections.some(s=>s.id===l.sectionId));if(enabled&&!retained.some(l=>l.categoryId===category.id))retained.push({categoryId:category.id,...(sections.length?{sectionId:input.importSectionId}:{})});book.importLocations=retained;}
     for(const a of items){if(sections.length)a.sectionId=assignments.find(v=>v.sessionId===a.sessionId).sectionId;else delete a.sectionId;}
     book.revision=(book.revision||0)+1;
    }

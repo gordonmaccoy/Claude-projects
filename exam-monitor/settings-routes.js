@@ -15,7 +15,7 @@ function createSettingsController({store,config={},supportAdminEmail='',adminAll
  router.get('/gradebooks/archived',wrap(async(req,res)=>res.json(await store.archivedGradebooks(req.user.id))));
  router.get('/gradebooks/:id/export',wrap(async(req,res)=>{const book=await store.getGradebook(req.user.id,req.params.id);res.json({file:require('./gradebook-export').gradebookWorkbook(book).toString('base64')});}));
  router.post('/gradebooks/:id/manage',wrap(async(req,res)=>res.json(await store.changeGradebook(req.user.id,req.params.id,req.body||{}))));
- router.post('/gradebooks/:id/results',wrap(async(req,res)=>res.json(await store.sendResultsToGradebook(req.user.id,req.params.id,req.body?.sessionId))));
+ router.post('/gradebooks/:id/results',wrap(async(req,res)=>res.json(await store.sendResultsToGradebook(req.user.id,req.params.id,req.body?.sessionId,req.body?.destination))));
  router.put('/gradebooks/order',wrap(async(req,res)=>res.json(await store.orderGradebooks(req.user.id,req.body?.ids))));
  router.patch('/gradebooks/:id',wrap(async(req,res)=>res.json(await store.gradebookPreferences(req.user.id,req.params.id,req.body))));
  router.get('/gradebooks',wrap(async(req,res)=>res.json(await store.listGradebooks(req.user.id))));
