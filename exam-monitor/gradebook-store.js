@@ -84,6 +84,11 @@ function createGradebookStore(pool,accounts){
     for(const a of items){if(sections.length)a.sectionId=assignments.find(v=>v.sessionId===a.sessionId).sectionId;else delete a.sectionId;}
     book.revision=(book.revision||0)+1;
    }
+   else if(input.action==='delete-assessment'){
+    if((book.revision||0)!==input.revision)throw problem('This gradebook changed. Refresh and try again.',409);
+    if(!book.assessments?.some(a=>a.sessionId===input.sessionId))throw problem('Assignment column not found.',404);
+    book.assessments=book.assessments.filter(a=>a.sessionId!==input.sessionId);book.revision=(book.revision||0)+1;
+   }
    else if(input.action==='include-assessment'){
     if((book.revision||0)!==input.revision)throw problem('This gradebook changed. Refresh and try again.',409);
     const assessment=book.assessments?.find(a=>a.sessionId===input.sessionId);if(!assessment||typeof input.included!=='boolean')throw problem('Select a valid assessment.',400);assessment.included=input.included;book.revision=(book.revision||0)+1;
