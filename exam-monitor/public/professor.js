@@ -612,7 +612,7 @@ async function loadSignedInWorkspace() {
     if(recoveringPassword)return;
     const authSession=(await auth.auth.getSession()).data.session;if(generation!==accountGeneration||sessionPreferences?.blocked||!authSession)return;
     if(registration&&await registration.resume(authSession))return;
-    document.getElementById("admin-link").hidden=!verified.adminAllowed;$('gradebooks-tab').hidden=!verified.adminAllowed;$('result-gradebook').hidden=!verified.adminAllowed;$('beta-feedback-tab').hidden=verified.plan!=='beta';settings.setAccount(verified);$('account-name').textContent=account.email;$('login').hidden=true;$('workspace').hidden=false;$('workspace-tabs').hidden=false;$('take-tour').hidden=workspaceTab==='settings'||workspaceTab==='trash';$('signout').hidden=false;
+    document.getElementById("admin-link").hidden=!verified.adminAllowed;$('gradebooks-tab').hidden=!verified.gradebooksAllowed;$('result-gradebook').hidden=!verified.gradebooksAllowed;$('beta-feedback-tab').hidden=verified.plan!=='beta';settings.setAccount(verified);$('account-name').textContent=account.email;$('login').hidden=true;$('workspace').hidden=false;$('workspace-tabs').hidden=false;$('take-tour').hidden=workspaceTab==='settings'||workspaceTab==='trash';$('signout').hidden=false;
     if(openGameTab&&workspaceTab==='launch')tab('games');
     socket.connect();
     try {

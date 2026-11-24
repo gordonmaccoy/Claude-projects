@@ -1,6 +1,5 @@
 const {randomUUID}=require('node:crypto');
 const {problem}=require('./account-store');
-const names=['Alex Morgan','Minji Kim','Daniel Park','Sofia Rivera','Liam Chen','Emma Wilson','Noah Patel','Hana Lee','Ethan Brown','Yuna Choi','Olivia Martin','Lucas Silva','Mia Nguyen','Leo Thompson','Sara Ahmed'];
 function createGradebookStore(pool,accounts){
  const store={async init(){
   await pool.query("CREATE TABLE IF NOT EXISTS onscreen_v2_gradebooks(id TEXT PRIMARY KEY,owner_id TEXT NOT NULL,data JSONB NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
@@ -13,9 +12,7 @@ function createGradebookStore(pool,accounts){
   await pool.query("UPDATE onscreen_v2_gradebooks SET data=data || '{\"sortBy\":\"number\",\"numberSortDefaultVersion\":1}'::jsonb WHERE NOT (data ? 'numberSortDefaultVersion')");
  },methods:{
   async listGradebooks(owner){return accounts.withOwner(owner,async()=>{
-   const students=names.slice(0,5).map((name,index)=>({id:randomUUID(),name,number:String(20261001+index)})),categories=['Quizzes','Attendance','Participation','Homework'].map((name,index)=>({id:index?'sample-'+name.toLowerCase():'daily-quizzes',name,weight:25}));
-   const assessments=categories.map((category,index)=>{const scores=[8,9,7,10,6];const scoringColumns=['Part 1','Part 2'].map((name,i)=>({id:randomUUID(),name,maximum:5,scores:students.map((st,j)=>({studentId:st.id,score:i?Math.max(0,scores[j]-5):5}))}));return {sessionId:'manual-'+randomUUID(),title:category.name+' example',categoryId:category.id,manual:true,total:10,importedAt:new Date().toISOString(),scoringColumns,grades:students.map((st,j)=>({studentId:st.id,score:scores[j],total:10,percentage:scores[j]*10,status:'Submitted'})),skipped:[]};});
-   const sample={id:'sample-'+owner,name:'Sample Gradebook',sample:true,sampleVersion:2,sortBy:'number',numberSortDefaultVersion:1,students,categories,quizCategoryId:'daily-quizzes',assessments,columns:['name','number']};
+   const sample=require('./gradebook-sample').sampleGradebook(owner);
    await pool.query('INSERT INTO onscreen_v2_gradebooks(id,owner_id,data) VALUES($1,$2,$3) ON CONFLICT(id) DO NOTHING',[sample.id,owner,JSON.stringify(sample)]);
    return (await pool.query("SELECT data FROM onscreen_v2_gradebooks WHERE owner_id=$1 AND data->>'deletedAt' IS NULL AND data->>'archivedAt' IS NULL ORDER BY sort_index,created_at,id",[owner])).rows.map(row=>row.data);
   });},

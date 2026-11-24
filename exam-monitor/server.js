@@ -92,7 +92,7 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, admin
   api.post('/sessions/:id/grade-override',wrap(async(req,res)=>{await owned(req.params.id,req.user);const {session}=await store.mutate(req.params.id,s=>require('./grading').override(s,req.body.studentId,req.body.questionId,req.user.id,req.body.points,req.body.reason));await broadcast(session);res.json(await decorate(session,req));}));
   api.use(settingsController.router);
   api.use('/admin',adminController.router);
-  api.get('/me', wrap(async(req, res) => res.json({...req.user,plan:store.accountPlan?await store.accountPlan(req.user.id):'beta',adminAllowed:await adminController.allowed(req.user)})));
+  api.get('/me', wrap(async(req, res) => res.json({...req.user,plan:store.accountPlan?await store.accountPlan(req.user.id):'beta',adminAllowed:await adminController.allowed(req.user),gradebooksAllowed:await adminController.allowed(req.user)||await store.gradebooksAllowed?.(req.user.id)||false})));
   const shareWrap=fn=>wrap(async(req,res)=>{try{return await fn(req,res);}catch(error){if([400,404,409,410,423,429].includes(error.status))return res.status(error.status).json({error:error.message});throw error;}});
   api.get('/shares',shareWrap(async(req,res)=>res.json(await store.listShares(req.user))));
   api.get('/sharing-contacts',shareWrap(async(req,res)=>res.json(await store.listSharingContacts(req.user.id))));

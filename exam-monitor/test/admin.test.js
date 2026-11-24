@@ -101,3 +101,31 @@ test('additional configured admin is identity-bound and removable without replac
   assert.equal(await store.isAdmin({id:'owner',email:'admin@examio.io'},config),true);
  }finally{await db.close();}
 });
+
+test('gradebooks access can be granted and revoked without admin access or losing data',async()=>{
+ const {db,store}=await fixture();
+ const runtime=createApp({store,sweepInterval:0,adminOptions:{ownerEmail:'admin@examio.io'},verifyUser:async t=>({id:t,email:t==='owner'?'admin@examio.io':'teacher@example.com'}),settingsOptions:{sendMail:null,removeAccount:null}});
+ runtime.server.listen(0,'127.0.0.1');await once(runtime.server,'listening');
+ const req=async(path,token='teacher',method='GET',body)=>{const r=await fetch(`http://127.0.0.1:${runtime.server.address().port}/api/${path}`,{method,headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});return {status:r.status,data:await r.json()};};
+ try{
+  assert.equal((await req('me')).data.gradebooksAllowed,false);
+  assert.equal((await req('gradebooks')).status,403);
+  assert.equal((await req('me','owner')).data.gradebooksAllowed,true);
+  assert.equal((await req('admin/accounts/teacher','owner','PATCH',{plan:'free',note:'',version:0,gradebooksEnabled:'yes'})).status,400);
+  assert.equal((await req('admin/accounts/teacher','owner','PATCH',{plan:'free',note:'',version:0,gradebooksEnabled:true})).status,200);
+  const me=(await req('me')).data;assert.equal(me.gradebooksAllowed,true);assert.equal(me.adminAllowed,false);
+  assert.equal((await req('admin/accounts')).status,403);
+  assert.equal((await req('gradebooks')).status,200);
+  const sample=(await store.listGradebooks('teacher'))[0];
+  assert.equal(sample.students.length,10);assert.equal(sample.categories.length,4);
+  assert.equal(sample.categories.reduce((n,c)=>n+c.weight,0),100);
+  for(const category of sample.categories)if(category.sections?.length)assert.equal(category.sections.reduce((n,s)=>n+s.weight,0),category.weight);
+  assert.equal(sample.assessments.length,8);
+  for(const a of sample.assessments){assert.equal(a.grades.length,10);assert.equal(a.scoringColumns.length,2);for(const grade of a.grades)assert.equal(a.scoringColumns.reduce((n,c)=>n+c.scores.find(s=>s.studentId===grade.studentId).score,0),grade.score);}
+  assert.equal((await req('admin/accounts/teacher','owner','PATCH',{plan:'pro',note:'',version:1})).status,200);
+  assert.equal(await store.gradebooksAllowed('teacher'),true);
+  assert.equal((await req('admin/accounts/teacher','owner','PATCH',{plan:'pro',note:'',version:2,gradebooksEnabled:false})).status,200);
+  assert.equal((await req('gradebooks')).status,403);assert.equal((await req('me')).data.gradebooksAllowed,false);
+  assert.deepEqual((await store.listGradebooks('teacher'))[0],sample);
+ }finally{await runtime.close();await db.close();}
+});

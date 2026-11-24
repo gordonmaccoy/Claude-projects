@@ -9,7 +9,7 @@ function createSettingsController({store,config={},supportAdminEmail='',adminAll
  function begin(user,kind,max){const now=Date.now(),key=user.id+':'+kind,old=budgets.get(key),state=old&&now-old.start<3600000?old:{start:now,count:0,busy:false};if(state.busy||state.count>=max)throw problem('Please wait before sending another '+(kind==='help'?'help question.':'contact request.'),429);state.count++;state.busy=true;budgets.set(key,state);if(budgets.size>5000)for(const [k,v] of budgets)if(now-v.start>=3600000)budgets.delete(k);return state;}
  async function deliver(id){if(!sendMail)return;try{return await store.deliverContact(id,sendMail);}catch{await store.delayContact(id);}}
  async function erase(id){if(!removeAccount)return {state:'deleting'};try{return await store.completeDeletion(id,removeAccount);}catch{await store.delayDeletion(id);return {state:'deleting'};}}
- router.use('/gradebooks',(req,res,next)=>Promise.resolve(adminAllowed(req.user)).then(allowed=>allowed?next():next(problem('Admin access is required.',403))).catch(next));
+ router.use('/gradebooks',(req,res,next)=>Promise.resolve().then(async()=>await adminAllowed(req.user)||await store.gradebooksAllowed?.(req.user.id)).then(allowed=>allowed?next():next(problem('Gradebooks access is not enabled for this account.',403))).catch(next));
  router.post('/gradebooks/undo',wrap(async(req,res)=>res.json(await store.undoGradebook(req.user.id))));
  router.get('/gradebooks/undo-status',wrap(async(req,res)=>res.json(await store.gradebookUndoStatus(req.user.id))));
  router.get('/gradebooks/archived',wrap(async(req,res)=>res.json(await store.archivedGradebooks(req.user.id))));
