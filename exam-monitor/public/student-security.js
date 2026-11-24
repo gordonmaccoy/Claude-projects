@@ -1,9 +1,12 @@
 // Browser deterrents are scoped to a running activity and the server's effective policy.
 window.examioStudentSecurity=function({document,window,root,button,status,report,t=value=>value}) {
  let active=false,testActive=false,policy={},focused=true,fullscreen=Boolean(document.fullscreenElement);
+ // iPadOS can interpret ordinary scrolling as the system fullscreen-exit gesture.
+ // Desktop-mode iPads identify as Macs, but have multiple touch points.
+ const ipad=/iPad/i.test(window.navigator.userAgent)||(/Mac/i.test(window.navigator.platform)&&window.navigator.maxTouchPoints>1);
  const available=()=>Boolean(document.documentElement.requestFullscreen)&&document.fullscreenEnabled!==false;
- const wantsFullscreen=()=>enabled('fullscreen')||enabled('requireFullscreen');
- const blocked=()=>testActive&&enabled('requireFullscreen')&&available()&&!document.fullscreenElement;
+ const wantsFullscreen=()=>!ipad&&(enabled('fullscreen')||enabled('requireFullscreen'));
+ const blocked=()=>!ipad&&testActive&&enabled('requireFullscreen')&&available()&&!document.fullscreenElement;
  const overlay=document.createElement('div');overlay.className='fullscreen-answer-gate';overlay.hidden=true;
  const message=document.createElement('p');message.textContent=t('Enter full screen mode to answer questions.');
  const enter=document.createElement('button');enter.type='button';enter.textContent=t('Enter full screen');enter.onclick=()=>button.click();overlay.append(message,enter);document.body.append(overlay);
