@@ -459,7 +459,7 @@ function renderTable(container, session, visibility=null) {
       appendDeviceLabel(row.cells[1],s);
       const review=document.createElement('td');if(s.failed && session.phase==='running')review.append(button(t('Unlock & continue'),()=>unlockStudent(session,s)));row.append(review);body.append(row);
     }
-    table.append(body);if(session.requireStudentNumber===false)for(const row of table.rows)row.cells[0]?.remove(); container.replaceChildren(table); return;
+    table.append(body);if(visibility&&!visibility.names)for(const row of table.rows)row.cells[1]?.remove();if(session.requireStudentNumber===false||(visibility&&!visibility.numbers))for(const row of table.rows)row.cells[0]?.remove(); container.replaceChildren(table); return;
   }
   table.innerHTML = '<thead><tr><th>'+t('Student number')+'</th><th>'+t('Name')+'</th><th>'+t('Status')+'</th><th>'+t('Student progress')+'</th>'+(showScores?'<th>'+t('Score')+'</th><th>'+t('Original score')+'</th>':'')+'<th>'+t('Review')+'</th></tr></thead>';
   const tbody = document.createElement('tbody');
@@ -490,7 +490,7 @@ function closeResults() {
 }
 $('result-close').onclick=()=>{const row=[...document.querySelectorAll('.result-session-card')].find(el=>el.dataset.sessionId===historySession?.id);closeResults();(row?.querySelector('button')||$('results-refresh')).focus();};
 function renderResultStatistics(students){const stats=window.examioResultAnalysis.statistics(students),root=$('result-stats');root.replaceChildren();for(const [label,value] of [[t('Students'),stats.students],[t('Completion'),stats.completion+'%'],[t('Class average'),stats.average==null?'—':stats.average+'%']]){const cell=document.createElement('div'),title=document.createElement('span'),number=document.createElement('strong');title.textContent=label;number.textContent=value;cell.append(title,number);root.append(cell);}}
-function renderResults() { gradebooks.updateTransferStatus(historySession); placeResultsPanel();$('result-detail').hidden=false; $('result-title').textContent=historySession.title;renderResultSettings(historySession); $('result-delete').hidden=false; $('result-rename').hidden=false;renderResultStatistics(historySession.students); renderTable($('result-students'),historySession); }
+function renderResults() { gradebooks.updateTransferStatus(historySession); placeResultsPanel();$('result-detail').hidden=false; $('result-title').textContent=historySession.title;renderResultSettings(historySession); $('result-delete').hidden=false; $('result-rename').hidden=false;renderResultStatistics(historySession.students); renderTable($('result-students'),historySession,{names:!$('result-hide-names').checked,numbers:!$('result-hide-numbers').checked,scores:true}); }
 async function deleteResults(session) {
   if(!confirm(`Move the saved results for “${session.title}” to Trash for 30 days?${session.phase!=='ended'?' This will end the active session first.':''}`)) return;
   if(session.phase!=='ended')await api(`/sessions/${session.id}/end`,'POST',{});
@@ -519,6 +519,7 @@ function showResultSummary(){
   $('result-summary-tab').setAttribute('aria-pressed','true');$('result-details-tab').setAttribute('aria-pressed','false');
 }
 $('result-summary-tab').onclick=showResultSummary;
+for(const id of ['result-hide-names','result-hide-numbers'])$(id).onchange=()=>{if(historySession)renderResults();if(questionData&&!$('result-details').hidden)renderAnswerGrid(questionData);};
 let detailsRequest=null,detailsSnapshot='',detailsPhase,questionData=null,questionIndex=0,questionResultsVisible=false;
 function detailsVisible(){return historySession&&!$('results').hidden&&!$('result-details').hidden&&!document.hidden;}
 function renderAnswerGrid(data){
@@ -546,10 +547,10 @@ function renderAnswerGrid(data){
     }
   }
   root.replaceChildren();
-  if(historySession?.requireStudentNumber===false){
-    for(const row of table.tHead.rows)row.cells[0]?.remove();
-    for(const row of table.tBodies[0].rows)row.cells[0]?.remove();
-    averageLabel.colSpan=2;
+  for(const index of [1,0])if(index===1?$('result-hide-names').checked:historySession?.requireStudentNumber===false||$('result-hide-numbers').checked){
+    for(const row of table.tHead.rows)row.cells[index]?.remove();
+    for(const row of table.tBodies[0].rows)row.cells[index]?.remove();
+    averageLabel.colSpan--;
   }
   if(data.students.length)root.append(table);else root.textContent=t('No students joined.');
 }
