@@ -85,6 +85,7 @@ function createGradebookStore(pool,accounts){
     if((book.revision||0)!==input.revision)throw problem('This gradebook changed. Refresh and try again.',409);
     const all=book.assessments||[],manual=all.filter(a=>(a.categoryId||'daily-quizzes')===input.categoryId),ids=input.ids;
     if(!Array.isArray(ids)||ids.length!==manual.length||new Set(ids).size!==ids.length||ids.some(id=>!manual.some(a=>a.sessionId===id)))throw problem('Invalid column order.',400);
+    if(input.moveSection){const category=book.categories?.find(c=>c.id===input.categoryId),assessment=manual.find(a=>a.sessionId===input.moveSection.sessionId);if(!assessment||!category?.sections?.some(s=>s.id===input.moveSection.sectionId))throw problem('Choose a valid section in this category.',400);assessment.sectionId=input.moveSection.sectionId;}
     let index=0;book.assessments=all.map(a=>{if(!manual.includes(a))return a;const id=ids[index++];return manual.find(item=>item.sessionId===id);});book.revision=(book.revision||0)+1;
    }
    else if(input.action==='detailed-scores'){

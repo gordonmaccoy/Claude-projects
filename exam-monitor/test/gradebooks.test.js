@@ -98,3 +98,14 @@ test('weighted sections combine independently, preserve assignments, validate to
  book=await store.changeGradebook('alice',book.id,{action:'sections',revision:book.revision,categoryId:'online',sections:[],assignments});assert.equal(book.assessments[0].sectionId,undefined);assert.equal(math.weighted(book,book.students[0].id).availableWeight,10);
  }finally{await db.close();}
 });
+
+test('moving columns between sections validates ownership, revision and destination while preserving scores',async()=>{
+ const db=new PGlite(),pool={query:(...a)=>db.query(...a),connect:async()=>({query:(...a)=>db.query(...a),release(){}})},store=require('../store').createStore(pool);
+ try{await store.init();const book=(await store.listGradebooks('teacher'))[0],category=book.categories[0],assessment=book.assessments[0],ids=book.assessments.filter(a=>a.categoryId===category.id).map(a=>a.sessionId);
+ const change={action:'order-assessments',revision:0,categoryId:category.id,ids,moveSection:{sessionId:assessment.sessionId,sectionId:category.sections[1].id}};
+ await assert.rejects(store.changeGradebook('other',book.id,change));
+ await assert.rejects(store.changeGradebook('teacher',book.id,{...change,moveSection:{...change.moveSection,sectionId:'invalid'}}));
+ const moved=await store.changeGradebook('teacher',book.id,change);assert.equal(moved.assessments[0].sectionId,category.sections[1].id);assert.deepEqual(moved.assessments[0].grades,assessment.grades);assert.deepEqual(moved.assessments[0].scoringColumns,assessment.scoringColumns);
+ await assert.rejects(store.changeGradebook('teacher',book.id,change));
+ }finally{await db.close();}
+});
