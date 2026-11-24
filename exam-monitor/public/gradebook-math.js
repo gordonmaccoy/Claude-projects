@@ -17,7 +17,7 @@
  }
  function weighted(book,id){const values=categories(book).map(c=>{const g=categorySummary(book,c,id);return {...c,...g,contribution:g.percentage==null?null:g.contribution??round(g.percentage*c.weight/100)};});const incomplete=values.some(g=>g.weight>0&&(g.incomplete||g.pending||g.percentage==null));const available=values.filter(g=>g.weight>0&&!g.pending&&g.percentage!=null),availableWeight=round(available.reduce((n,g)=>n+(g.availableWeight??g.weight),0)),earned=round(available.reduce((n,g)=>n+g.contribution,0));return {categories:values,incomplete,total:incomplete?null:earned,earned,availableWeight,currentPercentage:availableWeight?round(earned/availableWeight*100):null};}
  function importLocations(book){
-  if(Array.isArray(book.importLocations))return book.importLocations;
+  if(Array.isArray(book.importLocations))return book.importLocations.filter((l,i,all)=>all.findIndex(v=>v.categoryId===l.categoryId)===i);
   if(book.quizCategoryId==='')return [];
   const categoryId=book.quizCategoryId||'daily-quizzes',category=categories(book).find(c=>c.id===categoryId);
   return category?[{categoryId,...(category.sections?.length?{sectionId:category.importSectionId||category.sections[0].id}:{})}]:[];

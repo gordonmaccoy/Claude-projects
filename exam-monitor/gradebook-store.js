@@ -80,7 +80,7 @@ function createGradebookStore(pool,accounts){
     if(sections.length&&!sections.some(c=>c.id===input.importSectionId))throw problem('Choose a section for new imported quizzes.',400);
     const oldLocations=require('./public/gradebook-math').importLocations(book),enabled=oldLocations.some(l=>l.categoryId===category.id);
     category.sections=sections.map(c=>({id:c.id,name:c.name.trim(),weight:c.weight}));category.importSectionId=sections.length?input.importSectionId:null;
-    if(Array.isArray(book.importLocations)){const retained=oldLocations.filter(l=>l.categoryId!==category.id||sections.some(s=>s.id===l.sectionId));if(enabled&&!retained.some(l=>l.categoryId===category.id))retained.push({categoryId:category.id,...(sections.length?{sectionId:input.importSectionId}:{})});book.importLocations=retained;}
+    if(Array.isArray(book.importLocations)){const retained=oldLocations.filter(l=>l.categoryId!==category.id);if(enabled)retained.push({categoryId:category.id,...(sections.length?{sectionId:input.importSectionId}:{})});book.importLocations=retained;}
     for(const a of items){if(sections.length)a.sectionId=assignments.find(v=>v.sessionId===a.sessionId).sectionId;else delete a.sectionId;}
     book.revision=(book.revision||0)+1;
    }
