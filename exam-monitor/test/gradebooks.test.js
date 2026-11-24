@@ -74,3 +74,27 @@ test('archived gradebooks are separated, read-only and can be unarchived',async(
 test('archived results leave active listings and reject edits until unarchived',async()=>{
  const db=new PGlite(),pool={query:(...a)=>db.query(...a),connect:async()=>({query:(...a)=>db.query(...a),release(){}})},store=require('../store').createStore(pool);try{await store.init();const s=require('../exam').newSession('alice',{title:'Archive test',questions:[{id:'q',text:'Q?',options:[{id:'a',text:'A'},{id:'b',text:'B'}],correctOptionId:'a'}]},1000,{});s.phase='ended';await store.createSession(s);await store.mutate(s.id,v=>{v.archivedAt=Date.now();},true);assert.equal((await store.listSessions('alice')).length,0);assert.equal((await store.listSessions('alice',true)).length,1);assert.equal((await store.listSessions('bob',true)).length,0);await assert.rejects(store.mutate(s.id,v=>{v.resultTitle='Changed';}),/Unarchive/);await store.mutate(s.id,v=>{delete v.archivedAt;},true);assert.equal((await store.listSessions('alice')).length,1);}finally{await db.close();}
 });
+
+test('weighted sections combine independently, preserve assignments, validate totals and export weighted percentages',async()=>{
+ const db=new PGlite(),pool={query:(...a)=>db.query(...a)},accounts={withOwner:async(owner,fn)=>fn()},module=require('../gradebook-store').createGradebookStore(pool,accounts),math=require('../public/gradebook-math');
+ try{await module.init();const store=module.methods;let book=await store.createGradebook('alice',{name:'Sections',students:[{name:'Amy',number:'001'}]});
+ const categories=[{id:'online',name:'Online Class',weight:10},{id:'other',name:'Other',weight:90}];
+ book=await store.changeGradebook('alice',book.id,{action:'setup',revision:0,categories,quizCategoryId:'online'});
+ for(const [title,total,score]of [['Quiz 1',100,80],['Quiz 2',100,80],['Attendance',10,10]]){book=await store.changeGradebook('alice',book.id,{action:'add-assessment',revision:book.revision,categoryId:'online',title,total});book=await store.changeGradebook('alice',book.id,{action:'grade',revision:book.revision,sessionId:book.assessments.at(-1).sessionId,studentId:book.students[0].id,score});}
+ const sections=[{id:'quizzes',name:'Online Quizzes',weight:5},{id:'attendance',name:'Online Attendance',weight:5}],assignments=book.assessments.map((a,i)=>({sessionId:a.sessionId,sectionId:i===2?'attendance':'quizzes'}));
+ const setup={action:'sections',revision:book.revision,categoryId:'online',sections,assignments,importSectionId:'quizzes'};
+ await assert.rejects(store.changeGradebook('alice',book.id,{...setup,sections:[{...sections[0],weight:6},sections[1]]}));
+ await assert.rejects(store.changeGradebook('alice',book.id,{...setup,assignments:[]}));
+ await assert.rejects(store.changeGradebook('alice',book.id,{...setup,revision:0}));
+ book=await store.changeGradebook('alice',book.id,setup);
+ assert.equal(math.weighted(book,book.students[0].id).earned,9);assert.equal(math.weighted(book,book.students[0].id).availableWeight,10);assert.equal(math.weighted(book,book.students[0].id).currentPercentage,90);
+ book=await store.changeGradebook('alice',book.id,{action:'setup',revision:book.revision,categories,quizCategoryId:'online'});assert.equal(book.categories[0].sections.length,2);
+ await assert.rejects(store.changeGradebook('alice',book.id,{action:'add-assessment',revision:book.revision,categoryId:'online',title:'Unassigned',total:10}));
+ book=await store.changeGradebook('alice',book.id,{action:'include-assessment',revision:book.revision,sessionId:book.assessments[2].sessionId,included:false});
+ let score=math.weighted(book,book.students[0].id);assert.equal(score.earned,4);assert.equal(score.availableWeight,5);assert.equal(score.currentPercentage,80);
+ const {unzipSync,strFromU8}=require('fflate'),files=unzipSync(require('../gradebook-export').gradebookWorkbook(book));assert.match(strFromU8(files['xl/worksheets/sheet2.xml']),/<v>0.8<\/v>/);assert.match(strFromU8(files['xl/worksheets/sheet2.xml']),/Online Quizzes/);
+ const blank=await store.changeGradebook('alice',book.id,{action:'duplicate-blank'});assert.equal(blank.students.length,0);assert.deepEqual(blank.categories,book.categories);assert.equal(blank.assessments.length,3);assert.equal(blank.assessments[0].sectionId,'quizzes');assert.equal(blank.assessments[0].total,100);assert.equal(blank.assessments[2].included,false);assert.ok(blank.assessments.every(a=>a.manual&&a.grades.length===0&&a.skipped.length===0&&!book.assessments.some(old=>old.sessionId===a.sessionId)));assert.equal((await store.getGradebook('alice',book.id)).students.length,1);
+ const sample=(await store.listGradebooks('alice')).find(b=>b.sample);const emptySample=await store.changeGradebook('alice',sample.id,{action:'duplicate-blank'});assert.equal(emptySample.students.length,0);assert.ok(emptySample.assessments.every(a=>a.scoringColumns.every(c=>c.scores.length===0)));assert.equal(emptySample.assessments[0].scoringColumns[0].maximum,5);
+ book=await store.changeGradebook('alice',book.id,{action:'sections',revision:book.revision,categoryId:'online',sections:[],assignments});assert.equal(book.assessments[0].sectionId,undefined);assert.equal(math.weighted(book,book.students[0].id).availableWeight,10);
+ }finally{await db.close();}
+});

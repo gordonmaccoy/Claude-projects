@@ -42,6 +42,8 @@ function createGradebookStore(pool,accounts){
     const index=book.assessments.findIndex(item=>item.sessionId===sessionId);
     if(index<0&&book.assessments.length>=200)throw problem('This gradebook already contains 200 quizzes.',400);
     result.categoryId=index<0?(book.quizCategoryId||'daily-quizzes'):(book.assessments[index].categoryId||book.quizCategoryId||'daily-quizzes');
+    const category=book.categories?.find(c=>c.id===result.categoryId);
+    if(category?.sections?.length)result.sectionId=index<0?category.importSectionId:book.assessments[index].sectionId;
     if(index<0)book.assessments.push(result);else{result.included=book.assessments[index].included;book.assessments[index]=result;}
     await pool.query('UPDATE onscreen_v2_gradebooks SET data=$3 WHERE owner_id=$1 AND id=$2',[owner,id,JSON.stringify(book)]);
     return {book,matched:result.matched,skipped:result.skipped.length};
@@ -52,7 +54,7 @@ function createGradebookStore(pool,accounts){
   async getGradebook(owner,id){return accounts.withOwner(owner,async()=>{const row=(await pool.query('SELECT data FROM onscreen_v2_gradebooks WHERE owner_id=$1 AND id=$2',[owner,id])).rows[0];if(!row||row.data.deletedAt)throw problem('Gradebook not found.',404);return row.data;});},
   async changeGradebook(owner,id,input){return accounts.withOwner(owner,async()=>{const row=(await pool.query('SELECT data FROM onscreen_v2_gradebooks WHERE owner_id=$1 AND id=$2',[owner,id])).rows[0];if(!row||row.data.deletedAt)throw problem('Gradebook not found.',404);const book=row.data;
    if(book.archivedAt&&input.action!=='unarchive')throw problem('Unarchive this gradebook before editing.',409);
-   if(input.action==='duplicate'){const copy={...book,id:randomUUID(),name:(book.name+' (copy)').slice(0,120),sample:false};await pool.query('INSERT INTO onscreen_v2_gradebooks(id,owner_id,data,sort_index) SELECT $1,$2,$3,COALESCE(MAX(sort_index),-1)+1 FROM onscreen_v2_gradebooks WHERE owner_id=$2',[copy.id,owner,JSON.stringify(copy)]);return copy;}
+   if(input.action==='duplicate'||input.action==='duplicate-blank'){const blank=input.action==='duplicate-blank',copy={...book,id:randomUUID(),name:blank?book.name.slice(0,107)+' (blank copy)':(book.name+' (copy)').slice(0,120),sample:false};if(blank){copy.revision=0;copy.students=[];copy.assessments=(book.assessments||[]).map(a=>({sessionId:'manual-'+randomUUID(),title:a.title,categoryId:a.categoryId||'daily-quizzes',...(a.sectionId?{sectionId:a.sectionId}:{}),manual:true,total:require('./public/gradebook-math').total(a),included:a.included!==false,importedAt:new Date().toISOString(),grades:[],skipped:[],...(a.scoringColumns?{scoringColumns:a.scoringColumns.map(c=>({id:randomUUID(),name:c.name,maximum:c.maximum,scores:[]}))}:{})}));}await pool.query('INSERT INTO onscreen_v2_gradebooks(id,owner_id,data,sort_index) SELECT $1,$2,$3,COALESCE(MAX(sort_index),-1)+1 FROM onscreen_v2_gradebooks WHERE owner_id=$2',[copy.id,owner,JSON.stringify(copy)]);return copy;}
    if(input.action==='archive'){book.archivedAt=Date.now();book.revision=(book.revision||0)+1;}
    else if(input.action==='unarchive'){delete book.archivedAt;book.revision=(book.revision||0)+1;}
    else if(input.action==='delete'){book.deletedAt=new Date().toISOString();}
@@ -62,7 +64,20 @@ function createGradebookStore(pool,accounts){
     if(!Array.isArray(categories)||!categories.length||categories.length>20||categories.some(c=>!c||typeof c.id!=='string'||!c.id||c.id.length>80||typeof c.name!=='string'||!c.name.trim()||c.name.length>80||!Number.isFinite(c.weight)||c.weight<0||c.weight>100)||new Set(categories.map(c=>c.id)).size!==categories.length||new Set(categories.map(c=>c.name.trim().toLowerCase())).size!==categories.length||Math.abs(categories.reduce((n,c)=>n+c.weight,0)-100)>0.001)throw problem('Use unique category names and weights totaling 100%.',400);
     if(input.quizCategoryId!==''&&!categories.some(c=>c.id===input.quizCategoryId))throw problem('Select a category for imported quizzes.',400);
     if((book.assessments||[]).some(a=>!categories.some(c=>c.id===(a.categoryId||book.quizCategoryId||'daily-quizzes'))))throw problem('Categories containing grades cannot be removed.',400);
-    book.categories=categories.map(c=>({id:c.id,name:c.name.trim(),weight:c.weight}));book.quizCategoryId=input.quizCategoryId;book.revision=(book.revision||0)+1;
+    for(const c of categories){const old=book.categories?.find(v=>v.id===c.id);if(old?.sections?.length&&Math.abs(old.sections.reduce((n,v)=>n+v.weight,0)-c.weight)>0.001)throw problem('Update section weights before changing this category weight, or remove its sections first.',400);}
+    book.categories=categories.map(c=>({...book.categories?.find(v=>v.id===c.id),id:c.id,name:c.name.trim(),weight:c.weight}));book.quizCategoryId=input.quizCategoryId;book.revision=(book.revision||0)+1;
+   }
+   else if(input.action==='sections'){
+    if((book.revision||0)!==input.revision)throw problem('This gradebook changed. Reopen Sections setup.',409);
+    book.categories=book.categories||[{id:'daily-quizzes',name:'Daily Quizzes',weight:100}];
+    const category=book.categories.find(c=>c.id===input.categoryId),sections=input.sections;
+    if(!category||!Array.isArray(sections)||sections.length>20||sections.some(c=>!c||typeof c.id!=='string'||!c.id||c.id.length>80||typeof c.name!=='string'||!c.name.trim()||c.name.length>80||!Number.isFinite(c.weight)||c.weight<0||c.weight>100)||new Set(sections.map(c=>c.id)).size!==sections.length||new Set(sections.map(c=>c.name.trim().toLowerCase())).size!==sections.length||sections.length&&Math.abs(sections.reduce((n,c)=>n+c.weight,0)-category.weight)>0.001)throw problem('Use unique section names with weights adding up to the category weight.',400);
+    const items=(book.assessments||[]).filter(a=>(a.categoryId||'daily-quizzes')===category.id),assignments=input.assignments;
+    if(!Array.isArray(assignments)||assignments.length!==items.length||new Set(assignments.map(a=>a?.sessionId)).size!==items.length||assignments.some(a=>!a||!items.some(v=>v.sessionId===a.sessionId)||sections.length&&!sections.some(v=>v.id===a.sectionId)))throw problem('Assign each grade column to a section.',400);
+    if(sections.length&&!sections.some(c=>c.id===input.importSectionId))throw problem('Choose a section for new imported quizzes.',400);
+    category.sections=sections.map(c=>({id:c.id,name:c.name.trim(),weight:c.weight}));category.importSectionId=sections.length?input.importSectionId:null;
+    for(const a of items){if(sections.length)a.sectionId=assignments.find(v=>v.sessionId===a.sessionId).sectionId;else delete a.sectionId;}
+    book.revision=(book.revision||0)+1;
    }
    else if(input.action==='include-assessment'){
     if((book.revision||0)!==input.revision)throw problem('This gradebook changed. Refresh and try again.',409);
@@ -89,8 +104,9 @@ function createGradebookStore(pool,accounts){
 
     if((book.revision||0)!==input.revision)throw problem('This gradebook changed. Try again.',409);
     if(!(book.categories||[{id:'daily-quizzes'}]).some(c=>c.id===input.categoryId)||typeof input.title!=='string'||!input.title.trim()||input.title.length>200||!Number.isFinite(input.total)||input.total<=0||input.total>100000||(book.assessments||[]).length>=200)throw problem('Enter a title and a valid maximum score.',400);
+    const category=book.categories?.find(c=>c.id===input.categoryId);if(category?.sections?.length&&!category.sections.some(c=>c.id===input.sectionId))throw problem('Choose a section for this grade column.',400);
     book.students=book.students.map(st=>({...st,id:st.id||randomUUID()}));book.assessments=book.assessments||[];
-    book.assessments.push({sessionId:'manual-'+randomUUID(),categoryId:input.categoryId,title:input.title.trim(),total:input.total,importedAt:new Date().toISOString(),grades:[],skipped:[],manual:true});book.revision=(book.revision||0)+1;
+    book.assessments.push({sessionId:'manual-'+randomUUID(),categoryId:input.categoryId,...(category?.sections?.length?{sectionId:input.sectionId}:{}),title:input.title.trim(),total:input.total,importedAt:new Date().toISOString(),grades:[],skipped:[],manual:true});book.revision=(book.revision||0)+1;
    }
    else if(input.action==='paste-grades'){
 
