@@ -20,16 +20,16 @@
    const stats=node('div',null,'result-stats live-result-stats');
    for(const [label,value]of [['Students',students.length],['Still to submit',students.filter(student=>!student.result).length]]){const cell=node('div');cell.append(node('span',t(label)),node('strong',String(value)));stats.append(cell);}host.append(stats);
    const content=node('div',null,'table-wrap');host.append(content);
-   if(s.view==='summary')renderSummary(content,{...session,students},{names:s.names,numbers:s.numbers,scores:s.scores});
+   if(s.view==='summary')renderSummary(content,{...session,students},{names:s.names,numbers:s.numbers,scores:s.scores,keepNameColumn:true});
    else if(!data)content.textContent=t('Loading live results…');
    else{
     const table=node('table',null,'answer-grid'),header=table.createTHead().insertRow();
-    const columns=[...(session.requireStudentNumber!==false&&s.numbers?['Student number']:[]),...(s.names?['Name']:[]),'State',...(s.scores?['Score']:[])];
+    const columns=[...(session.requireStudentNumber!==false&&s.numbers?['Student number']:[]),'Name','State',...(s.scores?['Score']:[])];
     for(const label of columns){const th=node('th',t(label));th.scope='col';header.append(th);}
     data.questions.forEach((question,index)=>{const th=node('th'),button=node('button','Q'+(index+1));button.type='button';button.title=question;button.setAttribute('aria-label',t('Question')+' '+(index+1)+': '+question);button.onclick=()=>openQuestion({...data,liveResults:true},index);th.scope='col';th.append(button);header.append(th);});
     const body=table.createTBody();
     for(const student of [...data.students].sort((a,b)=>session.requireStudentNumber===false?a.name.localeCompare(b.name):String(a.number).localeCompare(String(b.number),undefined,{numeric:true}))){
-     const row=body.insertRow();if(session.requireStudentNumber!==false&&s.numbers)row.insertCell().textContent=student.number;if(s.names)row.insertCell().textContent=student.name;
+     const row=body.insertRow();if(session.requireStudentNumber!==false&&s.numbers)row.insertCell().textContent=student.number;const nameCell=row.insertCell();nameCell.textContent=s.names?student.name:'*****';const device=node('small',students.find(item=>item.id===student.id)?.deviceType||'Unknown device','student-device-label');device.title='Estimated device type reported by the browser';nameCell.append(device);
      row.insertCell().textContent=t(student.submitted?'Submitted':'Draft')+(students.find(item=>item.id===student.id)?.fullscreenUnavailable?' · '+t('Fullscreen unavailable'):'');
      if(s.scores){const summary=students.find(item=>item.id===student.id);row.insertCell().textContent=summary?.result?.pending?t('Grading…'):summary?.result?summary.score+' / '+summary.total+' · '+summary.result.percentage+'%':t('Pending');}
      for(const answer of student.answers){const cell=row.insertCell();cell.className='answer-'+answer.status;cell.textContent=answer.status==='grading'?t('Grading…'):(answer.status==='correct'?'✓ ':answer.status==='incorrect'?'✗ ':'')+(answer.letter||answer.answer||'—')+(answer.status==='partial'?' · '+answer.points+'/'+answer.maxPoints:'');cell.title=answer.question+' · '+(answer.answer||t('Unanswered'));}

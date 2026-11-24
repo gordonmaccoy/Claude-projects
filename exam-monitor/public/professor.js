@@ -455,17 +455,17 @@ function renderTable(container, session, visibility=null) {
     const body=document.createElement('tbody');
     for(const s of session.students) {
       const row=document.createElement('tr');
-      for(const value of [s.number,masked?'••••••':s.name,s.failed ? t('FAILED') : s.completed?'Completed and closed':s.status === 'green' ? t('Active') : t('Inactive')]) { const cell=document.createElement('td'); cell.textContent=value; row.append(cell); }
+      for(const value of [s.number,masked?'*****':s.name,s.failed ? t('FAILED') : s.completed?'Completed and closed':s.status === 'green' ? t('Active') : t('Inactive')]) { const cell=document.createElement('td'); cell.textContent=value; row.append(cell); }
       appendDeviceLabel(row.cells[1],s);
       const review=document.createElement('td');if(s.failed && session.phase==='running')review.append(button(t('Unlock & continue'),()=>unlockStudent(session,s)));row.append(review);body.append(row);
     }
-    table.append(body);if(visibility&&!visibility.names)for(const row of table.rows)row.cells[1]?.remove();if(session.requireStudentNumber===false||(visibility&&!visibility.numbers))for(const row of table.rows)row.cells[0]?.remove(); container.replaceChildren(table); return;
+    table.append(body);if(visibility&&!visibility.names&&!visibility.keepNameColumn)for(const row of table.rows)row.cells[1]?.remove();if(session.requireStudentNumber===false||(visibility&&!visibility.numbers))for(const row of table.rows)row.cells[0]?.remove(); container.replaceChildren(table); return;
   }
   table.innerHTML = '<thead><tr><th>'+t('Student number')+'</th><th>'+t('Name')+'</th><th>'+t('Status')+'</th><th>'+t('Student progress')+'</th>'+(showScores?'<th>'+t('Score')+'</th><th>'+t('Original score')+'</th>':'')+'<th>'+t('Review')+'</th></tr></thead>';
   const tbody = document.createElement('tbody');
   for (const s of [...session.students].sort((a,b) => session.requireStudentNumber===false?a.name.localeCompare(b.name):a.number.localeCompare(b.number, undefined, { numeric:true }))) {
     const tr = document.createElement('tr');
-    for (const text of [s.number,masked?'••••••':s.name]) { const td=document.createElement('td'); td.textContent=text; tr.append(td); }
+    for (const text of [s.number,masked?'*****':s.name]) { const td=document.createElement('td'); td.textContent=text; tr.append(td); }
     appendDeviceLabel(tr.cells[1],s);
     const state=document.createElement('td'); const pill=document.createElement('span'); pill.className=`pill ${s.status === 'red' ? 'red' : ''}`; pill.textContent=s.failed ? t('FAILED') : s.completed ? 'Completed and closed' : s.result ? 'Test Submitted' : s.status === 'green' ? t('Active') : t('Inactive'); state.append(pill);if(s.fullscreenUnavailable){const label=document.createElement('small');label.textContent=t('Fullscreen unavailable');label.style.display='block';state.append(label);} tr.append(state);
     const progress=document.createElement('td');progress.textContent=s.progress?`${s.result?t('Finished'):s.progress.question?t('Question {number} of {total}',{number:s.progress.question,total:s.progress.total}):t('Not started')} · ${t('{answered}/{total} answered',s.progress)}`:'—';tr.append(progress);
@@ -476,7 +476,7 @@ function renderTable(container, session, visibility=null) {
     const details=document.createElement('details');details.dataset.studentId=s.id; const summary=document.createElement('summary'); summary.textContent=t('{count} monitoring events',{count:s.events.length});if(s.events.length>5)summary.className='monitoring-alert'; details.append(summary);
     const list=document.createElement('ul'); for (const e of s.events) { const li=document.createElement('li'); li.textContent=`${new Date(e.at).toLocaleTimeString()} · ${e.type}${e.reason ? ` · ${e.reason}` : ''}`; list.append(li); } details.append(list); review.append(details); tr.append(review); tbody.append(tr);
   }
-  table.append(tbody);if(visibility&&!visibility.names)for(const row of table.rows)row.cells[1]?.remove();if(session.requireStudentNumber===false||(visibility&&!visibility.numbers))for(const row of table.rows)row.cells[0]?.remove();container.replaceChildren(table);
+  table.append(tbody);if(visibility&&!visibility.names&&!visibility.keepNameColumn)for(const row of table.rows)row.cells[1]?.remove();if(session.requireStudentNumber===false||(visibility&&!visibility.numbers))for(const row of table.rows)row.cells[0]?.remove();container.replaceChildren(table);
 }
 function detachResultsPanel(){const panel=$('result-detail');if(panel?.parentElement?.id==='result-sessions')$('results').append(panel);}
 function placeResultsPanel(){if(!historySession)return false;const row=[...document.querySelectorAll('.result-session-card')].find(el=>el.dataset.sessionId===historySession.id);if(!row)return false;const panel=$('result-detail');if(row.nextElementSibling!==panel)row.after(panel);return true;}

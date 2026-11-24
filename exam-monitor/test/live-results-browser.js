@@ -8,7 +8,7 @@ const {chromium}=require('playwright');
   await page.setContent('<section id="one"></section><section id="two"></section>');
   await page.addScriptTag({path:path.resolve('public/live-results.js')});
   await page.evaluate(()=>{
-   const students=[{id:'a',name:'Alex',number:'1',result:null},{id:'b',name:'Beth',number:'2',result:null}];
+   const students=[{id:'a',name:'Alex',number:'1',deviceType:'iPad',result:null},{id:'b',name:'Beth',number:'2',result:null}];
    window.session={id:'one',mode:'test',students};window.payload={questions:['Capital?'],questionDetails:[{text:'Capital?'}],summaryStudents:students,students:students.map(s=>({...s,submitted:false,answers:[{status:'pending',answer:'',question:'Capital?'}]}))};
    window.controller=createExamioLiveResults({api:async()=>structuredClone(payload),renderSummary:(host,session,visibility)=>{host.textContent='Summary: '+session.students.length;host.dataset.visibility=JSON.stringify(visibility);},openQuestion:(data,index)=>{window.clicked=data.questions[index];}});
    controller.mount(document.querySelector('#one'),session);controller.mount(document.querySelector('#two'),{...session,id:'two'});
@@ -16,7 +16,7 @@ const {chromium}=require('playwright');
   const first=page.locator('#one');
   assert.match(await first.textContent(),/Still to submit2/);
   await first.getByRole('button',{name:'Detailed Results'}).click();await page.evaluate(()=>controller.refresh());
-  assert.equal(await first.locator('tbody tr').count(),2);assert.equal(await first.locator('tfoot td').textContent(),'—');
+  assert.equal(await first.locator('tbody tr').count(),2);assert.equal(await first.getByRole('columnheader',{name:'Name',exact:true}).count(),1);assert.match(await first.locator('tbody').textContent(),/\*{5}/);assert.doesNotMatch(await first.locator('tbody').textContent(),/Alex/);assert.equal(await first.locator('.student-device-label').first().textContent(),'iPad');assert.equal(await first.locator('tfoot td').textContent(),'—');
   await page.evaluate(()=>{payload.students[0].answers[0]={question:'Capital?',answer:'Seoul',letter:'A',status:'correct',points:1,maxPoints:1};});
   await page.evaluate(()=>controller.refresh());assert.match(await first.locator('tbody').textContent(),/✓ A/);assert.equal(await first.locator('tfoot td').textContent(),'100%');
   await first.getByRole('button',{name:'Question 1: Capital?'}).click();assert.equal(await page.evaluate(()=>clicked),'Capital?');
