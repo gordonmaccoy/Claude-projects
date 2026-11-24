@@ -311,3 +311,5 @@ select,textarea{font:inherit;background:#fff;color:#223c31;border:1px solid #c5c
 .gradebook-detail-dialog .gradebook-detail-close{position:sticky;display:block;top:0;right:auto;margin:0 0 -34px auto;width:34px;height:34px;padding:0;z-index:5;background:#fff;color:#123247;border:1px solid #ccd9df;border-radius:8px;font-size:24px;line-height:30px}
 
 .gradebook-max-score{display:block;margin:6px auto 0;font-size:12px;font-weight:400;line-height:1.4;text-transform:none;letter-spacing:normal}
+
+.student-device-label{display:block;margin-top:4px;font-size:12px;font-weight:400;color:var(--muted,#667987);line-height:1.4}

@@ -444,6 +444,7 @@ function renderProfessorTimer(){
 }
 setInterval(renderProfessorTimer,500);
 for(const id of ['launch-show-names','launch-show-scores-live'])$(id).onchange=()=>{if(current)renderDashboard();};
+function appendDeviceLabel(cell,student){const label=document.createElement('small');label.className='student-device-label';label.textContent=student.deviceType||'Unknown device';label.title='Estimated device type reported by the browser';cell.append(label);}
 function renderTable(container, session, visibility=null) {
   const isLaunch=container.id==='live-students'||container.dataset.live==='true';
   const masked=visibility?!visibility.names:isLaunch&&!(container.dataset.live==='true'?container.closest('.session-group').querySelector('[data-show-names]').checked:$('launch-show-names').checked);
@@ -455,6 +456,7 @@ function renderTable(container, session, visibility=null) {
     for(const s of session.students) {
       const row=document.createElement('tr');
       for(const value of [s.number,masked?'••••••':s.name,s.failed ? t('FAILED') : s.completed?'Completed and closed':s.status === 'green' ? t('Active') : t('Inactive')]) { const cell=document.createElement('td'); cell.textContent=value; row.append(cell); }
+      appendDeviceLabel(row.cells[1],s);
       const review=document.createElement('td');if(s.failed && session.phase==='running')review.append(button(t('Unlock & continue'),()=>unlockStudent(session,s)));row.append(review);body.append(row);
     }
     table.append(body);if(session.requireStudentNumber===false)for(const row of table.rows)row.cells[0]?.remove(); container.replaceChildren(table); return;
@@ -464,6 +466,7 @@ function renderTable(container, session, visibility=null) {
   for (const s of [...session.students].sort((a,b) => session.requireStudentNumber===false?a.name.localeCompare(b.name):a.number.localeCompare(b.number, undefined, { numeric:true }))) {
     const tr = document.createElement('tr');
     for (const text of [s.number,masked?'••••••':s.name]) { const td=document.createElement('td'); td.textContent=text; tr.append(td); }
+    appendDeviceLabel(tr.cells[1],s);
     const state=document.createElement('td'); const pill=document.createElement('span'); pill.className=`pill ${s.status === 'red' ? 'red' : ''}`; pill.textContent=s.failed ? t('FAILED') : s.completed ? 'Completed and closed' : s.result ? 'Test Submitted' : s.status === 'green' ? t('Active') : t('Inactive'); state.append(pill);if(s.fullscreenUnavailable){const label=document.createElement('small');label.textContent=t('Fullscreen unavailable');label.style.display='block';state.append(label);} tr.append(state);
     const progress=document.createElement('td');progress.textContent=s.progress?`${s.result?t('Finished'):s.progress.question?t('Question {number} of {total}',{number:s.progress.question,total:s.progress.total}):t('Not started')} · ${t('{answered}/{total} answered',s.progress)}`:'—';tr.append(progress);
     if(showScores) for (const text of [s.result?.pending?t('Grading…'):s.score === null ? t('Pending') : `${s.score} / ${s.total}${s.result ? ` · ${s.result.percentage}%` : ''}`, s.result?.originalScore==null?'—':s.result ? `${s.result.originalScore} / ${s.total}` : '—']) { const td=document.createElement('td'); td.textContent=text; tr.append(td); }

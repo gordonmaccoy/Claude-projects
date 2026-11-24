@@ -31,7 +31,7 @@ async function join(input) {
     try { localStorage.setItem(resumeKey,memoryToken); } catch { message(t('Resume is available while this page stays open. This browser cannot save the resume link across reloads.')); }
   }
   const connection=connectionVersion;
-  const res=await emit('student:join',{sessionId,...input});
+  const res=await emit('student:join',{sessionId,...input,deviceHints:{platform:navigator.platform,maxTouchPoints:navigator.maxTouchPoints}});
   if(connection!==connectionVersion)return;
   if(!res.ok) { if(joined) {
     connectionNotice.textContent=res.timedOut?t('Still reconnecting…'):t(res.error);

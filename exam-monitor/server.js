@@ -7,6 +7,7 @@ const { Pool } = require('pg');
 const { createStore } = require('./store');
 const { authConfig, createVerifier } = require('./auth');
 const exam = require('./exam');
+const {deviceType}=require('./device-type');
 const { workbook,exportFilename } = require('./export');
 const {resultsPdf}=require('./results-pdf');
 const {createExportMailer}=require('./results-email');
@@ -341,7 +342,9 @@ function createApp({ store, verifyUser, config = {}, settingsOptions = {}, admin
       const { session, result } = await store.mutate(input.sessionId, s => {
         exam.sweep(s);
         let result;try{result=exam.join(s,input);}catch(e){return {joinError:e.message};}
-        exam.student(s, result.studentId).connectionId = socket.id;
+        const student=exam.student(s,result.studentId);
+        student.connectionId=socket.id;
+        if(s.phase!=='ended'&&!student.submission&&!student.completedAt)student.deviceType=deviceType(socket.handshake.headers['user-agent'],input.deviceHints);
         return result;
       });
       if(result.joinError){await broadcast(session);throw new Error(result.joinError);}

@@ -273,7 +273,7 @@ function privateView(s, now = Date.now()) {
   return { folderId:s.test?.folderId||null,onlyOneAttempt:!!s.onlyOneAttempt,immediateFeedback:!!s.immediateFeedback,showCorrections:s.showCorrections===true, id: s.id, deliveryType:delivery.type(s),requireStudentNumber:s.requireStudentNumber!==false,teacherQuestion:s.teacherQuestion||0,questionCount:s.test?.questions.length||0, security:effectiveSecurity(s),roomName:s.roomName||null,mode: s.mode, language:s.language??'en', title: s.resultTitle || s.test?.title || 'Classroom calculator', phase: s.phase,
     remainingMs:remainingTime(s,now),durationMinutes:s.durationMinutes||0,deadlineAt:s.deadlineAt||null,showScores:s.showScores!==false,shuffleAnswers:effectiveSecurity(s).enabled&&!!s.shuffleAnswers,extensionVersion:s.extensionVersion||0,
     createdAt: s.createdAt, startedAt: s.startedAt, endedAt: s.endedAt, displayToken: s.displayToken,
-    students: s.students.map(st => ({ id: st.id, number: st.number, name: st.name, status: status(st, now,s),
+    students: s.students.map(st => ({ id: st.id, number: st.number, name: st.name, deviceType:st.deviceType||'Unknown device', status: status(st, now,s),
       fullscreenUnavailable:st.fullscreenUnavailable===true, failed: isFailed(st), completed:Boolean(st.completedAt), result: result(s, st), events: st.events,
       finalized:Boolean(st.submission?.professorFinalized),
       progress:s.mode==='test'?{question:Math.max(0,(st.questionOrder||s.test.questions.map(q=>q.id)).indexOf(st.progressQuestionId)+1),answered:s.test.questions.filter(q=>{const a=(st.submission?.answers||st.draft||{})[q.id];return typeof a==='string'&&a.trim();}).length,total:s.test.questions.length}:null,
