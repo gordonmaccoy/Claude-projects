@@ -353,7 +353,7 @@ async function launchSession(payload) {
   if (launching) return;
   launching = true;
   try {
-    current = await api('/sessions', 'POST', payload);
+    current = await api('/sessions', 'POST', {...payload,language:window.examioLanguage.current});
     await openClassroomDisplay(current);
     await watch(); renderDashboard(); tab('launch'); await refresh();
   } finally { launching = false; }

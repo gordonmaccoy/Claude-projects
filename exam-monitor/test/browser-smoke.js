@@ -41,18 +41,21 @@ async function main() {
         const session=exam.newSession('alice',test,Date.now(),{language});
         await store.createSession(session);
         const studentContext=await browser.newContext({locale});
+        await studentContext.addInitScript(value=>localStorage.setItem('examio-language',value),language==='en'?'ko':'en');
         const student=await studentContext.newPage();
         await student.goto(base+'/student.html?session='+session.id+'&language='+locale);
         await student.locator('#number-input').fill('001');
         await student.locator('#name-input').fill('Student');
         assert.equal(await student.locator('html').getAttribute('lang'),language);
         assert.equal(await student.locator('[data-language-switch]').count(),0);
-        await student.getByRole('button',{name:joinLabel,exact:true}).click();
+        assert.equal(await student.locator('html').getAttribute('translate'),'no');assert.equal(await student.locator('meta[name=google]').getAttribute('content'),'notranslate');
+        await student.locator('#integrity-agreement').check();await student.getByRole('button',{name:joinLabel,exact:true}).click();
         await student.locator('#waiting-section').waitFor({state:'visible'});
         await store.mutate(session.id,s=>exam.start(s));
         await student.reload();
         await student.locator('.tq-option').first().waitFor();
         assert.match(await student.locator('.tq-text').first().textContent(),/대한민국의 수도는 어디인가요/);
+        if(language==='en'){await student.evaluate(()=>{applyStudentLanguage('ko');showView(currentView);});assert.equal(await student.locator('html').getAttribute('lang'),'en');assert.equal(await student.locator('#submit-confirm').textContent(),'Yes, submit');assert.match(await student.locator('.tq-text').first().textContent(),/대한민국의 수도는 어디인가요/);}
         await student.locator('.tq-option').first().click();
         await student.getByRole('button',{name:submitLabel,exact:true}).click();
         await student.locator('#submit-confirm').click();

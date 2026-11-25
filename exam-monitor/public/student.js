@@ -45,7 +45,7 @@ async function join(input) {
 async function initializeStudentLanguage() {
   try {
     if(sessionId) {
-      const response=await fetch(`/session-language/${encodeURIComponent(sessionId)}`);
+      const response=await fetch(`/session-language/${encodeURIComponent(sessionId)}`,{cache:'no-store'});
       if(!response.ok)throw new Error('Session language unavailable');
       const config=await response.json();applyStudentLanguage(config.language);$('number-input').hidden=config.requireStudentNumber===false;$('number-input').required=config.requireStudentNumber!==false;$('number-label').hidden=config.requireStudentNumber===false;
     }
@@ -77,6 +77,7 @@ function setConnected(ok) { for (const el of [els.connDot,els.testConnDot]) { el
 els.form.onsubmit=async e=> { e.preventDefault(); const b=els.form.querySelector('button'); b.disabled=true; try { await join({name:els.nameInput.value.trim(),number:$('number-input').value.trim()}); } finally { b.disabled=false; } };
 let deliveryRenderKey='';
 function showView(view) {
+  if(window.examioLanguage.current!==(view.language==='ko'?'ko':'en'))applyStudentLanguage(view.language);
   const nextKey=JSON.stringify([view.flow?.index,view.flow?.locked,view.flow?.lockedIds,view.flow?.readyToSubmit,view.flow?.feedback]);if(nextKey!==deliveryRenderKey){renderedTest=false;deliveryRenderKey=nextKey;}
   const previousExtension=currentView?.extensionVersion;currentView=view;
   if(previousExtension!==undefined && view.extensionVersion>previousExtension){extensionNoticeUntil=performance.now()+6000;$('time-notice').textContent=t('Your professor extended the time by {minutes} minute.', {minutes:view.lastExtension?.minutes||1});}
